@@ -19,7 +19,7 @@
 use crate::kitty;
 use crate::tty::{window_size, WinSize};
 use crate::Backend;
-use std::io::{self, Read, Write};
+use std::io::{self, Read};
 use std::os::fd::RawFd;
 use std::time::{Duration, Instant};
 
@@ -113,10 +113,17 @@ fn read_reply(fd: RawFd, deadline: Duration, is_complete: impl Fn(&[u8]) -> bool
     buf
 }
 
+/// Write a query and collect the reply.
+///
+/// The query MUST go to the same file descriptor we read the answer from. Writing to
+/// `io::stdout()` looks equivalent and is not: if the caller redirects stdout (`doctor >
+/// out.txt`), the escape sequences land in the file, the terminal never sees them, nothing
+/// ever replies, and every capability is reported as unsupported -- on a terminal that
+/// plainly supports them. The leaked escape bytes then corrupt the redirected output too.
 fn query(fd: RawFd, seq: &[u8], deadline: Duration, done: impl Fn(&[u8]) -> bool) -> Vec<u8> {
-    let mut out = io::stdout();
-    let _ = out.write_all(seq);
-    let _ = out.flush();
+    unsafe {
+        libc::write(fd, seq.as_ptr() as *const libc::c_void, seq.len());
+    }
     read_reply(fd, deadline, done)
 }
 
@@ -149,8 +156,9 @@ pub fn detect(fd: RawFd, deadline_ms: u64) -> Capabilities {
         // Do not leave our probe image resident in the user's terminal.
         let mut cleanup = Vec::new();
         kitty::delete_image(31, &mut cleanup);
-        let _ = io::stdout().write_all(&cleanup);
-        let _ = io::stdout().flush();
+        unsafe {
+            libc::write(fd, cleanup.as_ptr() as *const libc::c_void, cleanup.len());
+        }
     }
 
     // Primary DA: parameter 4 advertises sixel.

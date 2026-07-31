@@ -1,0 +1,36 @@
+blackglass doctor 0.1.0
+
+  terminal
+    TERM                xterm-ghostty
+    program             ghostty 1.3.1
+    multiplexer         none
+    remote (ssh)        no
+
+  graphics
+    kitty graphics      yes
+    sixel               no
+    iterm2 inline       no (heuristic: not queryable)
+    truecolor           yes
+    --> backend         kitty
+
+  input
+    kitty keyboard      yes
+    sgr-pixels mouse    yes
+
+  geometry
+    cells               146x23
+    window px (ioctl)   2488x858
+    window px (CSI 14t) 2482x851
+    cell px             17x37
+    page viewport       2482x851
+
+  engine
+    electron            /Users/adeebbashir/projects/blackglass/apps/engine/node_modules/.bin/electron
+
+  raw replies
+    kitty_graphics      \e_Gi=31;OK\e\
+    da1                 \e[?62;22;52c
+    kitty_keyboard      \e[?0u
+    window_px           \e[4;851;2482t
+    cell_px             \e[6;37;17t
+    sgr_pixel_mouse     \e[?1016;2$y

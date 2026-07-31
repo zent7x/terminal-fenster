@@ -18,7 +18,7 @@
 //! The signal path only calls async-signal-safe functions (`tcsetattr`, `write`, `signal`,
 //! `raise`).
 
-use std::io::{self, Write};
+use std::io::{self};
 use std::os::fd::RawFd;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -143,14 +143,17 @@ impl TtyGuard {
 
         unsafe {
             for sig in [libc::SIGINT, libc::SIGTERM, libc::SIGHUP, libc::SIGQUIT] {
-                libc::signal(sig, signal_handler as libc::sighandler_t);
+                libc::signal(sig, signal_handler as extern "C" fn(libc::c_int) as libc::sighandler_t);
             }
             // A frame write to a terminal that has gone away must surface as an EPIPE error
             // we can handle, not kill the process mid-teardown.
             libc::signal(libc::SIGPIPE, libc::SIG_IGN);
             // Window resize. Without this the page keeps its original geometry forever and
             // every pointer coordinate is wrong after the first resize.
-            libc::signal(libc::SIGWINCH, winch_handler as libc::sighandler_t);
+            libc::signal(
+                libc::SIGWINCH,
+                winch_handler as extern "C" fn(libc::c_int) as libc::sighandler_t,
+            );
         }
         Ok(Self { fd })
     }
@@ -182,9 +185,14 @@ impl TtyGuard {
             // unambiguous modifiers, which legacy encoding cannot express.
             seq.extend_from_slice(b"\x1b[>27u");
         }
-        let mut out = io::stdout();
-        out.write_all(&seq)?;
-        out.flush()
+        // Written to the tty fd, not stdout, for the same reason as capability queries:
+        // a redirected stdout would send mode changes to a file and leave the terminal
+        // in its default modes while we assume otherwise.
+        let n = unsafe { libc::write(self.fd, seq.as_ptr() as *const libc::c_void, seq.len()) };
+        if n < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
     }
 }
 
