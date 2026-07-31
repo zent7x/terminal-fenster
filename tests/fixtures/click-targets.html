@@ -1,0 +1,203 @@
+<!-- BlackGlass fixture: click-targets
+     Proves: a synthetic mouse click at a documented CSS-pixel coordinate lands on the
+     element that occupies that coordinate, and reports the coordinate spaces back.
+     Self-contained. No network, no subresources. Opens over file://. -->
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BG · click-targets</title>
+<style>
+/* ---------- shared fixture chrome (byte-identical in every BlackGlass fixture) ---------- */
+:root{color-scheme:dark}
+html,body{margin:0;padding:0;background:#0b0b0f;color:#e6e6e6;
+  font:14px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;-webkit-font-smoothing:none}
+#bg-beacon,#bg-status,.bg-corner{position:fixed;width:24px;height:24px;z-index:2147483647}
+#bg-beacon{left:0;top:0;background:#ff00ff}
+#bg-status{left:24px;top:0;background:#333}
+.bg-tr{right:0;top:0;background:#ff8000}
+.bg-bl{left:0;bottom:0;background:#0080ff}
+.bg-br{right:0;bottom:0;background:#ffff00}
+h1{position:fixed;left:56px;top:1px;margin:0;font:600 13px/24px ui-monospace,Menlo,monospace;color:#8a8aff}
+#bg-readout{position:fixed;right:8px;bottom:32px;width:380px;max-height:280px;overflow:hidden;
+  margin:0;padding:4px;background:rgba(0,0,0,.66);white-space:pre-wrap;word-break:break-all;
+  font-size:11px;line-height:1.3;color:#9adcff;pointer-events:none;z-index:2147483646}
+/* ---------- fixture-specific ---------- */
+.t{position:absolute;width:80px;height:80px;background:#c00000;border:0;
+   font:600 13px/80px ui-monospace,Menlo,monospace;color:#fff;text-align:center;cursor:pointer;
+   -webkit-user-select:none;user-select:none}
+.t.hit{background:#00c000}
+.cal{position:absolute;width:24px;height:24px;background:#ff00ff}
+#t9{transform:translate(20px,10px)}
+.lbl{position:absolute;font-size:11px;color:#777}
+</style>
+
+<body>
+<div id="bg-beacon"></div><div id="bg-status"></div>
+<div class="bg-corner bg-tr"></div><div class="bg-corner bg-bl"></div><div class="bg-corner bg-br"></div>
+<h1>fixture: click-targets</h1>
+<pre id="bg-readout"></pre>
+
+<!-- 3x3 grid. left = 40 + col*160, top = 120 + row*160. All values are CSS pixels. -->
+<div class="t" id="t0" style="left:40px;top:120px">0</div>
+<div class="t" id="t1" style="left:200px;top:120px">1</div>
+<div class="t" id="t2" style="left:360px;top:120px">2</div>
+<div class="t" id="t3" style="left:40px;top:280px">3</div>
+<div class="t" id="t4" style="left:200px;top:280px">4</div>
+<div class="t" id="t5" style="left:360px;top:280px">5</div>
+<div class="t" id="t6" style="left:40px;top:440px">6</div>
+<div class="t" id="t7" style="left:200px;top:440px">7</div>
+<div class="t" id="t8" style="left:360px;top:440px">8</div>
+
+<!-- right column: button-discriminating targets -->
+<div class="t" id="t-ctx" style="left:760px;top:120px">RMB</div>
+<div class="t" id="t-dbl" style="left:880px;top:120px">DBL</div>
+<div class="t" id="t-mid" style="left:1000px;top:120px">MMB</div>
+
+<!-- calibration pair: centres are exactly 300 CSS px apart, horizontally -->
+<div class="cal" id="cal-a" style="left:760px;top:260px"></div>
+<div class="cal" id="cal-b" style="left:1060px;top:260px"></div>
+<div class="lbl" style="left:760px;top:288px">cal-a/cal-b centres 300px apart</div>
+
+<!-- transform trap: layout box says (760,340); the painted box is 20/10 px further -->
+<div class="t" id="t9" style="left:760px;top:340px">XF</div>
+<div class="lbl" style="left:760px;top:432px">layout (760,340) vs painted (780,350)</div>
+
+<script>
+/* ---------- shared fixture harness (byte-identical in every BlackGlass fixture) ---------- */
+var __q = new URLSearchParams(location.search);
+window.__bg = {
+  id: 'click-targets', proto: 1, ready: false, pass: null,
+  query: Object.fromEntries(__q),
+  /* sample points for a raw-framebuffer scan. Negative = measured from the far edge. */
+  markers: {beacon:[12,12], status:[36,12], topRight:[-12,12], bottomLeft:[12,-12], bottomRight:[-12,-12]},
+  markerColors: {beaconLoading:'#ff00ff', beaconReady:'#00ffff', statusIdle:'#333333',
+                 statusPass:'#00ff00', statusFail:'#ff0000',
+                 topRight:'#ff8000', bottomLeft:'#0080ff', bottomRight:'#ffff00'},
+  expect: {}, state: function(){ return {}; },
+  _ready: function(){ this.ready = true;
+    document.getElementById('bg-beacon').style.background = '#00ffff';
+    document.documentElement.setAttribute('data-bg-ready','1'); this._dump(); },
+  _status: function(v){ this.pass = v;
+    document.getElementById('bg-status').style.background =
+      v === true ? '#00ff00' : v === false ? '#ff0000' : '#333'; },
+  _dump: function(){ var el = document.getElementById('bg-readout');
+    if (el) el.textContent = JSON.stringify(this.state(), null, 1); }
+};
+</script>
+
+<script>
+(function () {
+  var bg = window.__bg;
+
+  /* Documented truth about this page. A harness should read these rather than
+     hard-coding numbers, so the fixture and the test can never drift apart. */
+  var grid = [];
+  for (var r = 0; r < 3; r++) for (var c = 0; c < 3; c++) {
+    var i = r * 3 + c, left = 40 + c * 160, top = 120 + r * 160;
+    grid.push({ id: 't' + i, left: left, top: top, w: 80, h: 80,
+                centre: [left + 40, top + 40] });
+  }
+  bg.expect = {
+    unit: 'CSS pixels, page origin at document (0,0), page never scrolls',
+    targets: grid,
+    buttons: { 't-ctx': { centre: [800, 160], button: 2 },
+               't-dbl': { centre: [920, 160], detail: 2 },
+               't-mid': { centre: [1040, 160], button: 1 } },
+    calibration: { a: [772, 272], b: [1072, 272], separationCssPx: 300,
+                   colour: '#ff00ff', size: 24,
+                   scale: 'deviceCentreDistance / 300 == devicePixelRatio of the frame' },
+    transformTrap: { id: 't9', layoutBox: [760, 340, 80, 80], paintedBox: [780, 350, 80, 80],
+                     paintedCentre: [820, 400],
+                     note: 'clicking the layout centre (800,390) MUST miss; ' +
+                           'clicking the painted centre (820,400) MUST hit' },
+    passWhen: 'all nine grid targets t0..t8 have been clicked'
+  };
+
+  var hits = [], clicked = {}, misses = 0;
+
+  function record(ev, id) {
+    var el = document.getElementById(id), r = el.getBoundingClientRect();
+    var h = {
+      id: id, type: ev.type, button: ev.button, buttons: ev.buttons, detail: ev.detail,
+      clientX: ev.clientX, clientY: ev.clientY,
+      pageX: ev.pageX, pageY: ev.pageY,
+      offsetX: ev.offsetX, offsetY: ev.offsetY,
+      screenX: ev.screenX, screenY: ev.screenY,
+      isTrusted: ev.isTrusted,
+      /* signed error from the painted centre of the element, in CSS px.
+         This is the number D02 cares about: terminal cell -> CSS px precision. */
+      dx: +(ev.clientX - (r.left + r.width / 2)).toFixed(2),
+      dy: +(ev.clientY - (r.top + r.height / 2)).toFixed(2)
+    };
+    hits.push(h); if (hits.length > 64) hits.shift();
+    return h;
+  }
+
+  for (var n = 0; n < 9; n++) (function (id) {
+    var el = document.getElementById(id);
+    el.addEventListener('click', function (ev) {
+      record(ev, id); clicked[id] = true; el.classList.add('hit');
+      bg._status(Object.keys(clicked).length === 9); bg._dump();
+    });
+  })('t' + n);
+
+  document.getElementById('t-ctx').addEventListener('contextmenu', function (ev) {
+    ev.preventDefault(); record(ev, 't-ctx'); this.classList.add('hit'); bg._dump();
+  });
+  document.getElementById('t-ctx').addEventListener('mouseup', function (ev) {
+    if (ev.button === 2) { record(ev, 't-ctx'); this.classList.add('hit'); bg._dump(); }
+  });
+  document.getElementById('t-dbl').addEventListener('dblclick', function (ev) {
+    record(ev, 't-dbl'); this.classList.add('hit'); bg._dump();
+  });
+  document.getElementById('t-mid').addEventListener('auxclick', function (ev) {
+    record(ev, 't-mid'); this.classList.add('hit'); bg._dump();
+  });
+  document.getElementById('t9').addEventListener('click', function (ev) {
+    record(ev, 't9'); this.classList.add('hit'); bg._dump();
+  });
+
+  /* Anything that reaches the document but no target is a miss. Distinguishing a
+     miss from "no event at all" is the difference between a mis-mapped coordinate
+     and a dead input pipeline. */
+  document.addEventListener('click', function (ev) {
+    if (!(ev.target instanceof Element) || !ev.target.classList.contains('t')) {
+      misses++;
+      hits.push({ id: null, type: 'miss', clientX: ev.clientX, clientY: ev.clientY,
+                  tag: ev.target && ev.target.id || (ev.target && ev.target.nodeName) });
+      bg._dump();
+    }
+  }, true);
+
+  bg.state = function () {
+    return {
+      id: bg.id, ready: bg.ready, pass: bg.pass,
+      clickedCount: Object.keys(clicked).length, clicked: Object.keys(clicked).sort(),
+      misses: misses, lastHit: hits[hits.length - 1] || null, hits: hits,
+      devicePixelRatio: window.devicePixelRatio,
+      viewport: { innerW: window.innerWidth, innerH: window.innerHeight,
+                  outerW: window.outerWidth, outerH: window.outerHeight,
+                  scrollX: window.scrollX, scrollY: window.scrollY },
+      /* measured, not assumed: read back the live rects so a harness can detect
+         zoom, a stylesheet failure, or a viewport it did not expect */
+      measured: {
+        t0: document.getElementById('t0').getBoundingClientRect().toJSON(),
+        t9: document.getElementById('t9').getBoundingClientRect().toJSON(),
+        calA: document.getElementById('cal-a').getBoundingClientRect().toJSON(),
+        calB: document.getElementById('cal-b').getBoundingClientRect().toJSON()
+      }
+    };
+  };
+
+  bg.reset = function () {
+    hits = []; clicked = {}; misses = 0;
+    var all = document.querySelectorAll('.t');
+    for (var i = 0; i < all.length; i++) all[i].classList.remove('hit');
+    bg._status(false); bg._dump();
+  };
+
+  bg._status(false);
+  bg._ready();
+})();
+</script>
+</html>

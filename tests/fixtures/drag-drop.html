@@ -1,0 +1,276 @@
+<!-- BlackGlass fixture: drag-drop
+     Proves TWO independent things, because they can fail separately:
+       lane 1  native HTML5 drag and drop (draggable=true -> dragstart/dragover/drop).
+               Native drag is driven by the OS drag loop, so synthetic mouseDown/Move/Up
+               may never start it. This lane measures that instead of assuming it.
+       lane 2  pointer-emulated drag (mousedown/mousemove/mouseup, JS moves the node).
+               This is the lane that a terminal mouse can always drive.
+       lane 3  file drop, for the CDP Input.dispatchDragEvent path.
+     Self-contained, file:// safe. -->
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BG · drag-drop</title>
+<style>
+/* ---------- shared fixture chrome (identical in every fixture) ---------- */
+:root{color-scheme:dark}
+html,body{margin:0;padding:0;background:#0b0b0f;color:#e6e6e6;
+  font:14px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;-webkit-font-smoothing:none}
+#bg-beacon,#bg-status,.bg-corner{position:fixed;width:24px;height:24px;z-index:2147483647}
+#bg-beacon{left:0;top:0;background:#ff00ff}
+#bg-status{left:24px;top:0;background:#333}
+.bg-tr{right:0;top:0;background:#ff8000}
+.bg-bl{left:0;bottom:0;background:#0080ff}
+.bg-br{right:0;bottom:0;background:#ffff00}
+h1{position:fixed;left:56px;top:1px;margin:0;font:600 13px/24px ui-monospace,Menlo,monospace;color:#8a8aff}
+#bg-readout{position:fixed;right:8px;bottom:32px;width:380px;max-height:280px;overflow:hidden;
+  margin:0;padding:4px;background:rgba(0,0,0,.66);white-space:pre-wrap;word-break:break-all;
+  font-size:11px;line-height:1.3;color:#9adcff;pointer-events:none;z-index:2147483646}
+/* ---------- fixture-specific ---------- */
+.box{position:absolute;box-sizing:border-box;font:600 12px/1.2 ui-monospace,Menlo,monospace;
+  color:#fff;text-align:center;-webkit-user-select:none;user-select:none;padding-top:8px}
+.src{background:#0050c0;cursor:grab}
+.zone{background:#402020;border:2px dashed #806060}
+.zone.over{background:#405020;border-color:#a0c060}
+.zone.done{background:#00a000;border-style:solid;border-color:#00ff00}
+.lbl{position:absolute;font-size:11px;color:#8a8a98;width:220px}
+.hdr{position:absolute;font:600 12px ui-monospace,Menlo,monospace;color:#ffd000}
+</style>
+
+<body>
+<div id="bg-beacon"></div><div id="bg-status"></div>
+<div class="bg-corner bg-tr"></div><div class="bg-corner bg-bl"></div><div class="bg-corner bg-br"></div>
+<h1>fixture: drag-drop</h1>
+<pre id="bg-readout"></pre>
+
+<div class="hdr" style="left:40px;top:96px">lane 1 — native HTML5 drag</div>
+<div class="box src" id="nativeSrc" draggable="true" style="left:40px;top:120px;width:120px;height:120px">
+  drag me<br>(native)</div>
+<div class="box zone" id="nativeZone" style="left:220px;top:120px;width:200px;height:120px">
+  native drop zone</div>
+<div class="lbl" style="left:40px;top:250px">payload text/plain = BG-DND-PAYLOAD-1</div>
+
+<div class="hdr" style="left:480px;top:96px">lane 2 — pointer-emulated drag</div>
+<div class="box src" id="ptrSrc" style="left:480px;top:120px;width:100px;height:100px">
+  drag me<br>(pointer)</div>
+<div class="box zone" id="ptrZone" style="left:640px;top:120px;width:200px;height:120px">
+  pointer drop zone</div>
+<div class="lbl" style="left:480px;top:250px">mousedown on #ptrSrc, move over #ptrZone, mouseup</div>
+
+<div class="hdr" style="left:900px;top:96px">lane 3 — file drop</div>
+<div class="box zone" id="fileZone" style="left:900px;top:120px;width:220px;height:120px">
+  drop files here</div>
+<div class="lbl" style="left:900px;top:250px">assets/upload-sample.txt is a known 63-byte file</div>
+
+<div class="hdr" style="left:40px;top:320px">lane 4 — HTML5 sortable list (dragover reorder)</div>
+<div class="box src" id="li0" draggable="true" style="left:40px;top:344px;width:100px;height:40px;padding-top:12px">item 0</div>
+<div class="box src" id="li1" draggable="true" style="left:160px;top:344px;width:100px;height:40px;padding-top:12px">item 1</div>
+<div class="box src" id="li2" draggable="true" style="left:280px;top:344px;width:100px;height:40px;padding-top:12px">item 2</div>
+<div class="lbl" style="left:40px;top:392px" id="orderLbl">order: 0,1,2</div>
+
+<script>
+/* ---------- shared fixture harness (identical in every fixture except `id`) ---------- */
+var __q = new URLSearchParams(location.search);
+window.__bg = {
+  id: 'drag-drop', proto: 1, ready: false, pass: null,
+  query: Object.fromEntries(__q),
+  markers: {beacon:[12,12], status:[36,12], topRight:[-12,12], bottomLeft:[12,-12], bottomRight:[-12,-12]},
+  markerColors: {beaconLoading:'#ff00ff', beaconReady:'#00ffff', statusIdle:'#333333',
+                 statusPass:'#00ff00', statusFail:'#ff0000',
+                 topRight:'#ff8000', bottomLeft:'#0080ff', bottomRight:'#ffff00'},
+  expect: {}, state: function(){ return {}; },
+  _ready: function(){ this.ready = true;
+    document.getElementById('bg-beacon').style.background = '#00ffff';
+    document.documentElement.setAttribute('data-bg-ready','1'); this._dump(); },
+  _status: function(v){ this.pass = v;
+    document.getElementById('bg-status').style.background =
+      v === true ? '#00ff00' : v === false ? '#ff0000' : '#333'; },
+  _dump: function(){ var el = document.getElementById('bg-readout');
+    if (el) el.textContent = JSON.stringify(this.state(), null, 1); }
+};
+</script>
+
+<script>
+(function () {
+  var bg = window.__bg;
+  var $ = function (id) { return document.getElementById(id); };
+  var PAYLOAD = 'BG-DND-PAYLOAD-1';
+
+  bg.expect = {
+    unit: 'CSS pixels',
+    native:  { src: { box: [40, 120, 120, 120], centre: [100, 180] },
+               zone: { box: [220, 120, 200, 120], centre: [320, 180] },
+               payload: PAYLOAD, mime: 'text/plain' },
+    pointer: { src: { box: [480, 120, 100, 100], centre: [530, 170] },
+               zone: { box: [640, 120, 200, 120], centre: [740, 180] },
+               sequence: ['mouseDown @ src centre', 'mouseMove to zone centre (>=2 moves)',
+                          'mouseUp @ zone centre'] },
+    file:    { zone: { box: [900, 120, 220, 120], centre: [1010, 180] },
+               sample: 'assets/upload-sample.txt (63 bytes)' },
+    list:    { items: [{ id: 'li0', centre: [90, 364] }, { id: 'li1', centre: [210, 364] },
+                       { id: 'li2', centre: [330, 364] }] },
+    passWhen: 'either lane reports a completed drop (native.drop > 0 || pointer.dropped)',
+    caveat: 'native HTML5 drag is started by the OS drag loop. Electron sendInputEvent ' +
+            'mouseDown+mouseMove is NOT guaranteed to fire dragstart. If native.dragstart ' +
+            'stays 0 while pointer.dropped is true, the transport is fine and only the ' +
+            'native drag source is unreachable — report that, do not paper over it.',
+    measured_2026_08_01: {
+      host: 'Electron 43.2.0 / Chromium 150.0.7871.129, macOS 26.1, Apple M4',
+      sendInputEventPointerLane: 'WORKS. mouseDown at (530,170), five mouseMoves, mouseUp ' +
+                                 'at (740,180) -> pointer.dropped true.',
+      sendInputEventNativeLane: 'DOES NOT START. native.dragstart stayed 0; a synthetic ' +
+                                'mouse press and drag never enters the OS drag loop.',
+      cdpDragEvents: 'WORKS. CDP Input.dispatchDragEvent (dragEnter, dragOver, drop) with ' +
+                     'an items array delivered dragenter 1, dragover 2, drop 1 and the ' +
+                     'exact payload BG-DND-PAYLOAD-1 with types ["text/plain"].',
+      consequence: 'drive native HTML5 drag through CDP Input.dispatchDragEvent; drive ' +
+                   'pointer-style drag through sendInputEvent.'
+    }
+  };
+
+  var native = { dragstart: 0, drag: 0, dragenter: 0, dragover: 0, dragleave: 0,
+                 drop: 0, dragend: 0, payload: null, effectAllowed: null, dropEffect: null,
+                 types: null };
+  var pointer = { down: 0, move: 0, up: 0, dropped: false, dx: 0, dy: 0, path: [] };
+  var files = [], listOrder = ['li0', 'li1', 'li2'], dragTag = null;
+
+  function refresh() {
+    bg._status(native.drop > 0 || pointer.dropped);
+    bg._dump();
+  }
+
+  /* ---- lane 1: native ---- */
+  $('nativeSrc').addEventListener('dragstart', function (ev) {
+    native.dragstart++;
+    ev.dataTransfer.setData('text/plain', PAYLOAD);
+    ev.dataTransfer.setData('application/x-blackglass', PAYLOAD + '/typed');
+    ev.dataTransfer.effectAllowed = 'copyMove';
+    native.effectAllowed = ev.dataTransfer.effectAllowed;
+    refresh();
+  });
+  $('nativeSrc').addEventListener('drag', function () { native.drag++; });
+  $('nativeSrc').addEventListener('dragend', function (ev) {
+    native.dragend++; native.dropEffect = ev.dataTransfer && ev.dataTransfer.dropEffect; refresh();
+  });
+  var nz = $('nativeZone');
+  nz.addEventListener('dragenter', function (ev) {
+    ev.preventDefault(); native.dragenter++; nz.classList.add('over'); refresh();
+  });
+  nz.addEventListener('dragover', function (ev) {
+    ev.preventDefault();                      /* required, or drop never fires */
+    ev.dataTransfer.dropEffect = 'copy';
+    native.dragover++;
+    if (native.dragover % 10 === 1) refresh(); /* avoid a repaint per move */
+  });
+  nz.addEventListener('dragleave', function () {
+    native.dragleave++; nz.classList.remove('over'); refresh();
+  });
+  nz.addEventListener('drop', function (ev) {
+    ev.preventDefault(); native.drop++;
+    native.types = Array.prototype.slice.call(ev.dataTransfer.types);
+    native.payload = ev.dataTransfer.getData('text/plain');
+    nz.classList.remove('over'); nz.classList.add('done');
+    nz.textContent = 'DROPPED: ' + native.payload;
+    refresh();
+  });
+
+  /* ---- lane 2: pointer-emulated ---- */
+  var ps = $('ptrSrc'), pz = $('ptrZone');
+  var dragging = false, grabX = 0, grabY = 0, home = null;
+  ps.addEventListener('mousedown', function (ev) {
+    pointer.down++; dragging = true;
+    var r = ps.getBoundingClientRect();
+    if (!home) home = { left: r.left, top: r.top };
+    grabX = ev.clientX - r.left; grabY = ev.clientY - r.top;
+    ps.style.cursor = 'grabbing'; ev.preventDefault(); refresh();
+  });
+  document.addEventListener('mousemove', function (ev) {
+    if (!dragging) return;
+    pointer.move++;
+    ps.style.left = (ev.clientX - grabX) + 'px';
+    ps.style.top = (ev.clientY - grabY) + 'px';
+    pointer.path.push([ev.clientX, ev.clientY]);
+    if (pointer.path.length > 32) pointer.path.shift();
+    var over = hitZone(ev.clientX, ev.clientY);
+    pz.classList.toggle('over', over && !pointer.dropped);
+    if (pointer.move % 8 === 1) refresh();
+  });
+  document.addEventListener('mouseup', function (ev) {
+    if (!dragging) return;
+    dragging = false; pointer.up++; ps.style.cursor = 'grab';
+    if (hitZone(ev.clientX, ev.clientY)) {
+      pointer.dropped = true;
+      pointer.dx = +(ev.clientX - 740).toFixed(2);
+      pointer.dy = +(ev.clientY - 180).toFixed(2);
+      pz.classList.remove('over'); pz.classList.add('done');
+      pz.textContent = 'DROPPED (pointer)';
+    } else {
+      pz.classList.remove('over');
+    }
+    refresh();
+  });
+  function hitZone(x, y) {
+    var r = pz.getBoundingClientRect();
+    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+  }
+
+  /* ---- lane 3: files ---- */
+  var fz = $('fileZone');
+  ['dragenter', 'dragover'].forEach(function (t) {
+    fz.addEventListener(t, function (ev) { ev.preventDefault(); fz.classList.add('over'); });
+  });
+  fz.addEventListener('dragleave', function () { fz.classList.remove('over'); });
+  fz.addEventListener('drop', function (ev) {
+    ev.preventDefault(); fz.classList.remove('over'); fz.classList.add('done');
+    var dt = ev.dataTransfer;
+    files = [];
+    for (var i = 0; i < dt.files.length; i++) {
+      var f = dt.files[i];
+      files.push({ name: f.name, size: f.size, type: f.type, lastModified: f.lastModified });
+    }
+    fz.textContent = 'FILES: ' + files.length;
+    refresh();
+  });
+
+  /* ---- lane 4: sortable ---- */
+  ['li0', 'li1', 'li2'].forEach(function (id) {
+    var el = $(id);
+    el.addEventListener('dragstart', function (ev) {
+      dragTag = id; ev.dataTransfer.setData('text/plain', id); refresh();
+    });
+    el.addEventListener('dragover', function (ev) { ev.preventDefault(); });
+    el.addEventListener('drop', function (ev) {
+      ev.preventDefault();
+      var from = listOrder.indexOf(dragTag), to = listOrder.indexOf(id);
+      if (from >= 0 && to >= 0 && from !== to) {
+        listOrder.splice(to, 0, listOrder.splice(from, 1)[0]);
+        listOrder.forEach(function (lid, i) { $(lid).style.left = (40 + i * 120) + 'px'; });
+        $('orderLbl').textContent = 'order: ' + listOrder.map(function (s) { return s.slice(2); }).join(',');
+      }
+      refresh();
+    });
+  });
+
+  bg.state = function () {
+    return { id: bg.id, ready: bg.ready, pass: bg.pass,
+             native: native, pointer: pointer, files: files, listOrder: listOrder,
+             ptrSrcRect: $('ptrSrc').getBoundingClientRect().toJSON() };
+  };
+
+  bg.reset = function () {
+    native = { dragstart: 0, drag: 0, dragenter: 0, dragover: 0, dragleave: 0, drop: 0,
+               dragend: 0, payload: null, effectAllowed: null, dropEffect: null, types: null };
+    pointer = { down: 0, move: 0, up: 0, dropped: false, dx: 0, dy: 0, path: [] };
+    files = []; dragging = false;
+    nz.className = 'box zone'; nz.textContent = 'native drop zone';
+    pz.className = 'box zone'; pz.textContent = 'pointer drop zone';
+    fz.className = 'box zone'; fz.textContent = 'drop files here';
+    if (home) { ps.style.left = '480px'; ps.style.top = '120px'; }
+    refresh();
+  };
+
+  refresh();
+  bg._ready();
+})();
+</script>
+</html>

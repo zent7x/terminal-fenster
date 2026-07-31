@@ -1,0 +1,142 @@
+{
+  "schema": "blackglass.fixtures/1",
+  "unit": "CSS pixels",
+  "designViewport": [1280, 800],
+  "contract": {
+    "readyFlag": "document.documentElement[data-bg-ready] === \"1\"",
+    "api": "window.__bg  { id, proto, ready, pass, query, expect, state(), reset() }",
+    "markers": {
+      "beacon": { "at": [12, 12], "loading": "#ff00ff", "ready": "#00ffff" },
+      "status": { "at": [36, 12], "idle": "#333333", "pass": "#00ff00", "fail": "#ff0000" },
+      "topRight": { "at": [-12, 12], "rgb": "#ff8000" },
+      "bottomLeft": { "at": [12, -12], "rgb": "#0080ff" },
+      "bottomRight": { "at": [-12, -12], "rgb": "#ffff00" }
+    },
+    "markerNote": "negative coordinates are measured from the far edge of the frame"
+  },
+  "fixtures": [
+    {
+      "id": "click-targets",
+      "file": "click-targets.html",
+      "proves": "a click at a documented CSS coordinate lands on the element that occupies it, and reports every coordinate space back",
+      "covers": ["click targets at known pixel coordinates"],
+      "inputs": ["mouse"]
+    },
+    {
+      "id": "text-input",
+      "file": "text-input.html",
+      "proves": "synthetic keys insert text into a focused control; a password field masks its value and is never exposed in cleartext",
+      "covers": ["text input", "password field"],
+      "inputs": ["keyboard", "mouse"]
+    },
+    {
+      "id": "contenteditable",
+      "file": "contenteditable.html",
+      "proves": "a rich-text editing host accepts input and reports selection plus caret geometry",
+      "covers": ["contenteditable"],
+      "inputs": ["keyboard", "mouse"]
+    },
+    {
+      "id": "hover",
+      "file": "hover.html",
+      "proves": "CSS :hover activates under offscreen rendering; isolates the mouseEnter latch requirement",
+      "covers": ["hover / :hover states"],
+      "inputs": ["mouse"]
+    },
+    {
+      "id": "drag-drop",
+      "file": "drag-drop.html",
+      "proves": "native HTML5 drag and pointer-emulated drag, measured separately because they fail separately",
+      "covers": ["drag and drop"],
+      "inputs": ["mouse"]
+    },
+    {
+      "id": "scrolling",
+      "file": "scrolling.html",
+      "proves": "wheel deltas scroll the document and the nested scroller; scroll offset is readable from pixels via the colour-band strip",
+      "covers": ["scrolling", "position markers"],
+      "inputs": ["mouse", "keyboard"]
+    },
+    {
+      "id": "canvas2d",
+      "file": "canvas2d.html",
+      "proves": "2D canvas rasterises and a repainting page produces a steady paint stream; doubles as the frame-pacing corpus",
+      "covers": ["canvas 2D animation"],
+      "inputs": []
+    },
+    {
+      "id": "webgl-triangle",
+      "file": "webgl-triangle.html",
+      "proves": "a WebGL context exists under OSR and its output reaches the compositor; readPixels self-checks",
+      "covers": ["WebGL triangle"],
+      "inputs": []
+    },
+    {
+      "id": "css-animation",
+      "file": "css-animation.html",
+      "proves": "composited and layout-driven CSS animations both reach the offscreen surface; scrubbable to an exact keyframe",
+      "covers": ["CSS animation"],
+      "inputs": []
+    },
+    {
+      "id": "video",
+      "file": "video.html",
+      "proves": "a video decodes and its frames reach the surface; time maps to a known colour",
+      "covers": ["video element"],
+      "inputs": [],
+      "assets": ["assets/color-bars.webm", "assets/color-bars.mp4"]
+    },
+    {
+      "id": "form-submit",
+      "file": "form-submit.html",
+      "proves": "form submission is a real navigation, via button, Enter key and requestSubmit",
+      "covers": ["form submission"],
+      "inputs": ["mouse", "keyboard"],
+      "navigatesTo": "form-target.html"
+    },
+    {
+      "id": "form-target",
+      "file": "form-target.html",
+      "proves": "the landing page re-derives the expected query string and self-checks",
+      "covers": ["form submission"],
+      "inputs": [],
+      "verify": false,
+      "verifyNote": "verified indirectly: the form-submit probe lands here"
+    },
+    {
+      "id": "file-upload",
+      "file": "file-upload.html",
+      "proves": "file inputs accept files and the page reads their bytes back; programmatic path avoids the invisible native chooser",
+      "covers": ["file upload"],
+      "inputs": ["mouse"],
+      "assets": ["assets/upload-sample.txt", "assets/upload-sample.csv", "assets/upload-dir/"],
+      "hazard": "input.click() opens a native modal panel that never paints under OSR"
+    },
+    {
+      "id": "popup",
+      "file": "popup.html",
+      "proves": "what window.open and target=_blank actually do under the engine's setWindowOpenHandler deny policy",
+      "covers": ["popup window"],
+      "inputs": ["mouse"],
+      "opens": "popup-child.html"
+    },
+    {
+      "id": "popup-child",
+      "file": "popup-child.html",
+      "proves": "the child window is unmistakable by frame colour, title and postMessage",
+      "covers": ["popup window"],
+      "inputs": [],
+      "verify": false,
+      "verifyNote": "only meaningful when opened by popup.html"
+    },
+    {
+      "id": "escape-injection",
+      "file": "escape-injection.html",
+      "proves": "the tty-safe projection holds against 29 terminal control-sequence payloads",
+      "covers": ["terminal escape injection in <title>"],
+      "inputs": [],
+      "corpus": "escape-corpus.json",
+      "hazard": "hostile by design; clear the clipboard before running and use a disposable terminal"
+    }
+  ]
+}

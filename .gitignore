@@ -1,0 +1,6 @@
+/target/
+node_modules/
+*.log
+apps/engine/spike/out/
+tests/e2e/input-injection-results.json
+.DS_Store

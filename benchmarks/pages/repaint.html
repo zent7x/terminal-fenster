@@ -1,0 +1,43 @@
+<meta charset="utf-8">
+<title>BlackGlass repaint bench</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden;
+               background: #101014; color: #e8e8ee;
+               font: 14px/1.4 ui-monospace, Menlo, monospace; }
+  #stage { position: absolute; inset: 0; }
+  #bar   { position: absolute; top: 0; bottom: 0; width: 6%;
+           background: #f0f0f5; will-change: transform; }
+  #hud   { position: absolute; left: 12px; top: 10px; z-index: 2;
+           text-shadow: 0 1px 0 #000; }
+</style>
+<div id="stage"><div id="bar"></div></div>
+<div id="hud">BlackGlass repaint bench &mdash; frame <span id="n">0</span></div>
+<script>
+// Deterministic, self-contained repaint load. No network, no fonts, no timers
+// other than requestAnimationFrame, so the page cannot stall the pipeline in a
+// way that would be mistaken for an encoder or transport problem.
+//
+// Two independent sources of damage are used on purpose:
+//   1. The full-viewport background colour changes every frame. Chromium's
+//      compositor therefore reports the WHOLE viewport dirty, which is the
+//      case BlackGlass actually pays for -- the kitty encoder compresses a full
+//      frame regardless of damage rectangles.
+//   2. A translated bar, so the frame is not a flat fill that would compress
+//      unrealistically well and flatter the wire-bytes number.
+//
+// Frame index (not wall clock) drives the animation, so two runs of the same
+// length render the same sequence of images and are directly comparable.
+const stage = document.getElementById('stage');
+const bar = document.getElementById('bar');
+const nEl = document.getElementById('n');
+let n = 0;
+function tick() {
+  n++;
+  const hue = (n * 2) % 360;
+  stage.style.background = 'hsl(' + hue + ' 28% 12%)';
+  bar.style.transform = 'translateX(' + ((n * 7) % 1600) + 'px)';
+  nEl.textContent = n;
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+</script>

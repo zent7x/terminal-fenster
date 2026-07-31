@@ -1,0 +1,239 @@
+<!-- BlackGlass fixture: scrolling
+     Proves: wheel deltas move the document, the scroll position is reportable, and the
+     visible content identifies the scroll offset from pixels alone.
+     A 48 px colour strip runs down the left of the page: band i (250 px tall) has a fixed
+     colour, so a raw frame reveals roughly where the viewport is without any JS at all.
+     Also covers: a nested scroller (wheel must go to the element under the cursor),
+     position:sticky, and scrollIntoView.
+     Self-contained, file:// safe. -->
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BG · scrolling</title>
+<style>
+/* ---------- shared fixture chrome (identical in every fixture) ---------- */
+:root{color-scheme:dark}
+html,body{margin:0;padding:0;background:#0b0b0f;color:#e6e6e6;
+  font:14px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;-webkit-font-smoothing:none}
+#bg-beacon,#bg-status,.bg-corner{position:fixed;width:24px;height:24px;z-index:2147483647}
+#bg-beacon{left:0;top:0;background:#ff00ff}
+#bg-status{left:24px;top:0;background:#333}
+.bg-tr{right:0;top:0;background:#ff8000}
+.bg-bl{left:0;bottom:0;background:#0080ff}
+.bg-br{right:0;bottom:0;background:#ffff00}
+h1{position:fixed;left:56px;top:1px;margin:0;font:600 13px/24px ui-monospace,Menlo,monospace;color:#8a8aff}
+#bg-readout{position:fixed;right:8px;bottom:32px;width:380px;max-height:280px;overflow:hidden;
+  margin:0;padding:4px;background:rgba(0,0,0,.66);white-space:pre-wrap;word-break:break-all;
+  font-size:11px;line-height:1.3;color:#9adcff;pointer-events:none;z-index:2147483646}
+/* ---------- fixture-specific ---------- */
+html{scroll-behavior:auto}          /* never smooth: smooth scrolling is not deterministic */
+#page{position:relative;width:100%;height:6000px}
+.band{position:absolute;left:64px;width:48px;height:250px}
+.marker{position:absolute;left:130px;height:40px;font:700 24px/40px ui-monospace,Menlo,monospace;
+  color:#e6e6e6}
+.rule{position:absolute;left:112px;width:10px;height:1px;background:#666}
+#sticky{position:sticky;top:24px;left:0;margin-left:640px;width:220px;height:28px;
+  background:#204020;border:1px solid #40a040;font:600 12px/28px ui-monospace,Menlo,monospace;
+  text-align:center;z-index:10}
+#inner{position:absolute;left:400px;top:300px;width:300px;height:200px;overflow-y:scroll;
+  background:#16161c;border:2px solid #3a3a4a}
+#innerContent{position:relative;height:2000px;width:100%}
+.innerRow{position:absolute;left:8px;height:24px;font:12px/24px ui-monospace,Menlo,monospace;color:#8fe}
+#hscroll{position:absolute;left:400px;top:540px;width:300px;height:60px;overflow-x:scroll;
+  background:#16161c;border:2px solid #3a3a4a;white-space:nowrap}
+#hscrollContent{display:inline-block;width:2000px;height:24px;
+  background:linear-gradient(90deg,#c00000 0,#00c000 50%,#0000c0 100%)}
+</style>
+
+<body>
+<div id="bg-beacon"></div><div id="bg-status"></div>
+<div class="bg-corner bg-tr"></div><div class="bg-corner bg-bl"></div><div class="bg-corner bg-br"></div>
+<h1>fixture: scrolling</h1>
+<pre id="bg-readout"></pre>
+
+<div id="page">
+  <div id="sticky">sticky header</div>
+  <div id="inner"><div id="innerContent"></div></div>
+  <div id="hscroll"><div id="hscrollContent"></div></div>
+</div>
+
+<script>
+/* ---------- shared fixture harness (identical in every fixture except `id`) ---------- */
+var __q = new URLSearchParams(location.search);
+window.__bg = {
+  id: 'scrolling', proto: 1, ready: false, pass: null,
+  query: Object.fromEntries(__q),
+  markers: {beacon:[12,12], status:[36,12], topRight:[-12,12], bottomLeft:[12,-12], bottomRight:[-12,-12]},
+  markerColors: {beaconLoading:'#ff00ff', beaconReady:'#00ffff', statusIdle:'#333333',
+                 statusPass:'#00ff00', statusFail:'#ff0000',
+                 topRight:'#ff8000', bottomLeft:'#0080ff', bottomRight:'#ffff00'},
+  expect: {}, state: function(){ return {}; },
+  _ready: function(){ this.ready = true;
+    document.getElementById('bg-beacon').style.background = '#00ffff';
+    document.documentElement.setAttribute('data-bg-ready','1'); this._dump(); },
+  _status: function(v){ this.pass = v;
+    document.getElementById('bg-status').style.background =
+      v === true ? '#00ff00' : v === false ? '#ff0000' : '#333'; },
+  _dump: function(){ var el = document.getElementById('bg-readout');
+    if (el) el.textContent = JSON.stringify(this.state(), null, 1); }
+};
+</script>
+
+<script>
+(function () {
+  var bg = window.__bg;
+  var $ = function (id) { return document.getElementById(id); };
+
+  var PAGE_H = 6000, BAND_H = 250, BANDS = PAGE_H / BAND_H;   /* 24 */
+  /* Literal palette: hsl(i*15, 100%, 50%). Written out so the expected pixel value is
+     a constant in the repo and not the output of a rounding rule that could change. */
+  var PALETTE = ['#ff0000','#ff4000','#ff8000','#ffbf00','#ffff00','#bfff00',
+                 '#80ff00','#40ff00','#00ff00','#00ff40','#00ff80','#00ffbf',
+                 '#00ffff','#00bfff','#0080ff','#0040ff','#0000ff','#4000ff',
+                 '#8000ff','#bf00ff','#ff00ff','#ff00bf','#ff0080','#ff0040'];
+
+  var page = $('page');
+  for (var i = 0; i < BANDS; i++) {
+    var b = document.createElement('div');
+    b.className = 'band'; b.id = 'band' + i;
+    b.style.top = (i * BAND_H) + 'px'; b.style.background = PALETTE[i];
+    page.appendChild(b);
+    var m = document.createElement('div');
+    m.className = 'marker'; m.id = 'm' + i;
+    m.style.top = (i * BAND_H) + 'px';
+    m.textContent = 'y=' + (i * BAND_H);
+    page.appendChild(m);
+    for (var t = 0; t < 5; t++) {           /* 50 px ticks */
+      var r = document.createElement('div');
+      r.className = 'rule'; r.style.top = (i * BAND_H + t * 50) + 'px';
+      page.appendChild(r);
+    }
+  }
+  var ic = $('innerContent');
+  for (var j = 0; j < 40; j++) {
+    var row = document.createElement('div');
+    row.className = 'innerRow'; row.style.top = (j * 50) + 'px';
+    row.textContent = 'inner row ' + j + '  (top=' + (j * 50) + ')';
+    ic.appendChild(row);
+  }
+
+  bg.expect = {
+    unit: 'CSS pixels',
+    page: { heightPx: PAGE_H, bandHeightPx: BAND_H, bandCount: BANDS,
+            stripBox: [64, 0, 48, PAGE_H], palette: PALETTE,
+            readRule: 'strip colour at viewport y == PALETTE[floor((scrollY + y) / 250)]' },
+    markers: { leftPx: 130, heightPx: 40, text: 'y=<documentY>', everyPx: BAND_H },
+    inner:  { box: [400, 300, 300, 200], centre: [550, 400], contentHeightPx: 2000,
+              note: 'a wheel event with the cursor inside this box must scroll the box, ' +
+                    'not the document' },
+    hscroll:{ box: [400, 540, 300, 60], centre: [550, 570], contentWidthPx: 2000 },
+    sticky: { selector: '#sticky', stickyTopPx: 24,
+              note: 'must stay pinned 24 px below the viewport top once scrolled past' },
+    passWhen: 'window.scrollY >= 1000',
+    determinism: 'scroll-behavior is forced to auto; smooth scrolling would make frames ' +
+                 'depend on wall-clock timing',
+    measured_2026_08_01: {
+      host: 'Electron 43.2.0 / Chromium 150.0.7871.129, macOS 26.1, Apple M4, OSR 1280x800',
+      eventDelivery: 'GOOD. sendInputEvent({type:"mouseWheel", deltaY, canScroll:true}) ' +
+                     'reaches the page every time: counts.wheel increments once per call, ' +
+                     'deltaMode is 0 (pixels), and lastWheel.target is the element under ' +
+                     'the cursor (innerContent when over #inner).',
+      documentScroll: 'DOES NOT MOVE. window.scrollY stayed 0 across deltaY values of ' +
+                      '-600, -120, +120, five stacked -120s, and three stacked +80s.',
+      nestedScroll: 'INCONSISTENT, and that is the real problem. Three consecutive clean ' +
+                    'runs of (mouseEnter, 3x wheel deltaY 80) over #inner left scrollTop ' +
+                    'at 0. Two earlier sequences, both of which had already delivered a ' +
+                    'document-level wheel, moved it (scrollTop 120 after one deltaY 120, ' +
+                    'and ~500 in another). Same build, same window size, different ' +
+                    'preceding events -- which points at wheel-phase latching rather than ' +
+                    'a flat "unsupported".',
+      cdpDispatchMouseEvent: 'ALSO DOES NOT SCROLL the document (Input.dispatchMouseEvent ' +
+                             'type mouseWheel, deltaY 240, over the body).',
+      synthesizeScrollGesture: 'UNVERIFIED. Input.synthesizeScrollGesture never settled and ' +
+                               'wedged the debugger session; not retried. Best remaining ' +
+                               'candidate.',
+      workingFallback: 'window.scrollTo / scrollBy via executeJavaScript, which is what ' +
+                       '__bg.scrollToY() uses. Deterministic in every run.',
+      consequence: 'terminal wheel input cannot be relied on to scroll anything through ' +
+                   'sendInputEvent on this build. This fixture is what surfaces it, and ' +
+                   'the counters separate "the event never arrived" from "the event ' +
+                   'arrived and nothing scrolled" -- here it is firmly the second.'
+    }
+  };
+
+  var counts = { wheel: 0, scroll: 0, innerScroll: 0, hScroll: 0, keydown: 0 };
+  var lastWheel = null, maxScrollY = 0;
+
+  function refresh() {
+    if (window.scrollY > maxScrollY) maxScrollY = window.scrollY;
+    bg._status(window.scrollY >= 1000);
+    bg._dump();
+  }
+
+  window.addEventListener('wheel', function (ev) {
+    counts.wheel++;
+    lastWheel = { deltaX: ev.deltaX, deltaY: ev.deltaY, deltaZ: ev.deltaZ,
+                  deltaMode: ev.deltaMode, clientX: ev.clientX, clientY: ev.clientY,
+                  ctrlKey: ev.ctrlKey, isTrusted: ev.isTrusted,
+                  target: ev.target && (ev.target.id || ev.target.className) || null,
+                  defaultPrevented: ev.defaultPrevented };
+    refresh();
+  }, { passive: true, capture: true });
+
+  window.addEventListener('scroll', function () { counts.scroll++; refresh(); }, { passive: true });
+  $('inner').addEventListener('scroll', function () { counts.innerScroll++; refresh(); }, { passive: true });
+  $('hscroll').addEventListener('scroll', function () { counts.hScroll++; refresh(); }, { passive: true });
+  window.addEventListener('keydown', function () { counts.keydown++; refresh(); }, true);
+
+  function topVisibleMarker() {
+    var idx = Math.floor(window.scrollY / BAND_H);
+    return { index: idx, documentY: idx * BAND_H, colour: PALETTE[idx] || null,
+             text: 'y=' + (idx * BAND_H) };
+  }
+
+  bg.state = function () {
+    var inner = $('inner'), hs = $('hscroll');
+    return {
+      id: bg.id, ready: bg.ready, pass: bg.pass,
+      scrollX: window.scrollX, scrollY: window.scrollY, maxScrollYSeen: maxScrollY,
+      scrollLimitY: document.documentElement.scrollHeight - window.innerHeight,
+      documentHeight: document.documentElement.scrollHeight,
+      viewport: { w: window.innerWidth, h: window.innerHeight },
+      band: topVisibleMarker(),
+      /* colour under a fixed viewport probe point, i.e. what a frame scanner sees */
+      stripAtViewportY: (function () {
+        var out = {};
+        [100, 400, 700].forEach(function (y) {
+          var el = document.elementFromPoint(88, y);
+          out['y' + y] = el && el.className === 'band'
+            ? { band: el.id, colour: getComputedStyle(el).backgroundColor } : null;
+        });
+        return out;
+      })(),
+      inner: { scrollTop: inner.scrollTop, scrollHeight: inner.scrollHeight,
+               clientHeight: inner.clientHeight },
+      hscroll: { scrollLeft: hs.scrollLeft, scrollWidth: hs.scrollWidth,
+                 clientWidth: hs.clientWidth },
+      stickyTop: $('sticky').getBoundingClientRect().top,
+      counts: counts, lastWheel: lastWheel
+    };
+  };
+
+  bg.scrollToY = function (y) { window.scrollTo(0, y); refresh(); return window.scrollY; };
+  bg.scrollToBand = function (i) { return bg.scrollToY(i * BAND_H); };
+  bg.scrollIntoViewBand = function (i) {
+    var el = $('m' + i); if (!el) return null;
+    el.scrollIntoView({ block: 'start', behavior: 'auto' }); refresh(); return window.scrollY;
+  };
+  bg.reset = function () {
+    window.scrollTo(0, 0); $('inner').scrollTop = 0; $('hscroll').scrollLeft = 0;
+    for (var k in counts) counts[k] = 0;
+    lastWheel = null; maxScrollY = 0; refresh();
+  };
+
+  window.scrollTo(0, 0);
+  refresh();
+  bg._ready();
+})();
+</script>
+</html>

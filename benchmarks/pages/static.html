@@ -1,0 +1,28 @@
+<meta charset="utf-8">
+<title>BlackGlass static bench</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden;
+               background: #101014; color: #e8e8ee;
+               font: 15px/1.6 ui-monospace, Menlo, monospace; }
+  main { padding: 24px 32px; }
+  h1 { font-size: 20px; margin: 0 0 12px; }
+  p  { margin: 0 0 10px; max-width: 70ch; color: #b9b9c6; }
+  .swatch { display: inline-block; width: 42px; height: 42px; margin-right: 6px; }
+</style>
+<main>
+  <h1>BlackGlass static baseline</h1>
+  <p>This page never repaints after load. It is the no-damage control: any frames
+     counted here beyond the initial paint indicate the pipeline is producing
+     redundant frames, and the frame count should stay in the low single digits
+     no matter how long the bounded run lasts.</p>
+  <p>It also carries text and flat colour blocks so the first frame is a
+     realistic mix of high-frequency glyph edges and large uniform regions,
+     rather than a blank page that would compress unrepresentatively well.</p>
+  <div>
+    <span class="swatch" style="background:#e5484d"></span
+    ><span class="swatch" style="background:#e2a336"></span
+    ><span class="swatch" style="background:#46a758"></span
+    ><span class="swatch" style="background:#3b9eff"></span
+    ><span class="swatch" style="background:#8e4ec6"></span>
+  </div>
+</main>

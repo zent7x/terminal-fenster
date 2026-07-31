@@ -1,0 +1,10 @@
+[package]
+name = "bg-term"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Terminal capability detection, graphics protocol encoders, and input decoding for BlackGlass"
+
+[dependencies]
+libc.workspace = true
+flate2.workspace = true

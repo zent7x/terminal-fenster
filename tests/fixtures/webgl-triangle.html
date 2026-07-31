@@ -1,0 +1,224 @@
+<!-- BlackGlass fixture: webgl-triangle
+     Proves: a GPU-backed context exists under offscreen rendering and its output reaches
+     the compositor. Under --disable-gpu this exercises the SwiftShader software path,
+     which is the configuration a headless CI box will actually run.
+     The fixture reads its own centre pixel back with gl.readPixels, so it can report
+     success without any framebuffer scan and without a screenshot.
+     Self-contained, file:// safe. -->
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BG · webgl-triangle</title>
+<style>
+/* ---------- shared fixture chrome (identical in every fixture) ---------- */
+:root{color-scheme:dark}
+html,body{margin:0;padding:0;background:#0b0b0f;color:#e6e6e6;
+  font:14px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;-webkit-font-smoothing:none}
+#bg-beacon,#bg-status,.bg-corner{position:fixed;width:24px;height:24px;z-index:2147483647}
+#bg-beacon{left:0;top:0;background:#ff00ff}
+#bg-status{left:24px;top:0;background:#333}
+.bg-tr{right:0;top:0;background:#ff8000}
+.bg-bl{left:0;bottom:0;background:#0080ff}
+.bg-br{right:0;bottom:0;background:#ffff00}
+h1{position:fixed;left:56px;top:1px;margin:0;font:600 13px/24px ui-monospace,Menlo,monospace;color:#8a8aff}
+#bg-readout{position:fixed;right:8px;bottom:32px;width:380px;max-height:280px;overflow:hidden;
+  margin:0;padding:4px;background:rgba(0,0,0,.66);white-space:pre-wrap;word-break:break-all;
+  font-size:11px;line-height:1.3;color:#9adcff;pointer-events:none;z-index:2147483646}
+/* ---------- fixture-specific ---------- */
+#gl{position:absolute;left:40px;top:120px;background:#000}
+label{position:absolute;font-size:12px;color:#9a9aa8}
+button{position:absolute;background:#22222c;color:#e6e6e6;border:1px solid #4a4a5a;
+  font:12px ui-monospace,Menlo,monospace;height:28px;cursor:pointer}
+.note{position:absolute;font-size:11px;color:#6a6a78;max-width:460px}
+#fail{position:absolute;left:40px;top:120px;width:480px;height:270px;background:#600000;
+  color:#fff;font:600 14px/270px ui-monospace,Menlo,monospace;text-align:center;display:none}
+</style>
+
+<body>
+<div id="bg-beacon"></div><div id="bg-status"></div>
+<div class="bg-corner bg-tr"></div><div class="bg-corner bg-bl"></div><div class="bg-corner bg-br"></div>
+<h1>fixture: webgl-triangle</h1>
+<pre id="bg-readout"></pre>
+
+<label style="left:40px;top:98px">&lt;canvas&gt; WebGL 480x270 — RGB triangle on a black clear colour</label>
+<canvas id="gl" width="480" height="270"></canvas>
+<div id="fail">NO WEBGL CONTEXT</div>
+<button id="redraw" style="left:40px;top:406px;width:90px">redraw</button>
+<button id="spin"   style="left:140px;top:406px;width:90px">spin 1 step</button>
+
+<p class="note" style="left:560px;top:120px">
+Vertex colours are pure primaries at the three clip-space corners, so the barycentric
+interpolation makes the centre pixel a predictable mid grey-ish blend. The assertion is
+deliberately loose on the exact blend and strict on the thing that matters:
+<code>readPixels</code> at the triangle centroid must not be the clear colour.
+</p>
+<p class="note" style="left:560px;top:210px">
+The renderer string comes from <code>WEBGL_debug_renderer_info</code>, which Chromium may
+withhold. A null there is not a failure — it is a fact to record.
+</p>
+
+<script>
+/* ---------- shared fixture harness (identical in every fixture except `id`) ---------- */
+var __q = new URLSearchParams(location.search);
+window.__bg = {
+  id: 'webgl-triangle', proto: 1, ready: false, pass: null,
+  query: Object.fromEntries(__q),
+  markers: {beacon:[12,12], status:[36,12], topRight:[-12,12], bottomLeft:[12,-12], bottomRight:[-12,-12]},
+  markerColors: {beaconLoading:'#ff00ff', beaconReady:'#00ffff', statusIdle:'#333333',
+                 statusPass:'#00ff00', statusFail:'#ff0000',
+                 topRight:'#ff8000', bottomLeft:'#0080ff', bottomRight:'#ffff00'},
+  expect: {}, state: function(){ return {}; },
+  _ready: function(){ this.ready = true;
+    document.getElementById('bg-beacon').style.background = '#00ffff';
+    document.documentElement.setAttribute('data-bg-ready','1'); this._dump(); },
+  _status: function(v){ this.pass = v;
+    document.getElementById('bg-status').style.background =
+      v === true ? '#00ff00' : v === false ? '#ff0000' : '#333'; },
+  _dump: function(){ var el = document.getElementById('bg-readout');
+    if (el) el.textContent = JSON.stringify(this.state(), null, 1); }
+};
+</script>
+
+<script>
+(function () {
+  var bg = window.__bg;
+  var cv = document.getElementById('gl');
+  var W = cv.width, H = cv.height;
+
+  bg.expect = {
+    unit: 'CSS pixels (canvas backing store is 1:1 with CSS px)',
+    canvas: { box: [40, 120, W, H] },
+    clearColour: [0, 0, 0, 255],
+    vertices: [{ clip: [0.0, 0.8], colour: 'red' },
+               { clip: [-0.8, -0.8], colour: 'green' },
+               { clip: [0.8, -0.8], colour: 'blue' }],
+    /* clip (0,0) maps to the canvas centre; +y is up in clip space, down in page space */
+    centroidCanvasPx: [240, 135], centroidPageCentre: [280, 255],
+    probe: 'gl.readPixels at (240,135) must differ from the clear colour',
+    passWhen: 'a webgl context was created AND the centre pixel is not the clear colour',
+    determinism: 'one static draw on load; use __bg.spin() for a deterministic rotation step'
+  };
+
+  var gl = null, contextName = null, err = null, step = 0;
+  var names = ['webgl2', 'webgl', 'experimental-webgl'];
+  for (var i = 0; i < names.length && !gl; i++) {
+    try {
+      var c = cv.getContext(names[i], { preserveDrawingBuffer: true, antialias: false });
+      if (c) { gl = c; contextName = names[i]; }
+    } catch (e) { err = String(e); }
+  }
+
+  var info = { context: contextName, error: err };
+  var centrePixel = null;
+
+  function compile(type, src) {
+    var s = gl.createShader(type);
+    gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+      err = 'shader: ' + gl.getShaderInfoLog(s); return null;
+    }
+    return s;
+  }
+
+  function setup() {
+    var vsSrc =
+      'attribute vec2 aPos;attribute vec3 aCol;varying vec3 vCol;uniform float uAng;' +
+      'void main(){float s=sin(uAng),c=cos(uAng);' +
+      'vec2 p=vec2(aPos.x*c-aPos.y*s,aPos.x*s+aPos.y*c);' +
+      'vCol=aCol;gl_Position=vec4(p,0.0,1.0);}';
+    var fsSrc =
+      'precision mediump float;varying vec3 vCol;' +
+      'void main(){gl_FragColor=vec4(vCol,1.0);}';
+    var vs = compile(gl.VERTEX_SHADER, vsSrc), fs = compile(gl.FRAGMENT_SHADER, fsSrc);
+    if (!vs || !fs) return null;
+    var p = gl.createProgram();
+    gl.attachShader(p, vs); gl.attachShader(p, fs); gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) { err = 'link: ' + gl.getProgramInfoLog(p); return null; }
+    gl.useProgram(p);
+
+    var data = new Float32Array([
+      0.0,  0.8,  1, 0, 0,
+     -0.8, -0.8,  0, 1, 0,
+      0.8, -0.8,  0, 0, 1
+    ]);
+    var buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+    var aPos = gl.getAttribLocation(p, 'aPos'), aCol = gl.getAttribLocation(p, 'aCol');
+    gl.enableVertexAttribArray(aPos);
+    gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 20, 0);
+    gl.enableVertexAttribArray(aCol);
+    gl.vertexAttribPointer(aCol, 3, gl.FLOAT, false, 20, 8);
+    return { prog: p, uAng: gl.getUniformLocation(p, 'uAng') };
+  }
+
+  var prog = null;
+  function draw() {
+    if (!gl || !prog) return;
+    gl.viewport(0, 0, W, H);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.uniform1f(prog.uAng, step * Math.PI / 18);   /* exactly 10 degrees per step */
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    var px = new Uint8Array(4);
+    gl.readPixels(240, 135, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    centrePixel = [px[0], px[1], px[2], px[3]];
+    bg._status(!!(px[0] || px[1] || px[2]));
+    bg._dump();
+  }
+
+  if (!gl) {
+    document.getElementById('fail').style.display = 'block';
+    bg._status(false);
+  } else {
+    try {
+      var dbg = gl.getExtension('WEBGL_debug_renderer_info');
+      info.vendor = gl.getParameter(gl.VENDOR);
+      info.renderer = gl.getParameter(gl.RENDERER);
+      info.version = gl.getParameter(gl.VERSION);
+      info.glsl = gl.getParameter(gl.SHADING_LANGUAGE_VERSION);
+      info.unmaskedVendor = dbg ? gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) : null;
+      info.unmaskedRenderer = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : null;
+      info.maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+      info.maxViewportDims = Array.prototype.slice.call(gl.getParameter(gl.MAX_VIEWPORT_DIMS));
+      info.extensions = (gl.getSupportedExtensions() || []).length;
+      info.isContextLost = gl.isContextLost();
+    } catch (e) { err = String(e); }
+    prog = setup();
+    if (prog) draw(); else { document.getElementById('fail').style.display = 'block'; bg._status(false); }
+  }
+
+  cv.addEventListener('webglcontextlost', function (ev) {
+    ev.preventDefault(); info.contextLostAt = Date.now(); bg._status(false); bg._dump();
+  });
+
+  bg.spin = function (n) { step += (n === undefined ? 1 : n); draw(); return step; };
+  bg.redraw = function () { draw(); return centrePixel; };
+  bg.pixel = function (x, y) {
+    if (!gl) return null;
+    var px = new Uint8Array(4);
+    gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    return [px[0], px[1], px[2], px[3]];
+  };
+  bg.reset = function () { step = 0; draw(); return 0; };
+
+  bg.state = function () {
+    return {
+      id: bg.id, ready: bg.ready, pass: bg.pass,
+      webglAvailable: !!gl, contextName: contextName, error: err,
+      info: info, step: step, rotationDeg: step * 10,
+      centrePixel: centrePixel,
+      cornerPixels: gl ? { bl: bg.pixel(2, 2), br: bg.pixel(W - 3, 2),
+                           tl: bg.pixel(2, H - 3), tr: bg.pixel(W - 3, H - 3) } : null,
+      canvasRect: cv.getBoundingClientRect().toJSON(),
+      devicePixelRatio: window.devicePixelRatio
+    };
+  };
+
+  document.getElementById('redraw').addEventListener('click', function () { bg.redraw(); });
+  document.getElementById('spin').addEventListener('click', function () { bg.spin(1); });
+
+  bg._ready();
+})();
+</script>
+</html>

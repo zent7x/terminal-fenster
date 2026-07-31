@@ -1,0 +1,10 @@
+{
+  "name": "@blackglass/engine",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/main.js",
+  "description": "Chromium offscreen rendering engine host for BlackGlass",
+  "dependencies": {
+    "electron": "^43.2.0"
+  }
+}

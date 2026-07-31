@@ -1,0 +1,1270 @@
+{
+  "schema": "blackglass.escape-corpus/1",
+  "generatedBy": "tests/fixtures/make-escape-corpus.js",
+  "encoding": "payload = concat over segments of (UTF-16 code units, repeated n times). u is a hex string, 4 hex digits per UTF-16 code unit, big-endian, no separator.",
+  "safety": "every canary is an echo-only string; nothing here is destructive if executed",
+  "sinks": [
+    "document.title",
+    "location.hash",
+    "anchor href",
+    "anchor text",
+    "download filename",
+    "console.log",
+    "window.alert",
+    "page text"
+  ],
+  "cases": [
+    {
+      "id": "osc52-write-7bit",
+      "severity": "critical",
+      "threat": "A09 T1 / T-ESC-1",
+      "title": "OSC 52 clipboard write, 7-bit introducer",
+      "description": "ESC ] 5 2 ; c ; <base64> BEL. On Ghostty 1.3.1 clipboard-write defaults to allow, with no prompt, so an unsanitised title is a silent clipboard-write primitive.",
+      "canary": "BLACKGLASS_CANARY_OSC52",
+      "codeUnitCount": 57,
+      "escaped": "\\x1b]52;c;ZWNobyBCTEFDS0dMQVNTX0NBTkFSWV9PU0M1Mg==\\x07SAFE-TAIL",
+      "segments": [
+        {
+          "u": "001b"
+        },
+        {
+          "u": "005d00350032003b0063003b005a0057004e006f00620079004200430054004500460044005300300064004d00510056004e005400580030004e00420054006b00460053005700560039005000550030004d0031004d0067003d003d"
+        },
+        {
+          "u": "0007"
+        },
+        {
+          "u": "0053004100460045002d005400410049004c"
+        }
+      ],
+      "expect": {
+        "mustStripCodeUnits": [
+          27,
+          7
+        ],
+        "mustSurviveSubstring": "SAFE-TAIL",
+        "maxBytesAfterSanitize": null,
+        "expectReplacementChar": false,
+        "note": null
+      }
+    },
+    {
+      "id": "osc52-write-c1",
+      "severity": "critical",
+      "threat": "A09 T2 / T-ESC-2",
+      "title": "OSC 52 via 8-bit C1 introducer",
+      "description": "U+009D (OSC) ... U+009C (ST). Defeats any sanitiser that only strips 0x1B. Whether a UTF-8 terminal decodes C2 9D as C1 is terminal-specific and UNVERIFIED on Ghostty/iTerm2/Apple Terminal; strip it regardless, it costs nothing.",
+      "canary": "BLACKGLASS_CANARY_C1",
+      "codeUnitCount": 52,
+      "escaped": "\\x9d52;c;ZWNobyBCTEFDS0dMQVNTX0NBTkFSWV9DMQ==\\x9cSAFE-TAIL",
+      "segments": [
+        {
+          "u": "009d"
+        },
+        {
+          "u": "00350032003b0063003b005a0057004e006f00620079004200430054004500460044005300300064004d00510056004e005400580030004e00420054006b004600530057005600390044004d0051003d003d"
+        },
+        {
+          "u": "009c"
+        },
+        {
+          "u": "0053004100460045002d005400410049004c"
+        }
+      ],
+      "expect": {
+        "mustStripCodeUnits": [
+          157,
+          156
+        ],
+        "mustSurviveSubstring": "SAFE-TAIL",
+        "maxBytesAfterSanitize": null,
+        "expectReplacementChar": false,
+        "note": null
+      }
+    },
+    {
+      "id": "osc52-write-st",
+      "severity": "critical",
+      "threat": "A09 T1",
+      "title": "OSC 52 terminated by 7-bit ST instead of BEL",
+      "description": "Same primitive, ESC \\ terminator. Parsers that only look for BEL miss it.",
+      "canary": "BLACKGLASS_CANARY_ST",
+      "codeUnitCount": 54,
+      "escaped": "\\x1b]52;c;ZWNobyBCTEFDS0dMQVNTX0NBTkFSWV9TVA==\\x1b\\x5cSAFE-TAIL",
+      "segments": [
+        {
+          "u": "001b"
+        },
+        {
+          "u": "005d00350032003b0063003b005a0057004e006f00620079004200430054004500460044005300300064004d00510056004e005400580030004e00420054006b00460053005700560039005400560041003d003d"
+        },
+        {
+          "u": "001b005c"
+        },
+        {
+          "u": "0053004100460045002d005400410049004c"
+        }
+      ],
+      "expect": {
+        "mustStripCodeUnits": [
+          27
+        ],
+        "mustSurviveSubstring": "SAFE-TAIL",
+        "maxBytesAfterSanitize": null,
+        "expectReplacementChar": false,
+        "note": null
+      }
+    },
+    {
+      "id": "osc52-read",
+      "severity": "high",
+      "threat": "A09 T4 / T-ESC-4",
+      "title": "OSC 52 clipboard READ request",
+      "description": "ESC ] 5 2 ; c ; ? BEL. The terminal answers by writing the clipboard, base64 encoded, into our stdin. Our stdin parser is therefore a security boundary too.",
+      "canary": null,
+      "codeUnitCount": 18,
+      "escaped": "\\x1b]52;c;?\\x07SAFE-TAIL",
+      "segments": [
+        {
+          "u": "001b"
+        },
+        {
+          "u": "005d00350032003b0063003b003f"
+        },
+        {
+          "u": "0007"
+        },
+        {
+          "u": "0053004100460045002d005400410049004c"
+        }
+      ],
+      "expect": {
+        "mustStripCodeUnits": [
+          27,
+          7
+        ],
+        "mustSurviveSubstring": "SAFE-TAIL",
+        "maxBytesAfterSanitize": null,
+        "expectReplacementChar": false,
+        "note": null
+      }
+    },
+    {
+      "id": "osc2-title-set-and-report",
+      "severity": "critical",
+      "threat": "A09 T3 / T-ESC-3",
+      "title": "Set window title, then request a title report (CSI 21 t)",
+      "description": "The reply lands on the shell stdin as if typed. CyberArk documented this across PuTTY CVE-2021-33500, MobaXterm CVE-2021-28847, MinTTY CVE-2021-28848, ZOC CVE-2021-32198, Xshell CVE-2021-42095. Ghostty ships title-report=false, but that is the terminal being careful, not us.",
+      "canary": "BLACKGLASS_CANARY_T3",
+      "codeUnitCount": 35,
+      "escaped": "\\x1b]2;echo BLACKGLASS_CANARY_T3\\x07\\x1b[21t",
+      "segments": [
+        {
+          "u": "001b"
+        },
+        {
+          "u": "005d0032003b006500630068006f00200042004c00410043004b0047004c004100530053005f00430041004e004100520059005f00540033"
+        },
+        {
+          "u": "0007"
+        },
+        {
+          "u": "001b"
+        },
+        {
+          "u": "005b003200310074"
+        }
+      ],
+      "expect": {
+        "mustStripCodeUnits": [
+          27,
+          7
+        ],
+        "mustSurviveSubstring": null,
+        "maxBytesAfterSanitize": null,
+        "expectReplacementChar": false,
+        "note": null
+      }
+    },
+    {
+      "id": "bracketed-paste-escape",
+      "severity": "high",
+      "threat": "CVE-2021-31701 / CVE-2021-37326 / CVE-2021-40147 class",
+      "title": "Break out of bracketed paste mode",
+      "description": "CSI 201~ ends a bracketed paste early, so the remainder is treated as typed input rather than pasted text.",
+      "canary": "BLACKGLASS_CANARY_BP",
+      "codeUnitCount": 32,
+      "escaped": "\\x1b[201~echo BLACKGLASS_CANARY_BP\\x0a",
+      "segments": [
+        {
+          "u": "001b"
+        },
+        {
+          "u": "005b003200300031007e006500630068006f00200042004c00410043004b0047004c004100530053005f00430041004e004100520059005f00420050"
+        },
+        {
+          "u": "000a"
+        }
+      ],
+      "expect": {
+        "mustStripCodeUnits": [
+          27,
+          10
+        ],
+        "mustSurviveSubstring": null,
+        "maxBytesAfterSanitize": null,
+        "expectReplacementChar": false,
+        "note": null
+      }
+    },
+    {
+      "id": "dcs-sixel",
+      "severity": "high",
+      "threat": "BlackGlass-specific: collides with our own graphics stream",
+      "title": "DCS / sixel introducer inside untrusted text",
+      "description": "ESC P q ... ESC \\. A page-controlled DCS can desynchronise the sixel backend mid-image, because our own image data and this text share one byte stream.",
+      "canary": null,
+      "codeUnitCount": 43,
+      "escaped": "\\x1bPq#0;2;100;0;0#0~~@@vv@@~~@@~~$\\x1b\\x5cSAFE-TAIL",
+      "segments": [
+        {
+          "u": "001b"
+        },
+        {
+          "u": "0050007100230030003b0032003b003100300030003b0030003b003000230030007e007e004000400076007600400040007e007e00400040007e007e0024"
+        },
+        {
+          "u": "001b005c"
+        },
+        {
+          "u": "0053004100460045002d005400410049004c"
+        }
+      ],
+      "expect": {
+        "mustStripCodeUnits": [
+          27
+        ],
+        "mustSurviveSubstring": "SAFE-TAIL",
+        "maxBytesAfterSanitize": null,
+        "expectReplacementChar": false,
+        "note": null
+      }
+    },
+    {
+      "id": "apc-kitty-graphics",
+      "severity": "high",
+      "threat": "BlackGlass-specific: collides with the kitty graphics backend",
+      "title": "APC / kitty graphics introducer inside untrusted text",
+      "description": "ESC _ G ... ESC \\. The kitty backend is our primary renderer, so a page that can emit APC can inject or truncate an image transmission. This case is not in the usual terminal-injection literature; it exists because of what BlackGlass is.",
+      "canary": null,
+      "codeUnitCount": 35,
+      "escaped": "\\x1b_Ga=T,f=24,s=1,v=1;AAAA\\x1b\\x5cSAFE-TAIL",
+      "segments": [
+        {
+          "u": "001b"
+        },
+        {
+          "u": "005f00470061003d0054002c0066003d00320034002c0073003d0031002c0076003d0031003b0041004100410041"
+        },
+        {
+          "u": "001b005c"
+        },
+        {
+          "u": "0053004100460045002d005400410049004c"
+        }
+      ],
+      "expect": {
+        "mustStripCodeUnits": [
+          27
+        ],
+        "mustSurviveSubstring": "SAFE-TAIL",
+        "maxBytesAfterSanitize": null,
+        "expectReplacementChar": false,
+        "note": null
+      }
+    },
+    {
+      "id": "osc8-hyperlink-spoof",
+      "severity": "medium",
+      "threat": "URL-bar / link-preview spoofing",
+      "title": "OSC 8 hyperlink with a target that differs from its label",
+      "description": "ESC ] 8 ; ; <uri> ST <label> ESC ] 8 ; ; ST. The rendered label and the actual target differ, which is exactly the deception a browser chrome exists to prevent.",
+      "canary": null,
+      "codeUnitCount": 51,
+      "escaped": "\\x1b]8;;file:///etc/passwd\\x1b\\x5chttps://example.com\\x1b]8;;\\x1b\\x5c",
+      "segments": [
+        {
+          "u": "001b"
+        },
+        {
+          "u": "005d0038003b003b00660069006c0065003a002f002f002f006500740063002f007000610073007300770064"
+        },
+        {
+          "u": "001b005c"
+        },
+        {
+          "u": "00680074007400700073003a002f002f006500780061006d0070006c0065002e0063006f006d"
+        },
+        {
+          "u": "001b"
+        },
+        {
+          "u": "005d0038003b003b"
+        },
+        {
+          "u": "001b005c"
+        }
+      ],
+      "expect": {
+        "mustStripCodeUnits": [
+          27
+        ],
+        "mustSurviveSubstring": null,
+        "maxBytesAfterSanitize": null,
+        "expectReplacementChar": false,
+        "note": null
+      }
+    },
+    {
+      "id": "osc1337-iterm2",
+      "severity": "medium",
+      "threat": "A09 s1.2 H",
+      "title": "iTerm2 proprietary OSC 1337 sequences",
+      "description": "StealFocus and SetProfile. Exploitability on iTerm2 3.6.9 is UNVERIFIED here (TCC blocks automation of iTerm2 on this host), but stripping ESC makes it moot.",
+      "canary": null,
+      "codeUnitCount": 46,
+      "escaped": "\\x1b]1337;StealFocus\\x1b\\x5c\\x1b]1337;SetProfile=Default\\x1b\\x5c",
+      "segments": [
+        {
+          "u": "001b"
+        },
+        {
+          "u": "005d0031003300330037003b0053007400650061006c0046006f006300750073"
+        },
+        {
+          "u": "001b005c"
+        },
+        {
+          "u": "001b"
+        },
+        {
+          "u": "005d0031003300330037003b00530065007400500072006f00660069006c0065003d00440065006600610075006c0074"
+        },
+        {
+          "u": "001b005c"
+        }
+      ],
+      "expect": {
+        "mustStripCodeUnits": [
+          27
+        ],
+        "mustSurviveSubstring": null,
+        "maxBytesAfterSanitize": null,
+        "expectReplacementChar": false,
+        "note": null
+      }
+    },
+    {
+      "id": "csi-clear-and-home",
+      "severity": "medium",
+      "threat": "A09 T6 (availability) / chrome spoofing",
+      "title": "Clear screen and home the cursor",
+      "description": "CSI 2 J CSI H. Erases the user shell scrollback context around us.",
+      "canary": null,
+      "codeUnitCount": 16,
+      "escaped": "\\x1b[2J\\x1b[HSAFE-TAIL",
+      "segments": [
+        {
+          "u": "001b"
+        },
+        {
+          "u": "005b0032004a"
+        },
+        {
+          "u": "001b"
+        },
+        {
+          "u": "005b0048"
+        },
+        {
+          "u": "0053004100460045002d005400410049004c"
+        }
+      ],
+      "expect": {
+        "mustStripCodeUnits": [
+          27
+        ],
+        "mustSurviveSubstring": "SAFE-TAIL",
+        "maxBytesAfterSanitize": null,
+        "expectReplacementChar": false,
+        "note": null
+      }
+    },
+    {
+      "id": "csi-sgr-reverse",
+      "severity": "low",
+      "threat": "chrome spoofing",
+      "title": "SGR reverse video and colour",
+      "description": "CSI 7 m / CSI 31 m. Lets page text imitate our own reverse-video status bar.",
+      "canary": null,
+      "codeUnitCount": 23,
+      "escaped": "\\x1b[7mFAKE STATUS BAR\\x1b[0m",
+      "segments": [
+        {
+          "u": "001b"
+        },
+        {
+          "u": "005b0037006d"
+        },
+        {
+          "u": "00460041004b004500200053005400410054005500530020004200410052"
+        },
+        {
+          "u": "001b"
+        },
+        {
+          "u": "005b0030006d"
+        }
+      ],
+      "expect": {
+        "mustStripCodeUnits": [
+          27
+        ],
+        "mustSurviveSubstring": null,
+        "maxBytesAfterSanitize": null,
+        "expectReplacementChar": false,
+        "note": null
+      }
+    },
+    {
+      "id": "charset-designate-linedraw",
+      "severity": "low",
+      "threat": "A09 s1.2 E",
+      "title": "Designate the DEC line-drawing charset",
+      "description": "ESC ( 0 makes subsequent ASCII render as box-drawing glyphs.",
+      "canary": null,
+      "codeUnitCount": 11,
+      "escaped": "\\x1b(0lqqqk\\x1b(B",
+      "segments": [
+        {
+          "u": "001b"
+        },
+        {
+          "u": "00280030006c007100710071006b"
+        },
+        {
+          "u": "001b"
+        },
+        {
+          "u": "00280042"
+        }
+      ],
+      "expect": {
+        "mustStripCodeUnits": [
+          27
+        ],
+        "mustSurviveSubstring": null,
+        "maxBytesAfterSanitize": null,
+        "expectReplacementChar": false,
+        "note": null
+      }
+    },
+    {
+      "id": "so-si-shift",
+      "severity": "medium",
+      "threat": "A09 s1.2 E",
+      "title": "SO / SI charset shift without any ESC",
+      "description": "0x0E / 0x0F. Defeats a sanitiser that only looks for ESC, because no ESC is present.",
+      "canary": null,
+      "codeUnitCount": 19,
+      "escaped": "\\x0eLINEDRAW\\x0fSAFE-TAIL",
+      "segments": [
+        {
+          "u": "000e"
+        },
+        {
+          "u": "004c0049004e00450044005200410057"
+        },
+        {
+          "u": "000f"
+        },
+        {
+          "u": "0053004100460045002d005400410049004c"
+        }
+      ],
+      "expect": {
+        "mustStripCodeUnits": [
+          14,
+          15
+        ],
+        "mustSurviveSubstring": "SAFE-TAIL",
+        "maxBytesAfterSanitize": null,
+        "expectReplacementChar": false,
+        "note": null
+      }
+    },
+    {
+      "id": "enq-answerback",
+      "severity": "medium",
+      "threat": "A09 s1.2 E",
+      "title": "ENQ triggers an answerback string",
+      "description": "0x05. Some terminals transmit their answerback into the host, unsolicited.",
+      "canary": null,
+      "codeUnitCount": 12,
+      "escaped": "BEFORE\\x05AFTER",
+      "segments": [
+        {
+          "u": "004200450046004f00520045"
+        },
+        {
+          "u": "0005"
+        },
+        {
+          "u": "00410046005400450052"
+        }
+      ],
+      "expect": {
+        "mustStripCodeUnits": [
+          5
+        ],
+        "mustSurviveSubstring": null,
+        "maxBytesAfterSanitize": null,
+        "expectReplacementChar": false,
+        "note": null
+      }
+    },
+    {
+      "id": "cr-overwrite",
+      "severity": "medium",
+      "threat": "A09 s1.2 E",
+      "title": "Carriage return rewrites the status line",
+      "description": "0x0D returns to column 0 so the rest of the string overwrites what we drew.",
+      "canary": null,
+      "codeUnitCount": 26,
+      "escaped": "SAFE-PREFIX\\x0dEVIL-OVERWRITE",
+      "segments": [
+        {
+          "u": "0053004100460045002d005000520045004600490058"
+        },
+        {
+          "u": "000d"
+        },
+        {
+          "u": "004500560049004c002d004f00560045005200570052004900540045"
+        }
+      ],
+      "expect": {
+        "mustStripCodeUnits": [
+          13
+        ],
+        "mustSurviveSubstring": null,
+        "maxBytesAfterSanitize": null,
+        "expectReplacementChar": false,
+        "note": null
+      }
+    },
+    {
+      "id": "bs-url-spoof",
+      "severity": "medium",
+      "threat": "A09 s1.2 E",
+      "title": "Backspace rewrites a rendered origin",
+      "description": "Eleven 0x08 bytes erase \"example.com\" from the display and leave \"evil.com\" in its place, with no escape sequence involved at all.",
+      "canary": null,
+      "codeUnitCount": 30,
+      "escaped": "example.com(\\x08)*11evil.com",
+      "segments": [
+        {
+          "u": "006500780061006d0070006c0065002e0063006f006d"
+        },
+        {
+          "u": "0008",
+          "n": 11
+        },
+        {
+          "u": "006500760069006c002e0063006f006d"
+        }
+      ],
+      "expect": {
+        "mustStripCodeUnits": [
+          8
+        ],
+        "mustSurviveSubstring": null,
+        "maxBytesAfterSanitize": null,
+        "expectReplacementChar": false,
+        "note": null
+      }
+    },
+    {
+      "id": "c0-zoo",
+      "severity": "high",
+      "threat": "A09 s1.3 stage 2",
+      "title": "Every C0 control plus DEL",
+      "description": "U+0000 through U+001F and U+007F, each between visible markers. The sanitiser must replace all of them, with no exceptions carved out for TAB, LF or CR.",
+      "canary": null,
+      "codeUnitCount": 44,
+      "escaped": "[\\x00\\x01\\x02\\x03\\x04\\x05\\x06\\x07\\x08\\x09\\x0a\\x0b\\x0c\\x0d\\x0e\\x0f\\x10\\x11\\x12\\x13\\x14\\x15\\x16\\x17\\x18\\x19\\x1a\\x1b\\x1c\\x1d\\x1e\\x1f\\x7f]SAFE-TAIL",
+      "segments": [
+        {
+          "u": "005b"
+        },
+        {
+          "u": "0000"
+        },
+        {
+          "u": "0001"
+        },
+        {
+          "u": "0002"
+        },
+        {
+          "u": "0003"
+        },
+        {
+          "u": "0004"
+        },
+        {
+          "u": "0005"
+        },
+        {
+          "u": "0006"
+        },
+        {
+          "u": "0007"
+        },
+        {
+          "u": "0008"
+        },
+        {
+          "u": "0009"
+        },
+        {
+          "u": "000a"
+        },
+        {
+          "u": "000b"
+        },
+        {
+          "u": "000c"
+        },
+        {
+          "u": "000d"
+        },
+        {
+          "u": "000e"
+        },
+        {
+          "u": "000f"
+        },
+        {
+          "u": "0010"
+        },
+        {
+          "u": "0011"
+        },
+        {
+          "u": "0012"
+        },
+        {
+          "u": "0013"
+        },
+        {
+          "u": "0014"
+        },
+        {
+          "u": "0015"
+        },
+        {
+          "u": "0016"
+        },
+        {
+          "u": "0017"
+        },
+        {
+          "u": "0018"
+        },
+        {
+          "u": "0019"
+        },
+        {
+          "u": "001a"
+        },
+        {
+          "u": "001b"
+        },
+        {
+          "u": "001c"
+        },
+        {
+          "u": "001d"
+        },
+        {
+          "u": "001e"
+        },
+        {
+          "u": "001f"
+        },
+        {
+          "u": "007f"
+        },
+        {
+          "u": "005d0053004100460045002d005400410049004c"
+        }
+      ],
+      "expect": {
+        "mustStripCodeUnits": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          127
+        ],
+        "mustSurviveSubstring": "SAFE-TAIL",
+        "maxBytesAfterSanitize": null,
+        "expectReplacementChar": false,
+        "note": null
+      }
+    },
+    {
+      "id": "c1-zoo",
+      "severity": "high",
+      "threat": "A09 s1.3 stage 2",
+      "title": "Every C1 control",
+      "description": "U+0080 through U+009F, including DCS 0090, CSI 009B, ST 009C, OSC 009D.",
+      "canary": null,
+      "codeUnitCount": 43,
+      "escaped": "[\\x80\\x81\\x82\\x83\\x84\\x85\\x86\\x87\\x88\\x89\\x8a\\x8b\\x8c\\x8d\\x8e\\x8f\\x90\\x91\\x92\\x93\\x94\\x95\\x96\\x97\\x98\\x99\\x9a\\x9b\\x9c\\x9d\\x9e\\x9f]SAFE-TAIL",
+      "segments": [
+        {
+          "u": "005b"
+        },
+        {
+          "u": "0080"
+        },
+        {
+          "u": "0081"
+        },
+        {
+          "u": "0082"
+        },
+        {
+          "u": "0083"
+        },
+        {
+          "u": "0084"
+        },
+        {
+          "u": "0085"
+        },
+        {
+          "u": "0086"
+        },
+        {
+          "u": "0087"
+        },
+        {
+          "u": "0088"
+        },
+        {
+          "u": "0089"
+        },
+        {
+          "u": "008a"
+        },
+        {
+          "u": "008b"
+        },
+        {
+          "u": "008c"
+        },
+        {
+          "u": "008d"
+        },
+        {
+          "u": "008e"
+        },
+        {
+          "u": "008f"
+        },
+        {
+          "u": "0090"
+        },
+        {
+          "u": "0091"
+        },
+        {
+          "u": "0092"
+        },
+        {
+          "u": "0093"
+        },
+        {
+          "u": "0094"
+        },
+        {
+          "u": "0095"
+        },
+        {
+          "u": "0096"
+        },
+        {
+          "u": "0097"
+        },
+        {
+          "u": "0098"
+        },
+        {
+          "u": "0099"
+        },
+        {
+          "u": "009a"
+        },
+        {
+          "u": "009b"
+        },
+        {
+          "u": "009c"
+        },
+        {
+          "u": "009d"
+        },
+        {
+          "u": "009e"
+        },
+        {
+          "u": "009f"
+        },
+        {
+          "u": "005d0053004100460045002d005400410049004c"
+        }
+      ],
+      "expect": {
+        "mustStripCodeUnits": [
+          128,
+          129,
+          130,
+          131,
+          132,
+          133,
+          134,
+          135,
+          136,
+          137,
+          138,
+          139,
+          140,
+          141,
+          142,
+          143,
+          144,
+          145,
+          146,
+          147,
+          148,
+          149,
+          150,
+          151,
+          152,
+          153,
+          154,
+          155,
+          156,
+          157,
+          158,
+          159
+        ],
+        "mustSurviveSubstring": "SAFE-TAIL",
+        "maxBytesAfterSanitize": null,
+        "expectReplacementChar": false,
+        "note": null
+      }
+    },
+    {
+      "id": "bidi-trojan-source",
+      "severity": "high",
+      "threat": "A09 T5 / CVE-2021-42574",
+      "title": "Right-to-left override reverses a rendered origin",
+      "description": "U+202E makes \"https://example.com/gro.live//:sptth\" read as if it ends at evil.org. No control bytes are involved, so a C0/C1 filter alone does not help.",
+      "canary": null,
+      "codeUnitCount": 37,
+      "escaped": "https://example.com\\u202e/gro.live//:sptth",
+      "segments": [
+        {
+          "u": "00680074007400700073003a002f002f006500780061006d0070006c0065002e0063006f006d"
+        },
+        {
+          "u": "202e"
+        },
+        {
+          "u": "002f00670072006f002e006c006900760065002f002f003a00730070007400740068"
+        }
+      ],
+      "expect": {
+        "mustStripCodeUnits": [
+          8238
+        ],
+        "mustSurviveSubstring": null,
+        "maxBytesAfterSanitize": null,
+        "expectReplacementChar": false,
+        "note": null
+      }
+    },
+    {
+      "id": "bidi-isolates",
+      "severity": "medium",
+      "threat": "A09 T5",
+      "title": "Directional isolates and marks",
+      "description": "U+2066..U+2069, U+200E, U+200F, U+061C.",
+      "canary": null,
+      "codeUnitCount": 20,
+      "escaped": "a\\u2066b\\u2067c\\u2068d\\u2069\\u200e\\u200f\\u061cSAFE-TAIL",
+      "segments": [
+        {
+          "u": "0061"
+        },
+        {
+          "u": "2066"
+        },
+        {
+          "u": "0062"
+        },
+        {
+          "u": "2067"
+        },
+        {
+          "u": "0063"
+        },
+        {
+          "u": "2068"
+        },
+        {
+          "u": "0064"
+        },
+        {
+          "u": "2069"
+        },
+        {
+          "u": "200e"
+        },
+        {
+          "u": "200f"
+        },
+        {
+          "u": "061c"
+        },
+        {
+          "u": "0053004100460045002d005400410049004c"
+        }
+      ],
+      "expect": {
+        "mustStripCodeUnits": [
+          8294,
+          8295,
+          8296,
+          8297,
+          8206,
+          8207,
+          1564
+        ],
+        "mustSurviveSubstring": "SAFE-TAIL",
+        "maxBytesAfterSanitize": null,
+        "expectReplacementChar": false,
+        "note": null
+      }
+    },
+    {
+      "id": "zero-width",
+      "severity": "medium",
+      "threat": "A09 T5 / homograph",
+      "title": "Zero-width characters inside a hostname",
+      "description": "U+200B..U+200D and U+FEFF split a hostname invisibly, so a naive prefix match on \"example.com\" fails while the user reads exactly that.",
+      "canary": null,
+      "codeUnitCount": 15,
+      "escaped": "ex\\u200bam\\u200cple\\u200d.com\\ufeff",
+      "segments": [
+        {
+          "u": "00650078"
+        },
+        {
+          "u": "200b"
+        },
+        {
+          "u": "0061006d"
+        },
+        {
+          "u": "200c"
+        },
+        {
+          "u": "0070006c0065"
+        },
+        {
+          "u": "200d"
+        },
+        {
+          "u": "002e0063006f006d"
+        },
+        {
+          "u": "feff"
+        }
+      ],
+      "expect": {
+        "mustStripCodeUnits": [
+          8203,
+          8204,
+          8205,
+          65279
+        ],
+        "mustSurviveSubstring": null,
+        "maxBytesAfterSanitize": null,
+        "expectReplacementChar": false,
+        "note": null
+      }
+    },
+    {
+      "id": "private-use-area",
+      "severity": "low",
+      "threat": "A09 s1.3 stage 2",
+      "title": "Private Use Area glyphs",
+      "description": "U+E000 and U+F8FF render as whatever the user font decides, including a convincing padlock. Recommended for stripping in a security-indicator context.",
+      "canary": null,
+      "codeUnitCount": 8,
+      "escaped": "\\ue000secure\\uf8ff",
+      "segments": [
+        {
+          "u": "e000"
+        },
+        {
+          "u": "007300650063007500720065"
+        },
+        {
+          "u": "f8ff"
+        }
+      ],
+      "expect": {
+        "mustStripCodeUnits": [
+          57344,
+          63743
+        ],
+        "mustSurviveSubstring": null,
+        "maxBytesAfterSanitize": null,
+        "expectReplacementChar": false,
+        "note": null
+      }
+    },
+    {
+      "id": "zalgo-combining",
+      "severity": "medium",
+      "threat": "A09 s1.3 stage 3 (width)",
+      "title": "Forty combining marks on one base character",
+      "description": "Overflows a status line vertically in terminals that do not clamp combining runs. The width rule, not the filter, is what defends here.",
+      "canary": null,
+      "codeUnitCount": 50,
+      "escaped": "A(\\u0301)*40SAFE-TAIL",
+      "segments": [
+        {
+          "u": "0041"
+        },
+        {
+          "u": "0301",
+          "n": 40
+        },
+        {
+          "u": "0053004100460045002d005400410049004c"
+        }
+      ],
+      "expect": {
+        "mustStripCodeUnits": [],
+        "mustSurviveSubstring": "SAFE-TAIL",
+        "maxBytesAfterSanitize": null,
+        "expectReplacementChar": false,
+        "note": "combining marks are legal text; the requirement is a width clamp, not removal"
+      }
+    },
+    {
+      "id": "lone-surrogate",
+      "severity": "medium",
+      "threat": "A09 s1.3 stage 1",
+      "title": "Unpaired UTF-16 high surrogate",
+      "description": "U+D800 with no low surrogate. Chromium hands us UTF-16; a naive transcode can produce invalid UTF-8 or panic. Must become U+FFFD.",
+      "canary": null,
+      "codeUnitCount": 12,
+      "escaped": "before\\ud800after",
+      "segments": [
+        {
+          "u": "006200650066006f00720065"
+        },
+        {
+          "u": "d800"
+        },
+        {
+          "u": "00610066007400650072"
+        }
+      ],
+      "expect": {
+        "mustStripCodeUnits": [],
+        "mustSurviveSubstring": null,
+        "maxBytesAfterSanitize": null,
+        "expectReplacementChar": true,
+        "note": null
+      }
+    },
+    {
+      "id": "line-paragraph-separator",
+      "severity": "low",
+      "threat": "A09 s1.3 stage 2",
+      "title": "U+2028 and U+2029",
+      "description": "Line and paragraph separators; must become spaces, not newlines.",
+      "canary": null,
+      "codeUnitCount": 5,
+      "escaped": "A\\u2028B\\u2029C",
+      "segments": [
+        {
+          "u": "0041"
+        },
+        {
+          "u": "2028"
+        },
+        {
+          "u": "0042"
+        },
+        {
+          "u": "2029"
+        },
+        {
+          "u": "0043"
+        }
+      ],
+      "expect": {
+        "mustStripCodeUnits": [
+          8232,
+          8233
+        ],
+        "mustSurviveSubstring": null,
+        "maxBytesAfterSanitize": null,
+        "expectReplacementChar": false,
+        "note": null
+      }
+    },
+    {
+      "id": "overlong-title",
+      "severity": "medium",
+      "threat": "A09 T6 / T-DOS-1",
+      "title": "16 KiB single-line title",
+      "description": "Exceeds the 8 KiB per-string cap. The cap must be applied before the formatter, and truncation must never split a UTF-8 sequence.",
+      "canary": null,
+      "codeUnitCount": 16393,
+      "escaped": "LONG-(A)*16384-END",
+      "segments": [
+        {
+          "u": "004c004f004e0047002d"
+        },
+        {
+          "u": "0041",
+          "n": 16384
+        },
+        {
+          "u": "002d0045004e0044"
+        }
+      ],
+      "expect": {
+        "mustStripCodeUnits": [],
+        "mustSurviveSubstring": null,
+        "maxBytesAfterSanitize": 8192,
+        "expectReplacementChar": false,
+        "note": null
+      }
+    },
+    {
+      "id": "unterminated-osc",
+      "severity": "high",
+      "threat": "A09 T6",
+      "title": "OSC introducer followed by 64 KiB with no terminator",
+      "description": "A terminal buffers an unterminated OSC string unboundedly. Never forward a partial sequence, and never forward the introducer at all.",
+      "canary": null,
+      "codeUnitCount": 65538,
+      "escaped": "\\x1b](A)*65536",
+      "segments": [
+        {
+          "u": "001b"
+        },
+        {
+          "u": "005d"
+        },
+        {
+          "u": "0041",
+          "n": 65536
+        }
+      ],
+      "expect": {
+        "mustStripCodeUnits": [
+          27
+        ],
+        "mustSurviveSubstring": null,
+        "maxBytesAfterSanitize": 8192,
+        "expectReplacementChar": false,
+        "note": null
+      }
+    },
+    {
+      "id": "benign-control",
+      "severity": "none",
+      "threat": "control case",
+      "title": "Ordinary text that must pass through unchanged",
+      "description": "Latin, CJK, an emoji with a variation selector, and an accented character. A sanitiser that mangles this is over-aggressive, which is its own bug.",
+      "canary": null,
+      "codeUnitCount": 19,
+      "escaped": "Hello, \\u4e16\\u754c caf\\xe9 \\u2705 ok",
+      "segments": [
+        {
+          "u": "00480065006c006c006f002c0020"
+        },
+        {
+          "u": "4e16754c"
+        },
+        {
+          "u": "002000630061006600e90020"
+        },
+        {
+          "u": "2705"
+        },
+        {
+          "u": "0020006f006b"
+        }
+      ],
+      "expect": {
+        "mustStripCodeUnits": [],
+        "mustSurviveSubstring": "Hello, ",
+        "maxBytesAfterSanitize": null,
+        "expectReplacementChar": false,
+        "note": "expected output is identical to the input"
+      }
+    }
+  ]
+}

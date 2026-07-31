@@ -1,0 +1,203 @@
+<!-- BlackGlass fixture: popup
+     Proves: what actually happens to window.open and target=_blank.
+
+     The engine currently installs setWindowOpenHandler and returns {action:'deny'} while
+     emitting a popup event (apps/engine/src/main.js). So the CORRECT result today is
+     window.open() returning null and NO second window appearing. That is a pass here, not
+     a failure: the fixture records the outcome rather than asserting one policy.
+
+     Six routes are exercised because they take different paths: plain window.open, named
+     reuse, noopener, about:blank then document.write, an anchor with target=_blank, and a
+     script-driven anchor click.
+     Self-contained, file:// safe. Child page: popup-child.html -->
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BG · popup</title>
+<style>
+/* ---------- shared fixture chrome (identical in every fixture) ---------- */
+:root{color-scheme:dark}
+html,body{margin:0;padding:0;background:#0b0b0f;color:#e6e6e6;
+  font:14px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;-webkit-font-smoothing:none}
+#bg-beacon,#bg-status,.bg-corner{position:fixed;width:24px;height:24px;z-index:2147483647}
+#bg-beacon{left:0;top:0;background:#ff00ff}
+#bg-status{left:24px;top:0;background:#333}
+.bg-tr{right:0;top:0;background:#ff8000}
+.bg-bl{left:0;bottom:0;background:#0080ff}
+.bg-br{right:0;bottom:0;background:#ffff00}
+h1{position:fixed;left:56px;top:1px;margin:0;font:600 13px/24px ui-monospace,Menlo,monospace;color:#8a8aff}
+#bg-readout{position:fixed;right:8px;bottom:32px;width:380px;max-height:280px;overflow:hidden;
+  margin:0;padding:4px;background:rgba(0,0,0,.66);white-space:pre-wrap;word-break:break-all;
+  font-size:11px;line-height:1.3;color:#9adcff;pointer-events:none;z-index:2147483646}
+/* ---------- fixture-specific ---------- */
+button{position:absolute;background:#22222c;color:#e6e6e6;border:1px solid #4a4a5a;
+  font:12px ui-monospace,Menlo,monospace;height:30px;cursor:pointer;text-align:left;padding:0 8px}
+a{position:absolute;color:#7fd;font:12px ui-monospace,Menlo,monospace}
+.hdr{position:absolute;font:600 12px ui-monospace,Menlo,monospace;color:#ffd000}
+.note{position:absolute;font-size:11px;color:#6a6a78;max-width:460px}
+#log{position:absolute;left:40px;top:420px;width:600px;height:220px;overflow:hidden;
+  background:#16161c;border:1px solid #2a2a36;padding:6px;font-size:11px;color:#9ad;
+  white-space:pre-wrap;word-break:break-all}
+</style>
+
+<body>
+<div id="bg-beacon"></div><div id="bg-status"></div>
+<div class="bg-corner bg-tr"></div><div class="bg-corner bg-bl"></div><div class="bg-corner bg-br"></div>
+<h1>fixture: popup</h1>
+<pre id="bg-readout"></pre>
+
+<div class="hdr" style="left:40px;top:96px">routes</div>
+<button id="r1" style="left:40px;top:120px;width:280px">1 window.open(child)</button>
+<button id="r2" style="left:40px;top:158px;width:280px">2 window.open(child, 'bgnamed')</button>
+<button id="r3" style="left:40px;top:196px;width:280px">3 window.open(child, '_blank', 'noopener')</button>
+<button id="r4" style="left:40px;top:234px;width:280px">4 window.open('about:blank') + write</button>
+<button id="r5" style="left:40px;top:272px;width:280px">5 click a target=_blank anchor</button>
+<button id="r6" style="left:40px;top:310px;width:280px">6 window.open with size features</button>
+<button id="closeAll" style="left:40px;top:356px;width:280px">close every window we opened</button>
+
+<a id="blankLink" href="popup-child.html?via=anchor" target="_blank"
+   style="left:340px;top:278px">target=_blank anchor (also clickable by hand)</a>
+
+<p class="note" style="left:340px;top:120px">
+Under the current engine policy the expected result of every route is
+<code>null</code> plus one <code>{t:'popup'}</code> event on the wire. If a route instead
+returns a Window, the deny handler was bypassed — that is a finding, and route 5 (a real
+user-gesture anchor) is the one most likely to expose it.
+</p>
+<p class="note" style="left:340px;top:210px">
+Cross-window scripting between two <code>file://</code> documents is blocked: each file
+URL is its own opaque origin. The child therefore reports back with
+<code>postMessage(..., '*')</code> and also paints its own beacon, so the round trip is
+observable even when property access is denied.
+</p>
+
+<div id="log">(no attempts yet)</div>
+
+<script>
+/* ---------- shared fixture harness (identical in every fixture except `id`) ---------- */
+var __q = new URLSearchParams(location.search);
+window.__bg = {
+  id: 'popup', proto: 1, ready: false, pass: null,
+  query: Object.fromEntries(__q),
+  markers: {beacon:[12,12], status:[36,12], topRight:[-12,12], bottomLeft:[12,-12], bottomRight:[-12,-12]},
+  markerColors: {beaconLoading:'#ff00ff', beaconReady:'#00ffff', statusIdle:'#333333',
+                 statusPass:'#00ff00', statusFail:'#ff0000',
+                 topRight:'#ff8000', bottomLeft:'#0080ff', bottomRight:'#ffff00'},
+  expect: {}, state: function(){ return {}; },
+  _ready: function(){ this.ready = true;
+    document.getElementById('bg-beacon').style.background = '#00ffff';
+    document.documentElement.setAttribute('data-bg-ready','1'); this._dump(); },
+  _status: function(v){ this.pass = v;
+    document.getElementById('bg-status').style.background =
+      v === true ? '#00ff00' : v === false ? '#ff0000' : '#333'; },
+  _dump: function(){ var el = document.getElementById('bg-readout');
+    if (el) el.textContent = JSON.stringify(this.state(), null, 1); }
+};
+</script>
+
+<script>
+(function () {
+  var bg = window.__bg;
+  var $ = function (id) { return document.getElementById(id); };
+  var CHILD = 'popup-child.html';
+
+  bg.expect = {
+    unit: 'CSS pixels',
+    buttons: { r1: [40, 120, 280, 30], r2: [40, 158, 280, 30], r3: [40, 196, 280, 30],
+               r4: [40, 234, 280, 30], r5: [40, 272, 280, 30], r6: [40, 310, 280, 30] },
+    anchor: { id: 'blankLink', box: [340, 272, 300, 16] },
+    currentEnginePolicy: {
+      handler: 'setWindowOpenHandler -> {action:"deny"} plus sendEvent({t:"popup",url})',
+      expectedReturn: null,
+      expectedWireEvent: '{"t":"popup","url":"file://.../popup-child.html?via=..."}'
+    },
+    ifPolicyChanges: 'a returned Window means a real child exists; the child posts ' +
+                     '{bg:"popup-child", ok:true} back with targetOrigin "*"',
+    passWhen: 'every attempted route produced a definite outcome (a Window or an explicit ' +
+              'null/throw) — the fixture does not prejudge which policy is correct',
+    fileOriginCaveat: 'two file:// documents are cross-origin, so opener property access ' +
+                      'throws; only postMessage is expected to work'
+  };
+
+  var attempts = [], messages = [], opened = [];
+
+  function logLine(s) {
+    var el = $('log');
+    el.textContent = (el.textContent === '(no attempts yet)' ? '' : el.textContent + '\n') + s;
+  }
+
+  function attempt(route, fn) {
+    var rec = { route: route, at: attempts.length, returned: null, threw: null,
+                closedReadable: null, closed: null, nameReadable: null };
+    var w = null;
+    try { w = fn(); } catch (e) { rec.threw = String(e && e.name) + ': ' + String(e && e.message); }
+    rec.returned = w === null ? 'null' : (w === undefined ? 'undefined' : 'Window');
+    if (w) {
+      opened.push(w);
+      try { rec.closed = w.closed; rec.closedReadable = true; }
+      catch (e) { rec.closedReadable = false; rec.closedError = String(e && e.name); }
+      try { rec.nameReadable = typeof w.name === 'string'; }
+      catch (e) { rec.nameReadable = false; }
+    }
+    attempts.push(rec);
+    logLine('route ' + route + ' -> ' + rec.returned + (rec.threw ? ' (threw ' + rec.threw + ')' : ''));
+    bg._status(attempts.length > 0);
+    bg._dump();
+    return rec;
+  }
+
+  bg.route1 = function () { return attempt('1-plain', function () { return window.open(CHILD + '?via=open'); }); };
+  bg.route2 = function () { return attempt('2-named', function () { return window.open(CHILD + '?via=named', 'bgnamed'); }); };
+  bg.route3 = function () { return attempt('3-noopener', function () { return window.open(CHILD + '?via=noopener', '_blank', 'noopener'); }); };
+  bg.route4 = function () {
+    return attempt('4-aboutblank', function () {
+      var w = window.open('about:blank');
+      if (w) { try { w.document.write('<title>BG popup-written</title><body style="background:#00ff00">WRITTEN</body>'); } catch (e) {} }
+      return w;
+    });
+  };
+  bg.route5 = function () {
+    return attempt('5-anchor', function () { $('blankLink').click(); return null; });
+  };
+  bg.route6 = function () {
+    return attempt('6-features', function () {
+      return window.open(CHILD + '?via=features', '_blank', 'width=400,height=300,left=100,top=100');
+    });
+  };
+  bg.closeAll = function () {
+    var n = 0;
+    opened.forEach(function (w) { try { if (w && !w.closed) { w.close(); n++; } } catch (e) {} });
+    opened = []; logLine('closeAll -> ' + n); bg._dump(); return n;
+  };
+  bg.selfClose = function () { window.close(); return 'window.close() called on self'; };
+  bg.reset = function () { attempts = []; messages = []; opened = [];
+    $('log').textContent = '(no attempts yet)'; bg._status(null); bg._dump(); };
+
+  window.addEventListener('message', function (ev) {
+    messages.push({ origin: ev.origin, data: ev.data,
+                    hasSource: !!ev.source, type: typeof ev.data });
+    if (messages.length > 20) messages.shift();
+    logLine('message <- ' + JSON.stringify(ev.data) + ' origin=' + ev.origin);
+    bg._dump();
+  });
+
+  bg.state = function () {
+    return { id: bg.id, ready: bg.ready, pass: bg.pass,
+             attempts: attempts, attemptCount: attempts.length,
+             messages: messages, messageCount: messages.length,
+             openedStillTracked: opened.length,
+             opener: (function () { try { return window.opener ? 'present' : null; }
+                                    catch (e) { return 'unreadable:' + e.name; } })(),
+             origin: window.origin || location.origin,
+             href: location.href };
+  };
+
+  ['1', '2', '3', '4', '5', '6'].forEach(function (n) {
+    $('r' + n).addEventListener('click', function () { bg['route' + n](); });
+  });
+  $('closeAll').addEventListener('click', function () { bg.closeAll(); });
+
+  bg._ready();
+})();
+</script>
+</html>

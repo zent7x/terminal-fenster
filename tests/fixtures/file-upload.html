@@ -1,0 +1,250 @@
+<!-- BlackGlass fixture: file-upload
+     Proves: <input type=file> accepts files and the page can read them back.
+
+     DANGER, read before automating: clicking a real file input opens a NATIVE modal
+     file chooser. Under offscreen rendering that panel is invisible, and it will block
+     the run until something dismisses it. This fixture therefore defaults to the
+     programmatic path (__bg.attachText / __bg.attachFiles via DataTransfer), which
+     exercises the whole File/FileReader pipeline without any OS dialog. Only the buttons
+     under the red banner open the real chooser, and only on an explicit click.
+
+     Self-contained apart from assets/upload-sample.txt (63 bytes) and
+     assets/upload-sample.csv (49 bytes), which exist so a chooser-driven or
+     CDP DOM.setFileInputFiles run has known bytes to pick. file:// safe. -->
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BG · file-upload</title>
+<style>
+/* ---------- shared fixture chrome (identical in every fixture) ---------- */
+:root{color-scheme:dark}
+html,body{margin:0;padding:0;background:#0b0b0f;color:#e6e6e6;
+  font:14px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;-webkit-font-smoothing:none}
+#bg-beacon,#bg-status,.bg-corner{position:fixed;width:24px;height:24px;z-index:2147483647}
+#bg-beacon{left:0;top:0;background:#ff00ff}
+#bg-status{left:24px;top:0;background:#333}
+.bg-tr{right:0;top:0;background:#ff8000}
+.bg-bl{left:0;bottom:0;background:#0080ff}
+.bg-br{right:0;bottom:0;background:#ffff00}
+h1{position:fixed;left:56px;top:1px;margin:0;font:600 13px/24px ui-monospace,Menlo,monospace;color:#8a8aff}
+#bg-readout{position:fixed;right:8px;bottom:32px;width:380px;max-height:280px;overflow:hidden;
+  margin:0;padding:4px;background:rgba(0,0,0,.66);white-space:pre-wrap;word-break:break-all;
+  font-size:11px;line-height:1.3;color:#9adcff;pointer-events:none;z-index:2147483646}
+/* ---------- fixture-specific ---------- */
+label{position:absolute;font-size:12px;color:#9a9aa8}
+input[type=file]{position:absolute;font:12px ui-monospace,Menlo,monospace;color:#e6e6e6}
+button{position:absolute;background:#22222c;color:#e6e6e6;border:1px solid #4a4a5a;
+  font:12px ui-monospace,Menlo,monospace;height:28px;cursor:pointer}
+button.danger{background:#401414;border-color:#803030}
+#banner{position:absolute;left:640px;top:120px;width:420px;padding:8px;
+  background:#401414;border:1px solid #803030;font-size:11px;color:#ffc0c0}
+#drop{position:absolute;left:40px;top:400px;width:400px;height:120px;background:#402020;
+  border:2px dashed #806060;font:600 12px/120px ui-monospace,Menlo,monospace;
+  color:#fff;text-align:center}
+#drop.over{background:#405020;border-color:#a0c060}
+#drop.done{background:#00a000;border-style:solid}
+#files{position:absolute;left:40px;top:540px;width:900px;font-size:12px;color:#9ad;
+  white-space:pre-wrap;word-break:break-all}
+.hdr{position:absolute;font:600 12px ui-monospace,Menlo,monospace;color:#ffd000}
+</style>
+
+<body>
+<div id="bg-beacon"></div><div id="bg-status"></div>
+<div class="bg-corner bg-tr"></div><div class="bg-corner bg-bl"></div><div class="bg-corner bg-br"></div>
+<h1>fixture: file-upload</h1>
+<pre id="bg-readout"></pre>
+
+<div class="hdr" style="left:40px;top:96px">inputs (do NOT click these in an automated run)</div>
+<label style="left:40px;top:124px">#single</label>
+<input type="file" id="single" style="left:130px;top:122px;width:300px">
+<label style="left:40px;top:164px">#multi</label>
+<input type="file" id="multi" multiple style="left:130px;top:162px;width:300px">
+<label style="left:40px;top:204px">#accept</label>
+<input type="file" id="accept" accept=".txt,.csv,image/png" style="left:130px;top:202px;width:300px">
+<label style="left:40px;top:244px">#dir</label>
+<input type="file" id="dir" webkitdirectory style="left:130px;top:242px;width:300px">
+
+<div class="hdr" style="left:40px;top:288px">programmatic path — no OS dialog</div>
+<button id="attachTxt" style="left:40px;top:312px;width:190px">attach sample .txt</button>
+<button id="attachTwo" style="left:240px;top:312px;width:190px">attach 2 files to #multi</button>
+<button id="clear"     style="left:440px;top:312px;width:120px">clear</button>
+
+<div id="banner">
+<b>Native chooser warning.</b> The buttons below call <code>input.click()</code>, which opens
+a real NSOpenPanel. Under offscreen rendering that panel does not paint into the frame and
+will hang an unattended run. D05 measured the same class of stall for downloads without
+<code>setSavePath()</code>. Use these only when a human is watching.
+<br><br>
+<button class="danger" id="openSingle" style="position:static;height:24px">open chooser (#single)</button>
+<button class="danger" id="openDir" style="position:static;height:24px">open chooser (#dir)</button>
+</div>
+
+<div id="drop">drop files here (dataTransfer.files path)</div>
+<div id="files">(no files)</div>
+
+<script>
+/* ---------- shared fixture harness (identical in every fixture except `id`) ---------- */
+var __q = new URLSearchParams(location.search);
+window.__bg = {
+  id: 'file-upload', proto: 1, ready: false, pass: null,
+  query: Object.fromEntries(__q),
+  markers: {beacon:[12,12], status:[36,12], topRight:[-12,12], bottomLeft:[12,-12], bottomRight:[-12,-12]},
+  markerColors: {beaconLoading:'#ff00ff', beaconReady:'#00ffff', statusIdle:'#333333',
+                 statusPass:'#00ff00', statusFail:'#ff0000',
+                 topRight:'#ff8000', bottomLeft:'#0080ff', bottomRight:'#ffff00'},
+  expect: {}, state: function(){ return {}; },
+  _ready: function(){ this.ready = true;
+    document.getElementById('bg-beacon').style.background = '#00ffff';
+    document.documentElement.setAttribute('data-bg-ready','1'); this._dump(); },
+  _status: function(v){ this.pass = v;
+    document.getElementById('bg-status').style.background =
+      v === true ? '#00ff00' : v === false ? '#ff0000' : '#333'; },
+  _dump: function(){ var el = document.getElementById('bg-readout');
+    if (el) el.textContent = JSON.stringify(this.state(), null, 1); }
+};
+</script>
+
+<script>
+(function () {
+  var bg = window.__bg;
+  var $ = function (id) { return document.getElementById(id); };
+  var SAMPLE_TEXT = 'BLACKGLASS-UPLOAD-FIXTURE-v1\nline2:0123456789\nline3:abcdefghij\n';
+
+  bg.expect = {
+    unit: 'CSS pixels',
+    inputs: { single: { box: [130, 122, 300, 20], multiple: false },
+              multi:  { box: [130, 162, 300, 20], multiple: true },
+              accept: { box: [130, 202, 300, 20], accept: '.txt,.csv,image/png' },
+              dir:    { box: [130, 242, 300, 20], webkitdirectory: true } },
+    dropZone: { box: [40, 400, 400, 120], centre: [240, 460] },
+    assets: {
+      'assets/upload-sample.txt': { bytes: 63, sumOfBytes: 4668,
+        sha256: 'f3bdcb4db23f7761ee149d1d0954bda842f9e4465c5c5a2c23e548d82a6a96c9' },
+      'assets/upload-sample.csv': { bytes: 49, sumOfBytes: 3588,
+        sha256: '9359355bafe7e0e9d79dabb33c62f688c3591b0ce9b2eec312bd08d44364a2f7' },
+      'assets/upload-dir/a.txt': { bytes: 9 },
+      'assets/upload-dir/b.txt': { bytes: 9 }
+    },
+    programmatic: { attachText: '__bg.attachText(inputId, name, text)',
+                    attachFiles: '__bg.attachFiles(inputId, [{name,text}])',
+                    note: 'builds File objects and assigns them through a DataTransfer, ' +
+                          'so the change event and FileReader path run identically to a ' +
+                          'chooser-picked file' },
+    cdpAlternative: 'DOM.setFileInputFiles takes real on-disk paths without a dialog',
+    passWhen: 'at least one file has been read back with a matching byte length',
+    hazard: 'input.click() opens a native modal panel that never paints in OSR'
+  };
+
+  var read = [], changes = 0, lastError = null;
+
+  function checksum(bytes) {   /* cheap, order-sensitive, enough to prove exact content */
+    var s = 0;
+    for (var i = 0; i < bytes.length; i++) s = (s + bytes[i] * (i % 7 + 1)) >>> 0;
+    return s;
+  }
+
+  function ingest(fileList, origin) {
+    var pending = fileList.length;
+    if (!pending) { render(); return; }
+    Array.prototype.forEach.call(fileList, function (f) {
+      var fr = new FileReader();
+      fr.onerror = function () {
+        lastError = { name: f.name, error: String(fr.error && fr.error.name) };
+        pending--; render();
+      };
+      fr.onload = function () {
+        var buf = new Uint8Array(fr.result);
+        var head = '';
+        for (var i = 0; i < Math.min(32, buf.length); i++) {
+          var c = buf[i];
+          head += (c >= 32 && c < 127) ? String.fromCharCode(c) : '\\x' + c.toString(16);
+        }
+        read.push({ origin: origin, name: f.name,
+                    relativePath: f.webkitRelativePath || null,
+                    size: f.size, readBytes: buf.length, type: f.type || '',
+                    lastModified: f.lastModified, checksum: checksum(buf),
+                    sumOfBytes: buf.reduce(function (a, b) { return a + b; }, 0),
+                    head: head });
+        pending--; render();
+      };
+      fr.readAsArrayBuffer(f);
+    });
+  }
+
+  function render() {
+    var txt = read.length ? read.map(function (r) {
+      return r.origin + '  ' + r.name + '  ' + r.size + ' B  sum=' + r.sumOfBytes +
+             '  head="' + r.head.slice(0, 40) + '"';
+    }).join('\n') : '(no files)';
+    $('files').textContent = txt;
+    bg._status(read.length > 0 && read.every(function (r) { return r.size === r.readBytes; }));
+    bg._dump();
+  }
+
+  ['single', 'multi', 'accept', 'dir'].forEach(function (id) {
+    $(id).addEventListener('change', function () {
+      changes++; ingest(this.files, id);
+    });
+  });
+
+  var dz = $('drop');
+  ['dragenter', 'dragover'].forEach(function (t) {
+    dz.addEventListener(t, function (ev) { ev.preventDefault(); dz.classList.add('over'); });
+  });
+  dz.addEventListener('dragleave', function () { dz.classList.remove('over'); });
+  dz.addEventListener('drop', function (ev) {
+    ev.preventDefault(); dz.classList.remove('over'); dz.classList.add('done');
+    ingest(ev.dataTransfer.files, 'drop');
+  });
+
+  /* ---- programmatic attachment: File -> DataTransfer -> input.files ---- */
+  bg.attachFiles = function (inputId, specs) {
+    var dt = new DataTransfer();
+    specs.forEach(function (s) {
+      dt.items.add(new File([s.text === undefined ? '' : s.text], s.name,
+                            { type: s.type || 'text/plain',
+                              lastModified: s.lastModified || 0 }));
+    });
+    var el = $(inputId);
+    el.files = dt.files;
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    return el.files.length;
+  };
+  bg.attachText = function (inputId, name, text) {
+    return bg.attachFiles(inputId || 'single', [{ name: name || 'sample.txt', text: text === undefined ? SAMPLE_TEXT : text }]);
+  };
+  bg.clear = function () {
+    ['single', 'multi', 'accept', 'dir'].forEach(function (id) { $(id).value = ''; });
+    read = []; changes = 0; lastError = null;
+    dz.className = ''; dz.textContent = 'drop files here (dataTransfer.files path)';
+    render(); return true;
+  };
+  bg.reset = bg.clear;
+  /* Explicit, never automatic. See the banner. */
+  bg.openNativeChooser = function (inputId) { $(inputId || 'single').click(); return 'native panel requested'; };
+
+  bg.state = function () {
+    var inputs = {};
+    ['single', 'multi', 'accept', 'dir'].forEach(function (id) {
+      var el = $(id);
+      inputs[id] = { count: el.files.length, value: el.value,
+                     names: Array.prototype.map.call(el.files, function (f) { return f.name; }) };
+    });
+    return { id: bg.id, ready: bg.ready, pass: bg.pass,
+             inputs: inputs, changes: changes, read: read, lastError: lastError,
+             hasDataTransferCtor: typeof DataTransfer === 'function' };
+  };
+
+  $('attachTxt').addEventListener('click', function () { bg.attachText('single', 'upload-sample.txt', SAMPLE_TEXT); });
+  $('attachTwo').addEventListener('click', function () {
+    bg.attachFiles('multi', [{ name: 'one.txt', text: 'one' }, { name: 'two.txt', text: 'twotwo' }]);
+  });
+  $('clear').addEventListener('click', function () { bg.clear(); });
+  $('openSingle').addEventListener('click', function () { bg.openNativeChooser('single'); });
+  $('openDir').addEventListener('click', function () { bg.openNativeChooser('dir'); });
+
+  render();
+  bg._ready();
+})();
+</script>
+</html>

@@ -1,0 +1,261 @@
+<!-- BlackGlass fixture: video
+     Proves: a <video> element decodes and its frames reach the offscreen surface.
+     The clip is three one-second solid colours (red, green, blue) at 320x180, 10 fps,
+     so the decoded frame at any time t is known: t<1 red, 1<=t<2 green, t>=2 blue.
+     The default source is a data: URI, so the page is genuinely self-contained; the same
+     clip also exists as assets/color-bars.webm (VP8) and assets/color-bars.mp4 (H.264)
+     for the file-backed and proprietary-codec paths.
+     Self-contained, file:// safe. -->
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BG · video</title>
+<style>
+/* ---------- shared fixture chrome (identical in every fixture) ---------- */
+:root{color-scheme:dark}
+html,body{margin:0;padding:0;background:#0b0b0f;color:#e6e6e6;
+  font:14px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;-webkit-font-smoothing:none}
+#bg-beacon,#bg-status,.bg-corner{position:fixed;width:24px;height:24px;z-index:2147483647}
+#bg-beacon{left:0;top:0;background:#ff00ff}
+#bg-status{left:24px;top:0;background:#333}
+.bg-tr{right:0;top:0;background:#ff8000}
+.bg-bl{left:0;bottom:0;background:#0080ff}
+.bg-br{right:0;bottom:0;background:#ffff00}
+h1{position:fixed;left:56px;top:1px;margin:0;font:600 13px/24px ui-monospace,Menlo,monospace;color:#8a8aff}
+#bg-readout{position:fixed;right:8px;bottom:32px;width:380px;max-height:280px;overflow:hidden;
+  margin:0;padding:4px;background:rgba(0,0,0,.66);white-space:pre-wrap;word-break:break-all;
+  font-size:11px;line-height:1.3;color:#9adcff;pointer-events:none;z-index:2147483646}
+/* ---------- fixture-specific ---------- */
+#v{position:absolute;left:40px;top:120px;width:320px;height:180px;background:#000}
+#shadow{position:absolute;left:400px;top:120px;width:320px;height:180px;background:#000}
+label{position:absolute;font-size:12px;color:#9a9aa8}
+button{position:absolute;background:#22222c;color:#e6e6e6;border:1px solid #4a4a5a;
+  font:12px ui-monospace,Menlo,monospace;height:28px;cursor:pointer}
+.note{position:absolute;font-size:11px;color:#6a6a78;max-width:440px}
+#swatch{position:absolute;left:760px;top:120px;width:120px;height:120px;background:#333}
+</style>
+
+<body>
+<div id="bg-beacon"></div><div id="bg-status"></div>
+<div class="bg-corner bg-tr"></div><div class="bg-corner bg-bl"></div><div class="bg-corner bg-br"></div>
+<h1>fixture: video</h1>
+<pre id="bg-readout"></pre>
+
+<label style="left:40px;top:98px">&lt;video&gt; 320x180, 3 s, no audio track</label>
+<video id="v" playsinline preload="auto" muted></video>
+
+<label style="left:400px;top:98px">canvas mirror — drawImage of the current frame</label>
+<canvas id="shadow" width="320" height="180"></canvas>
+
+<label style="left:760px;top:98px">decoded centre colour</label>
+<div id="swatch"></div>
+
+<button id="b0"    style="left:40px;top:320px;width:90px">seek 0.5</button>
+<button id="b1"    style="left:140px;top:320px;width:90px">seek 1.5</button>
+<button id="b2"    style="left:240px;top:320px;width:90px">seek 2.5</button>
+<button id="play"  style="left:340px;top:320px;width:70px">play</button>
+<button id="pause" style="left:420px;top:320px;width:70px">pause</button>
+
+<p class="note" style="left:40px;top:370px">
+Colours are encoded through YUV 4:2:0, so the decoded RGB is close to but not exactly
+#FF0000 / #00FF00 / #0000FF. Assert with a tolerance, or assert on the dominant channel.
+The measured values for this build are recorded in README.md.
+</p>
+<p class="note" style="left:40px;top:440px">
+<code>?src=</code> selects the source: <code>data</code> (default, inline base64 VP8/WebM),
+<code>webm</code> (assets/color-bars.webm), <code>mp4</code> (assets/color-bars.mp4, H.264),
+<code>blob</code> (same bytes through URL.createObjectURL).
+Reading the canvas mirror back may throw SecurityError because a file:// or data: source is
+cross-origin to the document; the fixture records that outcome instead of hiding it.
+</p>
+
+<script>
+/* ---------- shared fixture harness (identical in every fixture except `id`) ---------- */
+var __q = new URLSearchParams(location.search);
+window.__bg = {
+  id: 'video', proto: 1, ready: false, pass: null,
+  query: Object.fromEntries(__q),
+  markers: {beacon:[12,12], status:[36,12], topRight:[-12,12], bottomLeft:[12,-12], bottomRight:[-12,-12]},
+  markerColors: {beaconLoading:'#ff00ff', beaconReady:'#00ffff', statusIdle:'#333333',
+                 statusPass:'#00ff00', statusFail:'#ff0000',
+                 topRight:'#ff8000', bottomLeft:'#0080ff', bottomRight:'#ffff00'},
+  expect: {}, state: function(){ return {}; },
+  _ready: function(){ this.ready = true;
+    document.getElementById('bg-beacon').style.background = '#00ffff';
+    document.documentElement.setAttribute('data-bg-ready','1'); this._dump(); },
+  _status: function(v){ this.pass = v;
+    document.getElementById('bg-status').style.background =
+      v === true ? '#00ff00' : v === false ? '#ff0000' : '#333'; },
+  _dump: function(){ var el = document.getElementById('bg-readout');
+    if (el) el.textContent = JSON.stringify(this.state(), null, 1); }
+};
+</script>
+
+<script>
+/* color-bars.webm, VP8 in WebM, 320x180, 10 fps, 3.000 s, 2543 bytes.
+   sha256 f7d8110e4647f855c15b85517b2b7282ea8872169c37ab29715d4f045b496e4e
+   Generated with the ffmpeg command recorded in README.md. */
+var WEBM_B64 = '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';
+</script>
+
+<script>
+(function () {
+  var bg = window.__bg;
+  var $ = function (id) { return document.getElementById(id); };
+  var v = $('v'), shadow = $('shadow'), sctx = shadow.getContext('2d', { willReadFrequently: true });
+
+  bg.expect = {
+    unit: 'CSS pixels',
+    video: { box: [40, 120, 320, 180], centre: [200, 210], intrinsic: [320, 180],
+             durationSec: 3, fps: 10, hasAudio: false },
+    mirror: { box: [400, 120, 320, 180], centre: [560, 210] },
+    swatch: { box: [760, 120, 120, 120], centre: [820, 180] },
+    timeline: [{ range: [0, 1], nominal: '#ff0000', dominantChannel: 'r' },
+               { range: [1, 2], nominal: '#00ff00', dominantChannel: 'g' },
+               { range: [2, 3], nominal: '#0000ff', dominantChannel: 'b' }],
+    tolerance: 'measured on Electron 43.2.0 / Chromium 150 the YUV 4:2:0 round trip came ' +
+               'back exact for VP8 (0,255,0 at t=1.5) and off by one for H.264 (0,255,1). ' +
+               'Compare with +/- 4 per channel; do not widen it without a new measurement.',
+    measured_2026_08_01: {
+      canvasReadbackTainted: false,
+      note: 'drawImage + getImageData succeeded for all four sources — data:, file-backed ' +
+            'webm, file-backed mp4 and blob: — from a file:// document. Pixel-level video ' +
+            'assertions therefore work without a framebuffer scan and without a server.',
+      decodedCentreAt1_5s: { data: [0, 255, 0, 255], webm: [0, 255, 0, 255],
+                             mp4: [0, 255, 1, 255], blob: [0, 255, 0, 255] },
+      h264: 'canPlayType("video/mp4; codecs=avc1.42E01E") == "probably" and the clip decoded'
+    },
+    sources: { data: 'inline base64 (default)', webm: 'assets/color-bars.webm',
+               mp4: 'assets/color-bars.mp4', blob: 'URL.createObjectURL of the same bytes' },
+    passWhen: 'readyState >= 2 (HAVE_CURRENT_DATA) and videoWidth == 320',
+    determinism: 'loads paused and seeks to 0.5 s; never autoplays unless ?autoplay=1'
+  };
+
+  var events = [], errorInfo = null, taint = null, decoded = null, objectUrl = null;
+  function log(t) { events.push(t); if (events.length > 40) events.shift(); }
+
+  function b64ToBytes(b64) {
+    var bin = atob(b64), out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  var which = bg.query.src || 'data';
+  var src;
+  if (which === 'webm') src = 'assets/color-bars.webm';
+  else if (which === 'mp4') src = 'assets/color-bars.mp4';
+  else if (which === 'blob') {
+    objectUrl = URL.createObjectURL(new Blob([b64ToBytes(WEBM_B64)], { type: 'video/webm' }));
+    src = objectUrl;
+  } else { which = 'data'; src = 'data:video/webm;base64,' + WEBM_B64; }
+  v.src = src;
+
+  function sample() {
+    /* Mirror the current frame into a canvas and read its centre. This proves decode
+       end-to-end without a framebuffer scan -- when the origin rules allow the read. */
+    try {
+      sctx.drawImage(v, 0, 0, shadow.width, shadow.height);
+    } catch (e) { taint = { stage: 'drawImage', name: e.name, message: String(e.message) }; }
+    try {
+      var d = sctx.getImageData(160, 90, 1, 1).data;
+      decoded = [d[0], d[1], d[2], d[3]];
+      taint = taint || { tainted: false };
+      $('swatch').style.background = 'rgb(' + d[0] + ',' + d[1] + ',' + d[2] + ')';
+    } catch (e) {
+      taint = { stage: 'getImageData', name: e.name, message: String(e.message), tainted: true };
+      decoded = null;
+      $('swatch').style.background = '#333';
+    }
+    bg._dump();
+  }
+
+  ['loadstart', 'loadedmetadata', 'loadeddata', 'canplay', 'canplaythrough', 'seeking',
+   'seeked', 'play', 'playing', 'pause', 'ended', 'stalled', 'suspend', 'waiting',
+   'error'].forEach(function (t) {
+    v.addEventListener(t, function () {
+      log(t);
+      if (t === 'error' && v.error) {
+        errorInfo = { code: v.error.code, message: v.error.message };
+        bg._status(false);
+      }
+      if (t === 'loadeddata' || t === 'seeked') { sample(); evaluate(); }
+      bg._dump();
+    });
+  });
+  v.addEventListener('timeupdate', function () { sample(); });
+
+  function evaluate() {
+    bg._status(v.readyState >= 2 && v.videoWidth === 320);
+    bg._dump();
+  }
+
+  bg.seek = function (t) {
+    return new Promise(function (resolve) {
+      var done = function () { v.removeEventListener('seeked', done); sample(); resolve(bg.state()); };
+      v.addEventListener('seeked', done);
+      v.currentTime = t;
+    });
+  };
+  bg.play = function () { var p = v.play(); if (p && p.catch) p.catch(function (e) {
+    errorInfo = { playRejected: String(e && e.name) }; bg._dump(); }); return true; };
+  bg.pause = function () { v.pause(); return true; };
+  bg.sample = function () { sample(); return decoded; };
+  bg.reset = function () { v.pause(); v.currentTime = 0.5; events = []; bg._dump(); };
+
+  var CODECS = {
+    'webm-vp8': 'video/webm; codecs="vp8"',
+    'webm-vp9': 'video/webm; codecs="vp9"',
+    'webm-av1': 'video/webm; codecs="av01.0.05M.08"',
+    'mp4-h264-baseline': 'video/mp4; codecs="avc1.42E01E"',
+    'mp4-h264-high': 'video/mp4; codecs="avc1.64001E"',
+    'mp4-hevc': 'video/mp4; codecs="hvc1.1.6.L93.B0"',
+    'mp4-aac': 'audio/mp4; codecs="mp4a.40.2"',
+    'ogg-theora': 'video/ogg; codecs="theora"',
+    'audio-opus': 'audio/webm; codecs="opus"',
+    'audio-mp3': 'audio/mpeg'
+  };
+  var support = {};
+  for (var k in CODECS) support[k] = v.canPlayType(CODECS[k]) || 'no';
+
+  bg.state = function () {
+    var buffered = [];
+    for (var i = 0; i < v.buffered.length; i++) {
+      buffered.push([+v.buffered.start(i).toFixed(3), +v.buffered.end(i).toFixed(3)]);
+    }
+    var t = v.currentTime;
+    var seg = t < 1 ? 0 : t < 2 ? 1 : 2;
+    return {
+      id: bg.id, ready: bg.ready, pass: bg.pass,
+      source: which, srcLength: src.length,
+      readyState: v.readyState, networkState: v.networkState,
+      videoWidth: v.videoWidth, videoHeight: v.videoHeight,
+      duration: isFinite(v.duration) ? +v.duration.toFixed(3) : v.duration,
+      currentTime: +t.toFixed(3), paused: v.paused, ended: v.ended, muted: v.muted,
+      seekable: v.seekable.length ? [+v.seekable.start(0).toFixed(3), +v.seekable.end(0).toFixed(3)] : null,
+      buffered: buffered,
+      expectedSegment: ['red', 'green', 'blue'][seg],
+      decodedCentreRGBA: decoded,
+      canvasReadback: taint,
+      error: errorInfo,
+      events: events,
+      codecSupport: support,
+      videoRect: v.getBoundingClientRect().toJSON()
+    };
+  };
+
+  $('b0').addEventListener('click', function () { bg.seek(0.5); });
+  $('b1').addEventListener('click', function () { bg.seek(1.5); });
+  $('b2').addEventListener('click', function () { bg.seek(2.5); });
+  $('play').addEventListener('click', function () { bg.play(); });
+  $('pause').addEventListener('click', function () { bg.pause(); });
+
+  v.addEventListener('loadedmetadata', function () {
+    if (bg.query.autoplay === '1') { bg.play(); }
+    else { v.currentTime = bg.query.t !== undefined ? parseFloat(bg.query.t) || 0.5 : 0.5; }
+  }, { once: true });
+
+  bg._status(false);
+  bg._ready();
+})();
+</script>
+</html>

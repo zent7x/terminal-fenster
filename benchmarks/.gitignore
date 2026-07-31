@@ -1,0 +1,3 @@
+# Benchmark output. Scoped narrowly on purpose so it cannot swallow anything
+# else under benchmarks/.
+/results/

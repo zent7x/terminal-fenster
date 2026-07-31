@@ -1,0 +1,219 @@
+<!-- BlackGlass fixture: hover
+     Proves: CSS :hover activates under offscreen rendering. This is the fixture that
+     fails if the engine sends mouseMove without a preceding mouseEnter
+     (apps/engine/src/main.js -- the enteredOnce latch). Tile A uses NO JavaScript at all,
+     so it isolates the compositor/hit-test path from the event path.
+     Self-contained, file:// safe. -->
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BG · hover</title>
+<style>
+/* ---------- shared fixture chrome (identical in every fixture) ---------- */
+:root{color-scheme:dark}
+html,body{margin:0;padding:0;background:#0b0b0f;color:#e6e6e6;
+  font:14px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;-webkit-font-smoothing:none}
+#bg-beacon,#bg-status,.bg-corner{position:fixed;width:24px;height:24px;z-index:2147483647}
+#bg-beacon{left:0;top:0;background:#ff00ff}
+#bg-status{left:24px;top:0;background:#333}
+.bg-tr{right:0;top:0;background:#ff8000}
+.bg-bl{left:0;bottom:0;background:#0080ff}
+.bg-br{right:0;bottom:0;background:#ffff00}
+h1{position:fixed;left:56px;top:1px;margin:0;font:600 13px/24px ui-monospace,Menlo,monospace;color:#8a8aff}
+#bg-readout{position:fixed;right:8px;bottom:32px;width:380px;max-height:280px;overflow:hidden;
+  margin:0;padding:4px;background:rgba(0,0,0,.66);white-space:pre-wrap;word-break:break-all;
+  font-size:11px;line-height:1.3;color:#9adcff;pointer-events:none;z-index:2147483646}
+/* ---------- fixture-specific ---------- */
+.tile{position:absolute;width:120px;height:120px;background:#c00000;
+  font:600 12px/120px ui-monospace,Menlo,monospace;color:#fff;text-align:center;
+  -webkit-user-select:none;user-select:none}
+/* A: pure CSS, zero JavaScript. red -> green on :hover */
+#a:hover{background:#00c000}
+/* B: JS counters only; colour driven from script */
+/* C: parent :hover restyles a child -> proves the hover state propagates down the tree */
+#c .inner{position:absolute;left:30px;top:30px;width:60px;height:60px;background:#404058}
+#c:hover .inner{background:#00ffff}
+/* D: pointer events + a :hover that changes geometry (relayout while hovered) */
+#d:hover{width:160px;background:#8000ff}
+/* E: a :hover under a transparent overlay -- must NOT trigger (hit-test correctness) */
+#e:hover{background:#00c000}
+#occluder{position:absolute;left:840px;top:120px;width:120px;height:120px;
+  background:rgba(255,255,255,.08)}
+.lbl{position:absolute;font-size:11px;color:#8a8a98;width:130px}
+#crosshair{position:absolute;width:9px;height:9px;border:1px solid #ff00ff;left:-20px;top:-20px;
+  pointer-events:none}
+</style>
+
+<body>
+<div id="bg-beacon"></div><div id="bg-status"></div>
+<div class="bg-corner bg-tr"></div><div class="bg-corner bg-bl"></div><div class="bg-corner bg-br"></div>
+<h1>fixture: hover</h1>
+<pre id="bg-readout"></pre>
+
+<div class="tile" id="a" style="left:40px;top:120px">A css-only</div>
+<div class="lbl" style="left:40px;top:246px">pure CSS :hover, no JS. Needs mouseEnter before mouseMove.</div>
+
+<div class="tile" id="b" style="left:200px;top:120px">B js</div>
+<div class="lbl" style="left:200px;top:246px">mouseover / mouseout / mousemove counters</div>
+
+<div class="tile" id="c" style="left:360px;top:120px"><div class="inner"></div></div>
+<div class="lbl" style="left:360px;top:246px">parent :hover restyles child</div>
+
+<div class="tile" id="d" style="left:520px;top:120px">D ptr</div>
+<div class="lbl" style="left:520px;top:246px">pointer events; :hover widens 120→160 (relayout)</div>
+
+<div class="tile" id="e" style="left:840px;top:120px">E occluded</div>
+<div id="occluder"></div>
+<div class="lbl" style="left:840px;top:246px">covered by a translucent overlay — must stay red</div>
+
+<div class="tile" id="f" title="native tooltip text" style="left:700px;top:120px;background:#404058">F title=</div>
+<div class="lbl" style="left:700px;top:246px">has a title attribute; native tooltip almost certainly never paints in OSR — observe, do not assume</div>
+
+<div id="crosshair"></div>
+
+<script>
+/* ---------- shared fixture harness (identical in every fixture except `id`) ---------- */
+var __q = new URLSearchParams(location.search);
+window.__bg = {
+  id: 'hover', proto: 1, ready: false, pass: null,
+  query: Object.fromEntries(__q),
+  markers: {beacon:[12,12], status:[36,12], topRight:[-12,12], bottomLeft:[12,-12], bottomRight:[-12,-12]},
+  markerColors: {beaconLoading:'#ff00ff', beaconReady:'#00ffff', statusIdle:'#333333',
+                 statusPass:'#00ff00', statusFail:'#ff0000',
+                 topRight:'#ff8000', bottomLeft:'#0080ff', bottomRight:'#ffff00'},
+  expect: {}, state: function(){ return {}; },
+  _ready: function(){ this.ready = true;
+    document.getElementById('bg-beacon').style.background = '#00ffff';
+    document.documentElement.setAttribute('data-bg-ready','1'); this._dump(); },
+  _status: function(v){ this.pass = v;
+    document.getElementById('bg-status').style.background =
+      v === true ? '#00ff00' : v === false ? '#ff0000' : '#333'; },
+  _dump: function(){ var el = document.getElementById('bg-readout');
+    if (el) el.textContent = JSON.stringify(this.state(), null, 1); }
+};
+</script>
+
+<script>
+(function () {
+  var bg = window.__bg;
+  var $ = function (id) { return document.getElementById(id); };
+
+  bg.expect = {
+    unit: 'CSS pixels',
+    tiles: {
+      a: { box: [40, 120, 120, 120], centre: [100, 180], idle: 'rgb(192, 0, 0)',
+           hovered: 'rgb(0, 192, 0)', js: false },
+      b: { box: [200, 120, 120, 120], centre: [260, 180], js: true },
+      c: { box: [360, 120, 120, 120], centre: [420, 180],
+           childIdle: 'rgb(64, 64, 88)', childHovered: 'rgb(0, 255, 255)' },
+      d: { box: [520, 120, 120, 120], centre: [580, 180],
+           hoveredWidth: 160, hovered: 'rgb(128, 0, 255)' },
+      f: { box: [700, 120, 120, 120], centre: [760, 180], hasTitleAttr: true },
+      e: { box: [840, 120, 120, 120], centre: [900, 180], occluded: true,
+           mustStay: 'rgb(192, 0, 0)' }
+    },
+    offBoard: [640, 600],
+    passWhen: 'tile A computed background is rgb(0, 192, 0) — i.e. :hover is live',
+    measured_2026_08_01: {
+      host: 'Electron 43.2.0 / Chromium 150.0.7871.129, macOS 26.1, Apple M4',
+      bareMouseMoveActivatesHover: true,
+      note: 'sendInputEvent({type:"mouseMove"}) with NO preceding mouseEnter DID activate ' +
+            ':hover on this build — tile A went rgb(0,192,0) and one mouseover fired. The ' +
+            'mouseEnter latch in the engine is therefore belt-and-braces here, not a ' +
+            'precondition. Keep the latch (it is correct and free) but do not rely on this ' +
+            'fixture failing without it.',
+      matchesHoverDisagrees: true,
+      matchesNote: 'while getComputedStyle reported the hover style applied, ' +
+                   'Element.matches(":hover") returned false for every tile. Assert on the ' +
+                   'computed style, not on matches(":hover").'
+    }
+  };
+
+  var counts = { mouseover: 0, mouseout: 0, mouseenter: 0, mouseleave: 0, mousemove: 0,
+                 pointerover: 0, pointerout: 0, pointerenter: 0, pointerleave: 0,
+                 pointermove: 0 };
+  var lastMove = null, lastPointer = null, hoverPath = [];
+
+  function bgcolor(id) { return getComputedStyle($(id)).backgroundColor; }
+
+  function refresh() {
+    var aHot = bgcolor('a') === 'rgb(0, 192, 0)';
+    bg._status(aHot);
+    $('b').style.background = counts.mouseover > counts.mouseout ? '#00c000' : '#c00000';
+    if (lastMove) { $('crosshair').style.left = (lastMove.clientX - 5) + 'px';
+                    $('crosshair').style.top = (lastMove.clientY - 5) + 'px'; }
+    bg._dump();
+  }
+
+  document.addEventListener('mousemove', function (ev) {
+    counts.mousemove++;
+    lastMove = { clientX: ev.clientX, clientY: ev.clientY,
+                 pageX: ev.pageX, pageY: ev.pageY,
+                 screenX: ev.screenX, screenY: ev.screenY,
+                 offsetX: ev.offsetX, offsetY: ev.offsetY,
+                 movementX: ev.movementX, movementY: ev.movementY,
+                 buttons: ev.buttons, isTrusted: ev.isTrusted,
+                 target: ev.target && ev.target.id || null };
+    refresh();
+  }, true);
+
+  ['mouseover', 'mouseout'].forEach(function (t) {
+    document.addEventListener(t, function (ev) {
+      counts[t]++;
+      hoverPath.push((t === 'mouseover' ? '+' : '-') + (ev.target.id || ev.target.className || '?'));
+      if (hoverPath.length > 32) hoverPath.shift();
+      refresh();
+    }, true);
+  });
+  ['mouseenter', 'mouseleave'].forEach(function (t) {
+    ['a', 'b', 'c', 'd', 'e', 'f'].forEach(function (id) {
+      $(id).addEventListener(t, function () { counts[t]++; refresh(); });
+    });
+  });
+  ['pointerover', 'pointerout', 'pointermove'].forEach(function (t) {
+    document.addEventListener(t, function (ev) {
+      counts[t]++;
+      if (t === 'pointermove') {
+        lastPointer = { pointerType: ev.pointerType, pointerId: ev.pointerId,
+                        pressure: ev.pressure, isPrimary: ev.isPrimary,
+                        width: ev.width, height: ev.height,
+                        clientX: ev.clientX, clientY: ev.clientY };
+      }
+      refresh();
+    }, true);
+  });
+  ['pointerenter', 'pointerleave'].forEach(function (t) {
+    $('d').addEventListener(t, function () { counts[t]++; refresh(); });
+  });
+
+  bg.state = function () {
+    var hovered = [];
+    ['a', 'b', 'c', 'd', 'e', 'f'].forEach(function (id) {
+      if ($(id).matches(':hover')) hovered.push(id);
+    });
+    return {
+      id: bg.id, ready: bg.ready, pass: bg.pass,
+      cssHoverLive: bgcolor('a') === 'rgb(0, 192, 0)',
+      computed: { a: bgcolor('a'), b: bgcolor('b'),
+                  cInner: getComputedStyle($('c').firstElementChild).backgroundColor,
+                  d: bgcolor('d'), dWidth: $('d').getBoundingClientRect().width,
+                  e: bgcolor('e') },
+      matchesHover: hovered,
+      elementFromLastPoint: lastMove
+        ? (function () { var el = document.elementFromPoint(lastMove.clientX, lastMove.clientY);
+                         return el ? (el.id || el.className || el.nodeName) : null; })()
+        : null,
+      counts: counts, lastMove: lastMove, lastPointer: lastPointer, hoverPath: hoverPath
+    };
+  };
+
+  bg.reset = function () {
+    for (var k in counts) counts[k] = 0;
+    lastMove = null; lastPointer = null; hoverPath = []; refresh();
+  };
+
+  refresh();
+  bg._ready();
+})();
+</script>
+</html>

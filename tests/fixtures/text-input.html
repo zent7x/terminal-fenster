@@ -1,0 +1,211 @@
+<!-- BlackGlass fixture: text-input
+     Proves: synthetic key events reach a focused control and actually insert text;
+     focus moves between controls; a password field masks its value.
+     Doubles as the redaction target for A09 T-AGT-2 (a page whose DOM must never be
+     serialised verbatim into agent context). Self-contained, file:// safe. -->
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BG · text-input</title>
+<style>
+/* ---------- shared fixture chrome (identical in every fixture) ---------- */
+:root{color-scheme:dark}
+html,body{margin:0;padding:0;background:#0b0b0f;color:#e6e6e6;
+  font:14px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;-webkit-font-smoothing:none}
+#bg-beacon,#bg-status,.bg-corner{position:fixed;width:24px;height:24px;z-index:2147483647}
+#bg-beacon{left:0;top:0;background:#ff00ff}
+#bg-status{left:24px;top:0;background:#333}
+.bg-tr{right:0;top:0;background:#ff8000}
+.bg-bl{left:0;bottom:0;background:#0080ff}
+.bg-br{right:0;bottom:0;background:#ffff00}
+h1{position:fixed;left:56px;top:1px;margin:0;font:600 13px/24px ui-monospace,Menlo,monospace;color:#8a8aff}
+#bg-readout{position:fixed;right:8px;bottom:32px;width:380px;max-height:280px;overflow:hidden;
+  margin:0;padding:4px;background:rgba(0,0,0,.66);white-space:pre-wrap;word-break:break-all;
+  font-size:11px;line-height:1.3;color:#9adcff;pointer-events:none;z-index:2147483646}
+/* ---------- fixture-specific ---------- */
+label{position:absolute;font-size:12px;color:#9a9aa8}
+input,textarea,select{position:absolute;box-sizing:border-box;background:#16161c;color:#e6e6e6;
+  border:2px solid #3a3a4a;font:14px/1 ui-monospace,Menlo,monospace;padding:0 8px}
+input:focus,textarea:focus,select:focus{border-color:#00ffff;outline:none}
+textarea{padding:6px 8px;resize:none}
+#focusmark{position:absolute;left:600px;top:120px;width:80px;height:80px;background:#333}
+#lenbar{position:absolute;left:600px;top:220px;width:0;height:24px;background:#00ff00}
+.note{position:absolute;font-size:11px;color:#6a6a78;max-width:520px}
+</style>
+
+<body>
+<div id="bg-beacon"></div><div id="bg-status"></div>
+<div class="bg-corner bg-tr"></div><div class="bg-corner bg-bl"></div><div class="bg-corner bg-br"></div>
+<h1>fixture: text-input</h1>
+<pre id="bg-readout"></pre>
+
+<label style="left:40px;top:98px">username (type: blackglass)</label>
+<input id="username" name="username" type="text" autocomplete="off" spellcheck="false"
+       style="left:40px;top:120px;width:320px;height:40px">
+
+<label style="left:40px;top:178px">password (never leaves this page in cleartext)</label>
+<input id="password" name="password" type="password" autocomplete="off"
+       style="left:40px;top:200px;width:320px;height:40px">
+
+<label style="left:40px;top:258px">decoy card number — must be redacted by any agent scraper</label>
+<input id="cardnumber" name="cardnumber" type="text" autocomplete="off"
+       value="4111 1111 1111 1111" style="left:40px;top:280px;width:320px;height:40px">
+
+<label style="left:40px;top:338px">textarea (multi-line, Enter must insert a newline)</label>
+<textarea id="notes" rows="4" spellcheck="false"
+          style="left:40px;top:360px;width:320px;height:96px"></textarea>
+
+<label style="left:40px;top:474px">select / checkbox / radio</label>
+<select id="choice" style="left:40px;top:496px;width:150px;height:32px">
+  <option value="a">alpha</option><option value="b">beta</option><option value="c">gamma</option>
+</select>
+<input id="agree" type="checkbox" style="left:210px;top:500px;width:24px;height:24px;padding:0">
+<input id="r1" type="radio" name="grp" value="one" style="left:250px;top:500px;width:24px;height:24px;padding:0">
+<input id="r2" type="radio" name="grp" value="two" style="left:286px;top:500px;width:24px;height:24px;padding:0">
+
+<label style="left:40px;top:548px">readonly / disabled — must not accept keystrokes</label>
+<input id="ro" type="text" value="READONLY" readonly style="left:40px;top:570px;width:150px;height:32px">
+<input id="dis" type="text" value="DISABLED" disabled style="left:210px;top:570px;width:150px;height:32px">
+
+<div id="focusmark"></div>
+<label style="left:600px;top:98px">focus mark: grey none / blue user / yellow pass / white other</label>
+<div id="lenbar"></div>
+<label style="left:600px;top:198px">username length bar — 20 px per character</label>
+<p class="note" style="left:600px;top:264px">
+Password contents are exposed only as <code>len</code> and <code>sum</code>
+(sum of UTF-16 code units), never as text. A harness can prove the exact string
+arrived without the string ever appearing in a log, a frame, or an agent context.
+</p>
+
+<script>
+/* ---------- shared fixture harness (identical in every fixture except `id`) ---------- */
+var __q = new URLSearchParams(location.search);
+window.__bg = {
+  id: 'text-input', proto: 1, ready: false, pass: null,
+  query: Object.fromEntries(__q),
+  markers: {beacon:[12,12], status:[36,12], topRight:[-12,12], bottomLeft:[12,-12], bottomRight:[-12,-12]},
+  markerColors: {beaconLoading:'#ff00ff', beaconReady:'#00ffff', statusIdle:'#333333',
+                 statusPass:'#00ff00', statusFail:'#ff0000',
+                 topRight:'#ff8000', bottomLeft:'#0080ff', bottomRight:'#ffff00'},
+  expect: {}, state: function(){ return {}; },
+  _ready: function(){ this.ready = true;
+    document.getElementById('bg-beacon').style.background = '#00ffff';
+    document.documentElement.setAttribute('data-bg-ready','1'); this._dump(); },
+  _status: function(v){ this.pass = v;
+    document.getElementById('bg-status').style.background =
+      v === true ? '#00ff00' : v === false ? '#ff0000' : '#333'; },
+  _dump: function(){ var el = document.getElementById('bg-readout');
+    if (el) el.textContent = JSON.stringify(this.state(), null, 1); }
+};
+</script>
+
+<script>
+(function () {
+  var bg = window.__bg;
+  var $ = function (id) { return document.getElementById(id); };
+
+  bg.expect = {
+    unit: 'CSS pixels',
+    fields: {
+      username:   { box: [40, 120, 320, 40], centre: [200, 140], type: 'text' },
+      password:   { box: [40, 200, 320, 40], centre: [200, 220], type: 'password' },
+      cardnumber: { box: [40, 280, 320, 40], centre: [200, 300], type: 'text' },
+      notes:      { box: [40, 360, 320, 96], centre: [200, 408], type: 'textarea' },
+      choice:     { box: [40, 496, 150, 32], centre: [115, 512], type: 'select' },
+      agree:      { box: [210, 500, 24, 24], centre: [222, 512], type: 'checkbox' },
+      ro:         { box: [40, 570, 150, 32], centre: [115, 586], type: 'readonly' },
+      dis:        { box: [210, 570, 150, 32], centre: [285, 586], type: 'disabled' }
+    },
+    focusMark: { box: [600, 120, 80, 80], centre: [640, 160],
+                 colours: { none: '#333333', username: '#0080ff', password: '#ffff00',
+                            other: '#ffffff' } },
+    lenBar: { origin: [600, 220], heightPx: 24, pxPerChar: 20, colour: '#00ff00' },
+    passWhen: "username === 'blackglass' AND password.length === 6",
+    secretsPolicy: 'password + cardnumber values must never appear in any log, frame ' +
+                   'OCR, or agent context; assert on len/sum instead'
+  };
+
+  var counts = { keydown: 0, keyup: 0, keypress: 0, beforeinput: 0, input: 0, change: 0,
+                 compositionstart: 0, compositionupdate: 0, compositionend: 0, paste: 0 };
+  var keyLog = [];
+
+  function sum(s) { var t = 0; for (var i = 0; i < s.length; i++) t += s.charCodeAt(i); return t; }
+
+  function evaluate() {
+    var ok = $('username').value === 'blackglass' && $('password').value.length === 6;
+    bg._status(ok);
+    var w = Math.min($('username').value.length * bg.expect.lenBar.pxPerChar, 600);
+    $('lenbar').style.width = w + 'px';
+    var f = document.activeElement, mark = $('focusmark');
+    mark.style.background = f === $('username') ? '#0080ff'
+                          : f === $('password') ? '#ffff00'
+                          : (f && f !== document.body) ? '#ffffff' : '#333333';
+    bg._dump();
+  }
+
+  ['keydown', 'keyup', 'keypress'].forEach(function (t) {
+    document.addEventListener(t, function (ev) {
+      counts[t]++;
+      if (t === 'keydown') {
+        keyLog.push({ key: ev.key, code: ev.code, keyCode: ev.keyCode, which: ev.which,
+                      location: ev.location, repeat: ev.repeat, isComposing: ev.isComposing,
+                      mods: (ev.ctrlKey ? 'C' : '') + (ev.altKey ? 'A' : '') +
+                            (ev.shiftKey ? 'S' : '') + (ev.metaKey ? 'M' : ''),
+                      isTrusted: ev.isTrusted,
+                      target: ev.target && ev.target.id || null });
+        if (keyLog.length > 32) keyLog.shift();
+      }
+      evaluate();
+    }, true);
+  });
+  ['beforeinput', 'input', 'change', 'compositionstart', 'compositionupdate',
+   'compositionend', 'paste'].forEach(function (t) {
+    document.addEventListener(t, function (ev) {
+      counts[t]++;
+      if (t === 'beforeinput') {
+        keyLog.push({ inputType: ev.inputType, data: ev.data,
+                      target: ev.target && ev.target.id || null });
+        if (keyLog.length > 32) keyLog.shift();
+      }
+      evaluate();
+    }, true);
+  });
+  ['focusin', 'focusout'].forEach(function (t) {
+    document.addEventListener(t, function () { evaluate(); }, true);
+  });
+
+  bg.state = function () {
+    var u = $('username'), p = $('password');
+    return {
+      id: bg.id, ready: bg.ready, pass: bg.pass,
+      username: u.value,
+      usernameSelection: [u.selectionStart, u.selectionEnd, u.selectionDirection],
+      /* deliberately NOT p.value */
+      password: { len: p.value.length, sum: sum(p.value),
+                  type: p.type, masked: p.type === 'password',
+                  textSecurity: getComputedStyle(p).webkitTextSecurity || null },
+      cardnumber: { len: $('cardnumber').value.length, sum: sum($('cardnumber').value) },
+      notes: { value: $('notes').value, lines: $('notes').value.split('\n').length },
+      choice: $('choice').value, agree: $('agree').checked,
+      radio: ($('r1').checked ? 'one' : $('r2').checked ? 'two' : null),
+      readonlyValue: $('ro').value, disabledValue: $('dis').value,
+      activeElement: document.activeElement ? (document.activeElement.id || document.activeElement.nodeName) : null,
+      hasFocus: document.hasFocus(), visibility: document.visibilityState,
+      counts: counts, keyLog: keyLog
+    };
+  };
+
+  bg.focusField = function (id) { var el = $(id); if (el) { el.focus(); evaluate(); } return document.activeElement.id; };
+  bg.reset = function () {
+    $('username').value = ''; $('password').value = ''; $('notes').value = '';
+    $('agree').checked = false; $('r1').checked = false; $('r2').checked = false;
+    $('choice').value = 'a';
+    for (var k in counts) counts[k] = 0;
+    keyLog = []; evaluate();
+  };
+
+  evaluate();
+  bg._ready();
+})();
+</script>
+</html>

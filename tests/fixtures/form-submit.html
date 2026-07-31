@@ -1,0 +1,187 @@
+<!-- BlackGlass fixture: form-submit
+     Proves: a form submission is a real navigation. The engine must emit did-navigate and
+     the URL must carry the encoded fields. Three submission routes are exercised because
+     they take different paths through Blink: a submit button click, Enter pressed inside a
+     text field, and form.requestSubmit() from script.
+     Lands on form-target.html, which decodes and self-checks.
+     Self-contained, file:// safe. -->
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BG · form-submit</title>
+<style>
+/* ---------- shared fixture chrome (identical in every fixture) ---------- */
+:root{color-scheme:dark}
+html,body{margin:0;padding:0;background:#0b0b0f;color:#e6e6e6;
+  font:14px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;-webkit-font-smoothing:none}
+#bg-beacon,#bg-status,.bg-corner{position:fixed;width:24px;height:24px;z-index:2147483647}
+#bg-beacon{left:0;top:0;background:#ff00ff}
+#bg-status{left:24px;top:0;background:#333}
+.bg-tr{right:0;top:0;background:#ff8000}
+.bg-bl{left:0;bottom:0;background:#0080ff}
+.bg-br{right:0;bottom:0;background:#ffff00}
+h1{position:fixed;left:56px;top:1px;margin:0;font:600 13px/24px ui-monospace,Menlo,monospace;color:#8a8aff}
+#bg-readout{position:fixed;right:8px;bottom:32px;width:380px;max-height:280px;overflow:hidden;
+  margin:0;padding:4px;background:rgba(0,0,0,.66);white-space:pre-wrap;word-break:break-all;
+  font-size:11px;line-height:1.3;color:#9adcff;pointer-events:none;z-index:2147483646}
+/* ---------- fixture-specific ---------- */
+label{position:absolute;font-size:12px;color:#9a9aa8}
+input,select,button{position:absolute;box-sizing:border-box;background:#16161c;color:#e6e6e6;
+  border:2px solid #3a3a4a;font:14px/1 ui-monospace,Menlo,monospace;padding:0 8px;height:32px}
+input:focus,select:focus{border-color:#00ffff;outline:none}
+button{background:#22222c;cursor:pointer;border-color:#4a4a5a}
+.note{position:absolute;font-size:11px;color:#6a6a78;max-width:440px}
+.hdr{position:absolute;font:600 12px ui-monospace,Menlo,monospace;color:#ffd000}
+</style>
+
+<body>
+<div id="bg-beacon"></div><div id="bg-status"></div>
+<div class="bg-corner bg-tr"></div><div class="bg-corner bg-bl"></div><div class="bg-corner bg-br"></div>
+<h1>fixture: form-submit</h1>
+<pre id="bg-readout"></pre>
+
+<div class="hdr" style="left:40px;top:96px">GET form — the expected result URL is fully determined</div>
+<form id="getForm" method="get" action="form-target.html">
+  <label style="left:40px;top:124px">q</label>
+  <input name="q" id="q" value="blackglass" style="left:40px;top:144px;width:200px">
+  <label style="left:260px;top:124px">n</label>
+  <input name="n" id="n" value="42" style="left:260px;top:144px;width:80px">
+  <label style="left:360px;top:124px">opt</label>
+  <select name="opt" id="opt" style="left:360px;top:144px;width:120px">
+    <option value="a">a</option><option value="b" selected>b</option><option value="c">c</option>
+  </select>
+  <input type="hidden" name="hidden" value="h1">
+  <label style="left:500px;top:124px">chk</label>
+  <input type="checkbox" name="chk" id="chk" checked style="left:500px;top:148px;width:24px;height:24px;padding:0">
+  <button type="submit" id="submitGet" style="left:560px;top:144px;width:150px">submit (button)</button>
+</form>
+<div class="note" style="left:40px;top:186px">
+expected: <code>form-target.html?q=blackglass&amp;n=42&amp;opt=b&amp;hidden=h1&amp;chk=on</code>
+</div>
+
+<div class="hdr" style="left:40px;top:236px">Enter-key submission — no submit button in this form</div>
+<form id="enterForm" method="get" action="form-target.html">
+  <input name="q" id="q2" value="entersubmit" style="left:40px;top:264px;width:200px">
+  <input type="hidden" name="via" value="enter">
+</form>
+<div class="note" style="left:260px;top:268px">
+focus <code>#q2</code> and press Enter. A single text input with no submit button still
+submits on Enter — the implicit-submission rule.
+</div>
+
+<div class="hdr" style="left:40px;top:316px">script submission — form.requestSubmit()</div>
+<form id="scriptForm" method="get" action="form-target.html">
+  <input name="q" id="q3" value="requestsubmit" style="left:40px;top:344px;width:200px">
+  <input type="hidden" name="via" value="script">
+  <button type="submit" style="left:260px;top:344px;width:60px">go</button>
+</form>
+<div class="note" style="left:340px;top:348px">
+call <code>__bg.submitScript()</code> — fires the submit event and validation, unlike
+the legacy <code>form.submit()</code>, which skips both.
+</div>
+
+<div class="hdr" style="left:40px;top:396px">POST form — expected to FAIL under file://</div>
+<form id="postForm" method="post" action="form-target.html">
+  <input name="q" id="q4" value="postbody" style="left:40px;top:424px;width:200px">
+  <button type="submit" style="left:260px;top:424px;width:120px">POST</button>
+</form>
+<div class="note" style="left:400px;top:428px">
+Chromium refuses POST to a file: URL. This is here so the failure mode is observed and
+recorded, not discovered later. Over http:// it must succeed.
+</div>
+
+<div class="hdr" style="left:40px;top:476px">validation — required + pattern, must block submission</div>
+<form id="validForm" method="get" action="form-target.html">
+  <input name="email" id="email" type="email" required placeholder="required, type=email"
+         style="left:40px;top:504px;width:240px">
+  <button type="submit" style="left:300px;top:504px;width:120px">submit</button>
+</form>
+<div class="note" style="left:440px;top:508px">
+An empty or malformed value must not navigate; the invalid event must fire.
+</div>
+
+<script>
+/* ---------- shared fixture harness (identical in every fixture except `id`) ---------- */
+var __q = new URLSearchParams(location.search);
+window.__bg = {
+  id: 'form-submit', proto: 1, ready: false, pass: null,
+  query: Object.fromEntries(__q),
+  markers: {beacon:[12,12], status:[36,12], topRight:[-12,12], bottomLeft:[12,-12], bottomRight:[-12,-12]},
+  markerColors: {beaconLoading:'#ff00ff', beaconReady:'#00ffff', statusIdle:'#333333',
+                 statusPass:'#00ff00', statusFail:'#ff0000',
+                 topRight:'#ff8000', bottomLeft:'#0080ff', bottomRight:'#ffff00'},
+  expect: {}, state: function(){ return {}; },
+  _ready: function(){ this.ready = true;
+    document.getElementById('bg-beacon').style.background = '#00ffff';
+    document.documentElement.setAttribute('data-bg-ready','1'); this._dump(); },
+  _status: function(v){ this.pass = v;
+    document.getElementById('bg-status').style.background =
+      v === true ? '#00ff00' : v === false ? '#ff0000' : '#333'; },
+  _dump: function(){ var el = document.getElementById('bg-readout');
+    if (el) el.textContent = JSON.stringify(this.state(), null, 1); }
+};
+</script>
+
+<script>
+(function () {
+  var bg = window.__bg;
+  var $ = function (id) { return document.getElementById(id); };
+
+  bg.expect = {
+    unit: 'CSS pixels',
+    getForm: { submitButton: { box: [560, 144, 150, 32], centre: [635, 160] },
+               resultQuery: '?q=blackglass&n=42&opt=b&hidden=h1&chk=on',
+               resultPath: 'form-target.html' },
+    enterForm: { field: { id: 'q2', box: [40, 264, 200, 32], centre: [140, 280] },
+                 route: 'focus the field, send Return',
+                 resultQuery: '?q=entersubmit&via=enter' },
+    scriptForm: { api: '__bg.submitScript()', resultQuery: '?q=requestsubmit&via=script' },
+    postForm: { expected: 'navigation refused under file://; succeeds over http://' },
+    validForm: { expected: 'no navigation while #email is empty or malformed; ' +
+                           'the invalid event fires' },
+    passWhen: 'the page has loaded and all five forms are present',
+    landing: 'form-target.html sets its own pass flag by re-deriving the expected params'
+  };
+
+  var submits = [], invalids = 0;
+
+  ['getForm', 'enterForm', 'scriptForm', 'postForm', 'validForm'].forEach(function (id) {
+    $(id).addEventListener('submit', function (ev) {
+      submits.push({ form: id, submitter: ev.submitter ? (ev.submitter.id || ev.submitter.type) : null,
+                     action: this.action, method: this.method,
+                     serialized: new URLSearchParams(new FormData(this)).toString() });
+      bg._dump();
+      /* deliberately not prevented: the navigation IS the thing under test */
+    });
+  });
+  document.addEventListener('invalid', function () { invalids++; bg._dump(); }, true);
+
+  bg.submitScript = function () { $('scriptForm').requestSubmit(); return true; };
+  bg.serialize = function (id) {
+    return new URLSearchParams(new FormData($(id || 'getForm'))).toString();
+  };
+  bg.expectedUrl = function () {
+    return new URL('form-target.html?' + bg.serialize('getForm'), location.href).href;
+  };
+
+  bg.state = function () {
+    return {
+      id: bg.id, ready: bg.ready, pass: bg.pass,
+      href: location.href,
+      serialized: { getForm: bg.serialize('getForm'), enterForm: bg.serialize('enterForm'),
+                    scriptForm: bg.serialize('scriptForm') },
+      expectedUrl: bg.expectedUrl(),
+      submits: submits, invalidEvents: invalids,
+      validity: { email: { valid: $('email').checkValidity(),
+                           message: $('email').validationMessage } },
+      formCount: document.forms.length
+    };
+  };
+
+  bg.reset = function () { submits = []; invalids = 0; bg._dump(); };
+
+  bg._status(document.forms.length === 5);
+  bg._ready();
+})();
+</script>
+</html>

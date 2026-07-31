@@ -1,0 +1,224 @@
+<!-- BlackGlass fixture: contenteditable
+     Proves: a rich-text editing host accepts synthetic keys, reports selection and caret
+     geometry, and emits the beforeinput/inputType stream a terminal editor needs.
+     The caret rectangle is the number the terminal cursor has to be drawn at.
+     Self-contained, file:// safe. -->
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BG · contenteditable</title>
+<style>
+/* ---------- shared fixture chrome (identical in every fixture) ---------- */
+:root{color-scheme:dark}
+html,body{margin:0;padding:0;background:#0b0b0f;color:#e6e6e6;
+  font:14px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;-webkit-font-smoothing:none}
+#bg-beacon,#bg-status,.bg-corner{position:fixed;width:24px;height:24px;z-index:2147483647}
+#bg-beacon{left:0;top:0;background:#ff00ff}
+#bg-status{left:24px;top:0;background:#333}
+.bg-tr{right:0;top:0;background:#ff8000}
+.bg-bl{left:0;bottom:0;background:#0080ff}
+.bg-br{right:0;bottom:0;background:#ffff00}
+h1{position:fixed;left:56px;top:1px;margin:0;font:600 13px/24px ui-monospace,Menlo,monospace;color:#8a8aff}
+#bg-readout{position:fixed;right:8px;bottom:32px;width:380px;max-height:280px;overflow:hidden;
+  margin:0;padding:4px;background:rgba(0,0,0,.66);white-space:pre-wrap;word-break:break-all;
+  font-size:11px;line-height:1.3;color:#9adcff;pointer-events:none;z-index:2147483646}
+/* ---------- fixture-specific ---------- */
+label{position:absolute;font-size:12px;color:#9a9aa8}
+.editor{position:absolute;box-sizing:border-box;background:#16161c;border:2px solid #3a3a4a;
+  padding:8px;overflow:auto;font:16px/24px ui-monospace,Menlo,monospace;white-space:pre-wrap}
+.editor:focus{border-color:#00ffff;outline:none}
+/* caretmark mirrors the real caret as a solid magenta bar so caret position stays
+   observable in a raw frame even when the blinking caret is switched off. */
+#caretmark{position:absolute;width:3px;height:24px;background:#ff00ff;left:-10px;top:-10px}
+.note{position:absolute;font-size:11px;color:#6a6a78;max-width:520px}
+b{color:#ffd000}i{color:#7fffd4}
+</style>
+
+<body>
+<div id="bg-beacon"></div><div id="bg-status"></div>
+<div class="bg-corner bg-tr"></div><div class="bg-corner bg-bl"></div><div class="bg-corner bg-br"></div>
+<h1>fixture: contenteditable</h1>
+<pre id="bg-readout"></pre>
+
+<label style="left:40px;top:98px">#rich — contenteditable="true" (rich text, accepts markup)</label>
+<div class="editor" id="rich" contenteditable="true" spellcheck="false"
+     style="left:40px;top:120px;width:520px;height:200px">The <b>quick</b> brown <i>fox</i>.</div>
+
+<label style="left:40px;top:338px">#plain — contenteditable="plaintext-only"</label>
+<div class="editor" id="plain" contenteditable="plaintext-only" spellcheck="false"
+     style="left:40px;top:360px;width:520px;height:120px">plain text only</div>
+
+<label style="left:40px;top:498px">#ro — contenteditable="false" inside an editable host (nested non-editable)</label>
+<div class="editor" id="host" contenteditable="true" spellcheck="false"
+     style="left:40px;top:520px;width:520px;height:80px">editable <span id="ro" contenteditable="false" style="background:#402020">FROZEN</span> editable</div>
+
+<div id="caretmark"></div>
+<p class="note" style="left:600px;top:120px">
+Determinism: the native caret blinks, so two frames of the same page are not
+byte-identical while an editor is focused. Load with <code>?caret=off</code> to set
+<code>caret-color: transparent</code>; <code>#caretmark</code> then carries the caret
+position instead, and consecutive frames become comparable.
+</p>
+<p class="note" style="left:600px;top:230px">
+<code>__bg.type(str)</code> inserts text through <code>execCommand('insertText')</code>
+(fires the same beforeinput/input pair a real keystroke does) so the editing pipeline can
+be exercised without the input transport. <code>__bg.setCaret(n)</code> places the caret at
+offset n of the first text node.
+</p>
+
+<script>
+/* ---------- shared fixture harness (identical in every fixture except `id`) ---------- */
+var __q = new URLSearchParams(location.search);
+window.__bg = {
+  id: 'contenteditable', proto: 1, ready: false, pass: null,
+  query: Object.fromEntries(__q),
+  markers: {beacon:[12,12], status:[36,12], topRight:[-12,12], bottomLeft:[12,-12], bottomRight:[-12,-12]},
+  markerColors: {beaconLoading:'#ff00ff', beaconReady:'#00ffff', statusIdle:'#333333',
+                 statusPass:'#00ff00', statusFail:'#ff0000',
+                 topRight:'#ff8000', bottomLeft:'#0080ff', bottomRight:'#ffff00'},
+  expect: {}, state: function(){ return {}; },
+  _ready: function(){ this.ready = true;
+    document.getElementById('bg-beacon').style.background = '#00ffff';
+    document.documentElement.setAttribute('data-bg-ready','1'); this._dump(); },
+  _status: function(v){ this.pass = v;
+    document.getElementById('bg-status').style.background =
+      v === true ? '#00ff00' : v === false ? '#ff0000' : '#333'; },
+  _dump: function(){ var el = document.getElementById('bg-readout');
+    if (el) el.textContent = JSON.stringify(this.state(), null, 1); }
+};
+</script>
+
+<script>
+(function () {
+  var bg = window.__bg;
+  var $ = function (id) { return document.getElementById(id); };
+  var rich = $('rich'), plain = $('plain'), host = $('host'), mark = $('caretmark');
+
+  var INITIAL_RICH = rich.innerHTML;
+  var INITIAL_PLAIN = plain.textContent;
+
+  bg.expect = {
+    unit: 'CSS pixels',
+    editors: {
+      rich:  { box: [40, 120, 520, 200], clickPoint: [60, 136], mode: 'true',
+               initialText: 'The quick brown fox.' },
+      plain: { box: [40, 360, 520, 120], clickPoint: [60, 376], mode: 'plaintext-only',
+               initialText: 'plain text only' },
+      host:  { box: [40, 520, 520, 80], clickPoint: [60, 536], mode: 'true',
+               nonEditableChild: 'ro' }
+    },
+    caretMark: { colour: '#ff00ff', widthPx: 3,
+                 note: 'top-left of #caretmark equals the caret rect origin in CSS px' },
+    passWhen: "#rich text content ends with 'BLACKGLASS'",
+    determinism: 'add ?caret=off to suppress the blinking native caret'
+  };
+
+  if (bg.query.caret === 'off') {
+    var s = document.createElement('style');
+    s.textContent = '.editor{caret-color:transparent}';
+    document.head.appendChild(s);
+  }
+
+  var counts = { beforeinput: 0, input: 0, keydown: 0, selectionchange: 0, paste: 0 };
+  var inputTypes = [];
+
+  function caretRect() {
+    var sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return null;
+    var r = sel.getRangeAt(0).cloneRange();
+    var rects = r.getClientRects();
+    var box = rects.length ? rects[0] : null;
+    if (!box || (box.width === 0 && box.height === 0)) {
+      /* A collapsed range at a node boundary can yield no rect. Fall back to the
+         containing element's box so the caret is still locatable. */
+      var node = r.startContainer;
+      var el = node.nodeType === 1 ? node : node.parentElement;
+      if (!el) return null;
+      var b = el.getBoundingClientRect();
+      return { x: b.left, y: b.top, w: 0, h: b.height, approximate: true };
+    }
+    return { x: +box.left.toFixed(2), y: +box.top.toFixed(2),
+             w: +box.width.toFixed(2), h: +box.height.toFixed(2), approximate: false };
+  }
+
+  function refresh() {
+    var cr = caretRect();
+    if (cr) { mark.style.left = cr.x + 'px'; mark.style.top = cr.y + 'px';
+              mark.style.height = (cr.h || 24) + 'px'; }
+    else { mark.style.left = '-10px'; mark.style.top = '-10px'; }
+    bg._status(/BLACKGLASS$/.test(rich.textContent.trim()));
+    bg._dump();
+  }
+
+  ['beforeinput', 'input', 'keydown', 'paste'].forEach(function (t) {
+    document.addEventListener(t, function (ev) {
+      counts[t]++;
+      if (t === 'beforeinput') {
+        inputTypes.push(ev.inputType);
+        if (inputTypes.length > 32) inputTypes.shift();
+      }
+      refresh();
+    }, true);
+  });
+  document.addEventListener('selectionchange', function () { counts.selectionchange++; refresh(); });
+  document.addEventListener('focusin', refresh, true);
+  document.addEventListener('focusout', refresh, true);
+
+  bg.state = function () {
+    var sel = window.getSelection();
+    return {
+      id: bg.id, ready: bg.ready, pass: bg.pass,
+      rich: { text: rich.textContent, html: rich.innerHTML, childNodes: rich.childNodes.length },
+      plain: { text: plain.textContent, html: plain.innerHTML },
+      host: { text: host.textContent, frozenText: $('ro').textContent },
+      selection: sel && sel.rangeCount ? {
+        anchorId: sel.anchorNode && (sel.anchorNode.parentElement ? sel.anchorNode.parentElement.id : null),
+        anchorOffset: sel.anchorOffset, focusOffset: sel.focusOffset,
+        isCollapsed: sel.isCollapsed, type: sel.type, text: sel.toString()
+      } : null,
+      caretRect: caretRect(),
+      activeElement: document.activeElement ? (document.activeElement.id || document.activeElement.nodeName) : null,
+      counts: counts, inputTypes: inputTypes,
+      caretSuppressed: bg.query.caret === 'off'
+    };
+  };
+
+  /* Insert text the way the editing pipeline sees a keystroke, without needing the
+     input transport. Returns the resulting text so a caller can assert in one round trip. */
+  bg.type = function (str, targetId) {
+    var el = $(targetId || 'rich');
+    el.focus();
+    document.execCommand('insertText', false, str);
+    refresh();
+    return el.textContent;
+  };
+  bg.setCaret = function (offset, targetId) {
+    var el = $(targetId || 'rich');
+    el.focus();
+    var node = el.firstChild;
+    while (node && node.nodeType !== 3) node = node.firstChild;
+    if (!node) return null;
+    var r = document.createRange();
+    var off = Math.max(0, Math.min(offset, node.length));
+    r.setStart(node, off); r.collapse(true);
+    var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    refresh();
+    return caretRect();
+  };
+  bg.selectAll = function (targetId) {
+    var el = $(targetId || 'rich'); el.focus();
+    var r = document.createRange(); r.selectNodeContents(el);
+    var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    refresh(); return sel.toString();
+  };
+  bg.reset = function () {
+    rich.innerHTML = INITIAL_RICH; plain.textContent = INITIAL_PLAIN;
+    for (var k in counts) counts[k] = 0;
+    inputTypes = []; refresh();
+  };
+
+  refresh();
+  bg._ready();
+})();
+</script>
+</html>
