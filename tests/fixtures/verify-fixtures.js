@@ -41,12 +41,18 @@ const PAINT_TIMEOUT_MS = 5000;
 
 /* documented marker colours, as RGB. Kept here as a literal so a fixture that changes its
    own chrome fails this probe instead of silently redefining the contract. */
+/* Right-edge markers sample at x = width-20, not width-12. A hosted macOS runner can render a
+   classic ~15 px root scrollbar (native, so ::-webkit-scrollbar CSS cannot hide it) on the one
+   scrollable fixture; that gutter shrinks the layout viewport, so a `right:0` corner stops at
+   ~width-15 and a width-12 sample lands on the grey scrollbar track. Every fixture's corner is
+   24 px wide, so width-20 stays inside the corner with no scrollbar and still clears a <=19 px
+   gutter with one. Left-edge markers are unaffected (no left scrollbar). */
 const MARKERS = {
   beacon:      { at: [12, 12],   rgb: [0x00, 0xff, 0xff] },   /* ready state */
   status:      { at: [36, 12],   rgb: null },                 /* fixture-defined */
-  topRight:    { at: [-12, 12],  rgb: [0xff, 0x80, 0x00] },
+  topRight:    { at: [-20, 12],  rgb: [0xff, 0x80, 0x00] },
   bottomLeft:  { at: [12, -12],  rgb: [0x00, 0x80, 0xff] },
-  bottomRight: { at: [-12, -12], rgb: [0xff, 0xff, 0x00] }
+  bottomRight: { at: [-20, -12], rgb: [0xff, 0xff, 0x00] }
 };
 
 function log(...a) { if (!JSON_ONLY) console.log(...a); }

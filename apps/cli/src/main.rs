@@ -173,17 +173,7 @@ fn main() {
         Some("action") => cmd_action(&args[1..]),
         Some("open") => cmd_open(&args[1..]),
         Some("version") | Some("--version") | Some("-V") => {
-            let exe = std::env::current_exe()
-                .map(|p| p.display().to_string())
-                .unwrap_or_else(|_| "?".into());
             println!("terminal-fenster {VERSION}");
-            println!("binary: {exe}");
-            if exe.contains("blackglass") {
-                eprintln!(
-                    "warning: this executable is named blackglass — rebuild with \
-                     `cargo build -p terminal-fenster --release` and run terminal-fenster"
-                );
-            }
             0
         }
         Some("help") | Some("--help") | Some("-h") | None => {
