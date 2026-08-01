@@ -97,11 +97,24 @@ pre,
 }
 
 .logo-mark {
-  width: 1.35rem;
-  height: 1.35rem;
-  border: 2px solid var(--accent);
-  border-radius: 3px;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+  width: 1.75rem;
+  height: 1.75rem;
+  flex-shrink: 0;
+}
+
+.logo-img {
+  height: 1.65rem;
+  width: auto;
+  display: block;
+}
+
+.logo-text {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+@media (min-width: 640px) {
+  .logo-img { height: 1.85rem; }
 }
 
 .nav {
@@ -515,3 +528,164 @@ section h2 {
 .footer-links a:hover {
   color: var(--text);
 }
+
+/* demo */
+
+#demo {
+  padding-top: 0;
+}
+
+.demo-frame {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg-terminal);
+  box-shadow: 0 24px 48px -24px rgba(0, 0, 0, 0.65);
+}
+
+.demo-frame img,
+.demo-frame object {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.demo-live {
+  margin-top: 1.5rem;
+}
+
+.tab-active {
+  color: var(--text) !important;
+}
+
+/* install CTA */
+
+.install-cta {
+  display: grid;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (min-width: 700px) {
+  .install-cta {
+    grid-template-columns: 1fr auto;
+    align-items: start;
+  }
+}
+
+.install-cta-box {
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius);
+  background: var(--bg-terminal);
+  padding: 1rem 1.15rem;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--accent);
+  word-break: break-all;
+}
+
+.install-note {
+  margin: 0 0 1.25rem;
+  font-size: 0.9rem;
+  color: var(--text-dim);
+}
+
+.btn-copy {
+  white-space: nowrap;
+}
+
+/* docs */
+
+.docs-page main {
+  padding: 2.5rem 0 4rem;
+}
+
+.docs-page h1 {
+  margin: 0 0 0.5rem;
+  font-size: 2rem;
+  letter-spacing: -0.03em;
+}
+
+.docs-lead {
+  margin: 0 0 2rem;
+  color: var(--text-muted);
+  max-width: 52ch;
+}
+
+.docs-page h2 {
+  margin: 2.5rem 0 0.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  font-size: 1.25rem;
+}
+
+.docs-page h2:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+.docs-page h3 {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 1rem;
+}
+
+.docs-page p,
+.docs-page li {
+  color: var(--text-muted);
+}
+
+.docs-page ul {
+  padding-left: 1.2rem;
+}
+
+.docs-page code {
+  font-size: 0.88em;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.docs-page pre {
+  margin: 0.75rem 0 1rem;
+  padding: 1rem 1.1rem;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-terminal);
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.docs-page pre code {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+}
+
+.docs-toc {
+  margin: 0 0 2rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  font-size: 0.92rem;
+}
+
+.docs-toc ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.docs-toc a {
+  color: var(--text-muted);
+}
+
+.docs-toc a:hover {
+  color: var(--accent);
+}
+

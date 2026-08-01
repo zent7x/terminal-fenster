@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" fill="none" role="img" aria-label="Terminal-Fenster demo">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="55%" stop-color="#1e1b4b"/>
+      <stop offset="100%" stop-color="#312e81"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="960" height="540" rx="12" fill="#0c0c0e"/>
+  <rect x="1" y="1" width="958" height="538" rx="11" stroke="#27272a" stroke-width="2"/>
+  <!-- title bar -->
+  <rect x="0" y="0" width="960" height="36" rx="12" fill="#18181b"/>
+  <circle cx="20" cy="18" r="6" fill="#ef4444"/>
+  <circle cx="40" cy="18" r="6" fill="#eab308"/>
+  <circle cx="60" cy="18" r="6" fill="#22c55e"/>
+  <text x="480" y="22" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="13" fill="#a1a1aa">ghostty  zsh</text>
+  <!-- tab -->
+  <rect x="0" y="36" width="960" height="28" fill="#111113"/>
+  <text x="24" y="54" font-family="IBM Plex Mono, monospace" font-size="12" fill="#e4e4e7">  news.ycombinator.com</text>
+  <text x="900" y="54" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="12" fill="#71717a">+tab</text>
+  <!-- url -->
+  <rect x="0" y="64" width="960" height="34" fill="#0a0a0b"/>
+  <text x="24" y="86" font-family="IBM Plex Mono, monospace" font-size="12" fill="#71717a">»</text>
+  <rect x="48" y="72" width="864" height="22" rx="4" stroke="#27272a" fill="#09090b"/>
+  <text x="60" y="87" font-family="IBM Plex Mono, monospace" font-size="12" fill="#a1a1aa">
+    https://news.ycombinator.com
+    <animate attributeName="opacity" values="1;0.35;1" dur="3s" repeatCount="indefinite"/>
+  </text>
+  <!-- viewport -->
+  <rect x="0" y="98" width="960" height="390" fill="url(#bg)"/>
+  <g opacity="0.85">
+    <rect x="80" y="140" width="48" height="48" rx="2" fill="#3b82f6">
+      <animate attributeName="opacity" values="0.5;1;0.5" dur="2.2s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="140" y="140" width="48" height="48" rx="2" fill="#8b5cf6">
+      <animate attributeName="opacity" values="0.45;0.95;0.45" dur="2.6s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="200" y="140" width="48" height="48" rx="2" fill="#ec4899">
+      <animate attributeName="opacity" values="0.4;0.9;0.4" dur="2.9s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="80" y="200" width="48" height="48" rx="2" fill="#5eead4" filter="url(#glow)">
+      <animate attributeName="y" values="200;196;200" dur="1.8s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.6;1;0.6" dur="1.8s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="140" y="200" width="48" height="48" rx="2" fill="#3b82f6">
+      <animate attributeName="opacity" values="0.55;0.95;0.55" dur="2.1s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="200" y="200" width="48" height="48" rx="2" fill="#8b5cf6">
+      <animate attributeName="opacity" values="0.5;0.9;0.5" dur="2.4s" repeatCount="indefinite"/>
+    </rect>
+  </g>
+  <text x="24" y="470" font-family="IBM Plex Mono, monospace" font-size="11" fill="#5eead4">kitty graphics · 120 fps · real input</text>
+  <!-- prompt -->
+  <rect x="0" y="488" width="960" height="52" fill="#0c0c0e"/>
+  <text x="24" y="520" font-family="IBM Plex Mono, monospace" font-size="13" fill="#a1a1aa">
+    <tspan fill="#5eead4">terminal-fenster open</tspan> news.ycombinator.com
+    <animate attributeName="opacity" values="1;0.2;1" dur="1s" repeatCount="indefinite"/>
+  </text>
+</svg>

@@ -8,26 +8,27 @@
   <meta property="og:title" content="Terminal-Fenster">
   <meta property="og:description" content="A real Chromium browser that renders inside your terminal.">
   <meta property="og:url" content="https://terminal-fenster.com">
+  <meta property="og:image" content="https://terminal-fenster.com/assets/demo.svg">
   <meta name="theme-color" content="#09090b">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%2309090b'/%3E%3Crect x='6' y='6' width='20' height='20' rx='2' fill='none' stroke='%235eead4' stroke-width='2'/%3E%3C/svg%3E">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 </head>
 <body>
   <header class="site-header">
     <div class="wrap">
       <a class="logo" href="/">
-        <span class="logo-mark" aria-hidden="true"></span>
-        Terminal-Fenster
+        <img class="logo-img" src="assets/logo.svg" alt="Terminal-Fenster" width="240" height="48">
       </a>
       <nav class="nav" aria-label="Primary">
+        <a href="#demo">Demo</a>
         <a href="#how">How it works</a>
         <a href="#install">Install</a>
-        <a href="#mcp">MCP</a>
+        <a href="docs/">Docs</a>
         <a href="https://github.com/zent7x/terminal-fenster">GitHub</a>
-        <a class="btn btn-primary" href="#install">Get started</a>
+        <a class="btn btn-primary" href="#install">Install</a>
       </nav>
     </div>
   </header>
@@ -43,13 +44,13 @@
             paints Kitty graphics and forwards your keyboard and mouse back to the page.
           </p>
           <div class="hero-actions">
-            <a class="btn btn-primary" href="https://github.com/zent7x/terminal-fenster">View on GitHub</a>
-            <a class="btn btn-ghost" href="#install">Build from source</a>
+            <a class="btn btn-primary" href="#install">Install now</a>
+            <a class="btn btn-ghost" href="docs/">Read the docs</a>
           </div>
           <p class="status-pill">Experimental — working vertical slice, not a signed release yet</p>
         </div>
 
-        <div class="terminal" aria-label="Terminal preview">
+        <div class="terminal" id="live-demo" aria-label="Live terminal preview">
           <div class="terminal-bar">
             <span class="dot dot-r"></span>
             <span class="dot dot-y"></span>
@@ -58,18 +59,17 @@
           </div>
           <div class="browser-chrome">
             <div class="tab-row">
-              <span>■ example.com</span>
+              <span class="tab-active">■ news.ycombinator.com</span>
               <span>+tab</span>
             </div>
             <div class="url-row">
               <span>↻</span>
-              <span class="url-field">https://example.com</span>
+              <span class="url-field">https://news.ycombinator.com</span>
               <span>⌕</span>
             </div>
           </div>
           <div class="viewport">
             <div class="pixel-grid" aria-hidden="true">
-              <!-- 96 cells -->
               <span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span>
               <span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span>
               <span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span>
@@ -82,8 +82,24 @@
             <span class="viewport-caption">kitty graphics · real pixels</span>
           </div>
           <div class="terminal-prompt">
-            <span class="cmd">terminal-fenster open</span> news.ycombinator.com<span class="cursor-blink"></span>
+            <span class="cmd demo-prompt-text">terminal-fenster open news.ycombinator.com</span><span class="cursor-blink"></span>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="demo">
+      <div class="wrap">
+        <h2>See it</h2>
+        <p class="section-lead">
+          Real Chromium pixels in a Kitty-graphics terminal. Record your own GIF with
+          <code class="mono">tools/capture-website-demo.sh</code> after installing.
+        </p>
+        <div class="demo-frame">
+          <picture>
+            <source srcset="assets/demo.gif" type="image/gif">
+            <img src="assets/demo.svg" alt="Terminal-Fenster running in Ghostty with browser chrome and pixel viewport" width="960" height="540" loading="lazy">
+          </picture>
         </div>
       </div>
     </section>
@@ -117,14 +133,26 @@
         <h2>Install</h2>
         <p class="section-lead">
           macOS or Linux. Rust 1.80+ and Node 22.12+ for a source build. Interactive browsing
-          needs a Kitty-graphics terminal — Ghostty is what we develop against.
+          needs Ghostty, kitty, or WezTerm.
         </p>
+
+        <p class="install-note">
+          One-liner clones <code>main</code> and runs <code>install.sh</code>. Pin
+          <code>TERMINAL_FENSTER_REF</code> to a release tag when we ship signed binaries.
+        </p>
+
+        <div class="install-cta">
+          <div class="install-cta-box" id="install-cmd">curl -fsSL https://raw.githubusercontent.com/zent7x/terminal-fenster/main/install.sh | bash</div>
+          <button type="button" class="btn btn-primary btn-copy" data-copy="curl -fsSL https://raw.githubusercontent.com/zent7x/terminal-fenster/main/install.sh | bash">Copy install command</button>
+        </div>
+
         <div class="install">
-<pre><span class="comment"># clone and install</span>
+<pre><span class="comment"># or clone manually</span>
 <span class="cmd-line">git clone https://github.com/zent7x/terminal-fenster.git</span>
 <span class="cmd-line">cd terminal-fenster && ./install.sh</span>
 
 <span class="comment"># interactive (Ghostty / kitty / WezTerm)</span>
+<span class="cmd-line">terminal-fenster setup</span>
 <span class="cmd-line">terminal-fenster open example.com</span>
 
 <span class="comment"># headless — any terminal, scripts, CI</span>
@@ -172,6 +200,9 @@
 <span class="comment"># paste JSON into your MCP client's mcpServers block</span>
 <span class="cmd-line">terminal-fenster mcp</span></pre>
         </div>
+        <p style="margin-top:1rem;font-size:0.92rem;color:var(--text-muted)">
+          <a href="docs/#mcp">Full MCP docs →</a>
+        </p>
       </div>
     </section>
   </main>
@@ -180,11 +211,12 @@
     <div class="wrap">
       <span>© 2026 Terminal-Fenster contributors · MIT</span>
       <div class="footer-links">
+        <a href="docs/">Docs</a>
         <a href="https://github.com/zent7x/terminal-fenster">GitHub</a>
-        <a href="https://github.com/zent7x/terminal-fenster/blob/main/README.md">Docs</a>
         <a href="https://github.com/zent7x/terminal-fenster/blob/main/SECURITY.md">Security</a>
       </div>
     </div>
   </footer>
+  <script src="site.js" defer></script>
 </body>
 </html>

@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Docs — Terminal-Fenster</title>
+  <meta name="description" content="Install, configure, and use Terminal-Fenster — a Chromium browser inside your terminal.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+</head>
+<body class="docs-page">
+  <header class="site-header">
+    <div class="wrap">
+      <a class="logo" href="../">
+        <img class="logo-img" src="../assets/logo.svg" alt="Terminal-Fenster" width="240" height="48">
+      </a>
+      <nav class="nav" aria-label="Primary">
+        <a href="../#demo">Demo</a>
+        <a href="../#install">Install</a>
+        <a href="./">Docs</a>
+        <a href="https://github.com/zent7x/terminal-fenster">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="wrap">
+      <h1>Documentation</h1>
+      <p class="docs-lead">
+        Terminal-Fenster is experimental pre-1.0 software. This page covers install, daily use,
+        headless mode, and MCP automation. Full detail lives in the
+        <a href="https://github.com/zent7x/terminal-fenster/blob/main/README.md">README</a>.
+      </p>
+
+      <nav class="docs-toc" aria-label="On this page">
+        <strong>On this page</strong>
+        <ul>
+          <li><a href="#requirements">Requirements</a></li>
+          <li><a href="#install">Install</a></li>
+          <li><a href="#quickstart">Quick start</a></li>
+          <li><a href="#keys">Keyboard shortcuts</a></li>
+          <li><a href="#terminals">Terminal support</a></li>
+          <li><a href="#headless">Headless mode</a></li>
+          <li><a href="#mcp">MCP automation</a></li>
+          <li><a href="#develop">Develop from source</a></li>
+          <li><a href="#status">Project status</a></li>
+        </ul>
+      </nav>
+
+      <h2 id="requirements">Requirements</h2>
+      <ul>
+        <li><strong>OS:</strong> macOS or Linux</li>
+        <li><strong>Build:</strong> Rust 1.80+, Node.js 22.12+ (for source install)</li>
+        <li><strong>Interactive:</strong> a terminal with Kitty graphics — Ghostty, kitty, or WezTerm</li>
+        <li><strong>Headless:</strong> any terminal (including Apple Terminal)</li>
+      </ul>
+
+      <h2 id="install">Install</h2>
+      <p>Fastest path — clones <code>main</code> and builds from source:</p>
+      <pre><code>curl -fsSL https://raw.githubusercontent.com/zent7x/terminal-fenster/main/install.sh | bash</code></pre>
+      <p>Manual checkout:</p>
+      <pre><code>git clone https://github.com/zent7x/terminal-fenster.git
+cd terminal-fenster
+./install.sh</code></pre>
+      <p>Installs to <code>~/.local/share/terminal-fenster</code> and links
+      <code>~/.local/bin/terminal-fenster</code>. Uninstall:</p>
+      <pre><code>./uninstall.sh                 # keep browser profile
+./uninstall.sh --purge-profile   # remove profile data</code></pre>
+
+      <h2 id="quickstart">Quick start</h2>
+      <pre><code>terminal-fenster setup              # verify engine + terminal
+terminal-fenster doctor             # capability report
+terminal-fenster open example.com   # interactive browsing
+terminal-fenster open example.com --headless</code></pre>
+      <p>From a checkout without installing:</p>
+      <pre><code>tools/dev-terminal-fenster.sh open example.com</code></pre>
+
+      <h2 id="keys">Keyboard shortcuts</h2>
+      <ul>
+        <li><code>ctrl+q</code> — quit</li>
+        <li><code>ctrl+r</code> — reload</li>
+        <li><code>ctrl+l</code> — focus URL / search bar</li>
+        <li><code>ctrl+f</code> — find in page</li>
+        <li><code>ctrl+=</code> / <code>ctrl+-</code> / <code>ctrl+0</code> — zoom</li>
+        <li><code>ctrl+left</code> / <code>ctrl+right</code> — back / forward</li>
+        <li>Mouse — click, hover, drag, scroll forwarded to the page</li>
+      </ul>
+
+      <h2 id="terminals">Terminal support</h2>
+      <table class="term-table">
+        <thead>
+          <tr><th>Terminal</th><th>Graphics</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Ghostty</td><td>Kitty</td><td>Primary dev target, verified E2E</td></tr>
+          <tr><td>kitty, WezTerm</td><td>Kitty</td><td>Expected to work; not CI-tested</td></tr>
+          <tr><td>iTerm2</td><td>Kitty</td><td>Graphics OK; pixel mouse permanently reset</td></tr>
+          <tr><td>Apple Terminal</td><td>None</td><td>Headless only — interactive <code>open</code> refuses</td></tr>
+        </tbody>
+      </table>
+      <p>Run <code>terminal-fenster doctor</code> inside your terminal to see which backend you get and why.</p>
+
+      <h2 id="headless">Headless mode</h2>
+      <p>
+        <code>--headless</code> skips TTY graphics. Use it in CI, scripts, SSH without a graphics
+        terminal, or Apple Terminal. Control the browser via JSON:
+      </p>
+      <pre><code>terminal-fenster action state
+terminal-fenster action navigate --url https://example.com
+terminal-fenster action quit</code></pre>
+
+      <h2 id="mcp">MCP automation</h2>
+      <p>
+        Sixteen browser tools over stdio — navigate, snapshot, click, type, screenshot, and more.
+        The MCP server starts an isolated Chromium session; actions use the same engine input path
+        as the interactive browser.
+      </p>
+      <pre><code>terminal-fenster mcp-config   # JSON for your MCP client
+terminal-fenster mcp          # run the server</code></pre>
+      <p>See <a href="https://github.com/zent7x/terminal-fenster/blob/main/packages/mcp/README.md">packages/mcp/README.md</a> for the full tool list and security model.</p>
+
+      <h3>Environment</h3>
+      <ul>
+        <li><code>TERMINAL_FENSTER_ENGINE</code> — path to engine checkout</li>
+        <li><code>TERMINAL_FENSTER_MCP</code> — path to <code>packages/mcp/index.js</code></li>
+        <li><code>TERMINAL_FENSTER_FPS</code> — paint rate ceiling (default follows display)</li>
+        <li><code>TERMINAL_FENSTER_SHM=0</code> — disable Kitty shared-memory fast path</li>
+      </ul>
+
+      <h2 id="develop">Develop from source</h2>
+      <pre><code>cargo build -p terminal-fenster --release
+(cd apps/engine && npm ci)
+tools/release-check.sh          # full gate
+cargo test --workspace --locked</code></pre>
+      <p>Contributing: <a href="https://github.com/zent7x/terminal-fenster/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a></p>
+
+      <h2 id="status">Project status</h2>
+      <p>
+        Working vertical slice: real pages in Ghostty, full input, MCP harness, headless JSON API.
+        Not yet a signed public binary release — see
+        <a href="https://github.com/zent7x/terminal-fenster/blob/main/RELEASE.md">RELEASE.md</a>
+        for distribution gates.
+      </p>
+      <p>
+        Security reports:
+        <a href="https://github.com/zent7x/terminal-fenster/blob/main/SECURITY.md">SECURITY.md</a>
+      </p>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <span>© 2026 Terminal-Fenster contributors · MIT</span>
+      <div class="footer-links">
+        <a href="../">Home</a>
+        <a href="https://github.com/zent7x/terminal-fenster">GitHub</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
