@@ -85,10 +85,10 @@ lands we cannot put them on a landing page. That makes P0 a *verification* task,
   confirm `last_wire_bytes` drops with damage and there is **no tearing / no stale tiles** under
   the DEC-2026 mosaic. Record real numbers next to C08's modelled ones. *Needs a graphics
   terminal — human or a terminal-capable agent; cannot run under the agent sandbox.*
-- **P0.2** Add a **terminal-independent round-trip test**: decode the mosaic's emitted Kitty
-  escapes back to pixels and assert they reconstruct the framebuffer at the right positions. This
-  proves *encoding* correctness in CI without a terminal (complements C08's id/marking unit tests).
-  *Safe: new file `crates/bg-term/tests/mosaic_roundtrip.rs`, no hot-file edits.*
+- **P0.2 — ✅ DONE (commit `c092c83`).** `crates/bg-term/tests/encode_roundtrip.rs` decodes the
+  encoder's APC output back to pixels (base64 + inflate) and asserts byte-for-byte equality with
+  the input, including a chunked frame and a framebuffer-cropped tile. Proves *encoding*
+  correctness in CI without a terminal. On-screen *placement* correctness still rides on P0.1.
 
 ### P1 — Close the two most-cited gaps
 - **P1.1 SSH transport.** Implement the designed adaptive transport so a remote `blackglass open`
@@ -126,3 +126,19 @@ lands we cannot put them on a landing page. That makes P0 a *verification* task,
 
 Keep this scorecard honest: only move a 🔴 to 🟡/🟢 when the change is **verified**, not merely
 written. That is the same bar B02 and C08 held themselves to.
+
+---
+
+## 6. Progress log
+
+**2026-08-01 (tick 2).** Observed while verifying the tree — the swarm is executing the roadmap:
+- **P0.2 done** (round-trip encoder verification, `c092c83`).
+- **CI landed** (`.github/workflows/ci.yml`): `fmt --check` + `clippy -D warnings` + tests +
+  release on ubuntu & macOS, plus an engine job (npm test, e2e, fixture matrix, bench self-test,
+  MCP handshake). **Verified all five jobs pass locally** — the clippy baseline was cleaned up too.
+- **P1.2 low-RAM moving** — e2e now asserts *"terminal focus loss gates output and lowers paint
+  rate"* (idle throttle). Score 🔴→🟡 once a real RAM number is measured.
+- **Fixture matrix 14/14** — file-upload, popup, escape-injection now covered (closes the B02
+  popup/`<select>` gap; hardens agent/fidelity).
+- Test count: 127 Rust + engine 5 + e2e 12 + fixtures 14 + MCP 24, all green.
+Still the gating item for the marketing wedge: **P0.1**, an on-a-terminal Ghostty measurement.
