@@ -62,15 +62,17 @@ esac
 UNINSTALL_ROOT="$TEST_DIR/uninstall-root"
 UNINSTALL_BIN="$TEST_DIR/uninstall-bin"
 TEST_HOME="$TEST_DIR/home"
+TEST_XDG_CONFIG_HOME="$TEST_HOME/.config"
 case "$(uname -s)" in
   Darwin) TEST_PROFILE="$TEST_HOME/Library/Application Support/terminal-fenster" ;;
-  Linux) TEST_PROFILE="$TEST_HOME/.config/terminal-fenster" ;;
+  Linux) TEST_PROFILE="$TEST_XDG_CONFIG_HOME/terminal-fenster" ;;
   *) printf 'install-layout test: unsupported test OS\n' >&2; exit 1 ;;
 esac
 mkdir -p "$UNINSTALL_ROOT/bin" "$UNINSTALL_ROOT/engine" "$UNINSTALL_BIN" "$TEST_PROFILE"
 : > "$UNINSTALL_ROOT/.terminal-fenster-install"
 ln -s "$UNINSTALL_ROOT/bin/terminal-fenster" "$UNINSTALL_BIN/terminal-fenster"
-HOME="$TEST_HOME" TERMINAL_FENSTER_PREFIX="$UNINSTALL_ROOT" TERMINAL_FENSTER_BINDIR="$UNINSTALL_BIN" \
+HOME="$TEST_HOME" XDG_CONFIG_HOME="$TEST_XDG_CONFIG_HOME" \
+  TERMINAL_FENSTER_PREFIX="$UNINSTALL_ROOT" TERMINAL_FENSTER_BINDIR="$UNINSTALL_BIN" \
   "$PROJECT_DIR/uninstall.sh" >/dev/null 2>&1
 [ ! -e "$UNINSTALL_ROOT" ] && [ ! -e "$UNINSTALL_BIN/terminal-fenster" ] && [ -d "$TEST_PROFILE" ] || {
   printf 'install-layout test: default uninstall did not preserve exactly the profile\n' >&2
@@ -80,7 +82,8 @@ HOME="$TEST_HOME" TERMINAL_FENSTER_PREFIX="$UNINSTALL_ROOT" TERMINAL_FENSTER_BIN
 mkdir -p "$UNINSTALL_ROOT/bin" "$UNINSTALL_ROOT/engine" "$TEST_PROFILE"
 : > "$UNINSTALL_ROOT/.terminal-fenster-install"
 ln -s "$UNINSTALL_ROOT/bin/terminal-fenster" "$UNINSTALL_BIN/terminal-fenster"
-HOME="$TEST_HOME" TERMINAL_FENSTER_PREFIX="$UNINSTALL_ROOT" TERMINAL_FENSTER_BINDIR="$UNINSTALL_BIN" \
+HOME="$TEST_HOME" XDG_CONFIG_HOME="$TEST_XDG_CONFIG_HOME" \
+  TERMINAL_FENSTER_PREFIX="$UNINSTALL_ROOT" TERMINAL_FENSTER_BINDIR="$UNINSTALL_BIN" \
   "$PROJECT_DIR/uninstall.sh" --purge-profile >/dev/null 2>&1
 [ ! -e "$UNINSTALL_ROOT" ] && [ ! -e "$UNINSTALL_BIN/terminal-fenster" ] && [ ! -e "$TEST_PROFILE" ] || {
   printf 'install-layout test: purge uninstall left scoped data behind\n' >&2

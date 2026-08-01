@@ -26,7 +26,8 @@ h1{position:fixed;left:56px;top:1px;margin:0;font:600 13px/24px ui-monospace,Men
   margin:0;padding:4px;background:rgba(0,0,0,.66);white-space:pre-wrap;word-break:break-all;
   font-size:11px;line-height:1.3;color:#9adcff;pointer-events:none;z-index:2147483646}
 /* ---------- fixture-specific ---------- */
-html{scroll-behavior:auto}          /* never smooth: smooth scrolling is not deterministic */
+html{scroll-behavior:auto;scrollbar-width:none} /* deterministic viewport; never smooth */
+html::-webkit-scrollbar{display:none} /* hosted runners may reserve 15 px for root scrollbars */
 #page{position:relative;width:100%;height:6000px}
 .band{position:absolute;left:64px;width:48px;height:250px}
 .marker{position:absolute;left:130px;height:40px;font:700 24px/40px ui-monospace,Menlo,monospace;
