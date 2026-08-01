@@ -106,15 +106,40 @@ never reuse the user's logged-in session.
 - The Chromium sandbox stays **enabled** (`sandbox: true`, `contextIsolation: true`,
   `nodeIntegration: false`) as set in the spikes. Only the *harness* sandbox was relaxed to
   run the spikes; see the environment note below.
-- Damage tracking is **not proven, and the existing evidence is confounded** (per B02). Both
-  spikes forced full-viewport damage by construction: `osr-probe.js` animated a CSS
-  `transform` (compositor-only) and `fps-matrix.js` fills the entire canvas every frame.
-  Neither could have observed a small dirty rect even if Chromium reports them. A localized
-  change (caret blink, hover) has never been tested. Nothing in this repo may assume partial
-  damage works until that spike runs.
+- Damage tracking is **proven** as of the B02 capability spike
+  (`apps/engine/spike/b02-capability-probe.js`, run 2026-08-01 on Electron 43.2.0 /
+  Chromium 150, macOS M4). The earlier "confounded" evidence is now superseded. A stimulus
+  that damages a known 40×40 box at a non-origin offset (600,400) produced dirty rects at
+  exactly `(600,400,40,40)`, `ratio 0.00123`, on **299 of 359 paints** (`rectsOnStimulusBox
+  299`, `partialFraction 0.997`), while the full-canvas control read `ratio 1.0` on every
+  paint and the idle page stopped painting after load. Localized real-input stimuli confirm
+  it beyond the synthetic canvas: hover (26 on-box partial paints) and a monospace text tick
+  (78 on-box partial paints, the proxy for typing). Verdict line: *"PARTIAL DAMAGE CONFIRMED
+  (bitmap path)."* Committed digest with the full 21-stage table:
+  `artifacts/swarm/B02-RESULTS.md` (raw JSON at `apps/engine/spike/out/b02-{bitmap,shared}.json`,
+  gitignored).
+  - **The dirty rect is in device pixels**, in the same coordinate space as the bitmap: under
+    `deviceScaleFactor=2` the same CSS box reports `(1200,800,80,80)` on a 1440×900 frame. The
+    damage encoder therefore crops the BGRA buffer with the rect **as-is — no CSS→device
+    scaling**. Rects are true 2D boxes, not full-width row strips (`fullWidthPartialHeight 0`).
+  - **Throttling frame rate does not inflate damage** (H5 refuted): the ratio held at 0.00123
+    at 60, 30 and 10 fps. The SSH plan's capture throttling does not cancel its own locality
+    benefit, so the adaptive controller may throttle capture as designed.
+  - Cross-check (`--mode=shared`): the bitmap `dirtyRect` reads full-frame in shared-texture
+    mode, but `textureInfo.metadata.captureUpdateRect` reports the identical `(1200,800,80,80)`
+    partial damage on 299/300 frames. The information is present in Viz via two independent
+    paths; the shipping bitmap path already exposes it directly, so **no native addon or
+    Electron patch is required** for damage tracking.
+  - **Unverified in this run:** caret blink specifically produced only 1 paint because the
+    headless/locked OS session never gave the OSR window OS-level focus
+    (`document.hasFocus()===false`), so Chromium's blink timer never fired. The click and
+    text-mutation paths are proven; the 1×20px caret rect should be reconfirmed by running the
+    probe interactively in a focused Ghostty window.
 - Related: the engine currently **writes the dirty rect into the frame header and then sends
-  the full bitmap anyway**. Until damage is both proven and consumed, every frame costs full
-  viewport bytes. This is the single largest known performance gap.
+  the full bitmap anyway** (`apps/engine/src/main.js`). Damage is now proven but **not yet
+  consumed**, so every frame still costs full viewport bytes. Cropping `onPaint` to the (now
+  trusted) device-pixel dirty rect is the single largest remaining performance win and the
+  gate on the SSH story; it is unblocked by this spike. C08 (damage encoder) owns it.
 - Shared-texture mode was re-measured by B05 across 10 paired runs and was **0.52 ms
   *slower*** (t=0.41) — the p99 advantage recorded in the table above came from a single
   sample and does not reproduce. B05 additionally found IOSurface pads rows to a 64-byte

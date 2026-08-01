@@ -496,7 +496,7 @@ Set the PTY to raw with `cfmakeraw()` and clear `OPOST` on the slave. If you ski
 - **`encode_ms`** — `EncodeEnd − EncodeBegin`, p50/p95/p99.
 - **`write_ms`** — `WriteEnd − WriteBegin`, p50/p95/p99. Expect this to dominate at full resolution (§0.1).
 - **`interframe_gap_ms`** — successive `WriteEnd` deltas. Report p50/p95/p99 **and the standard deviation**, because pacing *smoothness* is perceptually distinct from pacing *rate*. 60 fps with a 30 ms stutter every second looks worse than a steady 45 fps.
-- **`damage_area_ratio`** — `dirtyRect.width*height / (w*h)`. ADR-0001 established that Electron OSR does report partial damage. Given §0.1, exploiting it is the primary optimization lever; this metric measures whether we are.
+- **`damage_area_ratio`** — `dirtyRect.width*height / (w*h)`. Partial damage is proven by the **B02 spike** (2026-08-01), not by ADR-0001 — the earlier attribution was wrong and is corrected here. B02 measured `0.00123` for a 40×40 change against `1.0` for a full-canvas control, and confirmed the rect is in device pixels. Given §0.1, exploiting it is the primary optimization lever; this metric measures whether we are.
 
 ### 4.2 Frame-drop attribution
 

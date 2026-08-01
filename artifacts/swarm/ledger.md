@@ -52,7 +52,12 @@ ADR-0001 was amended rather than silently edited.
 - **B02** — the damage-tracking evidence was **confounded, not merely absent**: both spikes
   forced full-viewport damage by construction (`osr-probe.js` animated a compositor-only CSS
   transform; `fps-matrix.js` fills the whole canvas). Neither could have observed a small
-  dirty rect. ADR-0001 now states nothing may assume partial damage until a proper spike runs.
+  dirty rect. **Resolved 2026-08-01:** the designed spike ran and settled it affirmatively —
+  a 40×40 change at (600,400) reports a dirty rect of exactly that, `ratio 0.00123`, on
+  299/359 paints, versus `1.0` for the full-canvas control. Damage is in device pixels and
+  fps-invariant; shared-texture `captureUpdateRect` agrees. ADR-0001 updated from "not proven"
+  to "proven, not yet consumed"; C08 (crop in `main.js`) is now unblocked and is the gate on
+  the SSH story.
 
 ## Squad A — product intelligence and architecture reconnaissance
 
@@ -67,14 +72,14 @@ ADR-0001 was amended rather than silently edited.
 | A07 | SSH / remote research | delivered | Design only; not implemented |
 | A08 | Agent automation research | **FAILED** | API connection error; retry declined. Partially covered by E01/E03/E04 |
 | A09 | Threat and privacy model | delivered | Informs security posture |
-| A10 | Performance plan | delivered | Contains one stale claim (that ADR-0001 established partial damage) — flagged by B02, do not cite |
+| A10 | Performance plan | delivered | Stale partial-damage attribution corrected (A10:499) after B02 ran and proved it directly |
 
 ## Squad B — browser engine and process core
 
 | ID | Mission | Status | Disposition |
 |---|---|---|---|
 | B01 | Architecture RFC | delivered | **Integrated** — 4 defects fixed |
-| B02 | OSR capability probe | delivered | **Corrected ADR-0001** on damage tracking |
+| B02 | OSR capability probe | executed 2026-08-01 | **Partial damage CONFIRMED** (Outcome A): rects `(600,400,40,40)` r0.00123, 299/359 paints; device-px; fps-invariant. Unblocks C08. Results in `apps/engine/spike/out/b02-*.json` |
 | B03 | Engine alternatives | delivered | **Corrected ADR-0001** on CDP |
 | B04 | Tab lifecycle design | delivered | Design + diff; not applied (single-tab today) |
 | B05 | Shared-texture analysis | delivered | **Corrected ADR-0001**; shared texture rejected |
