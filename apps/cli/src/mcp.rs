@@ -1,7 +1,7 @@
 //! Locate and launch the Terminal-Fenster MCP server (`packages/mcp/index.js`).
 //!
-//! Agents connect over stdio (JSON-RPC). `terminal-fenster mcp` is the portable entry point so
-//! harnesses do not need an absolute path into a checkout.
+//! Harnesses connect over stdio (JSON-RPC). `terminal-fenster mcp` is the portable entry point so
+//! clients do not need an absolute path into a checkout.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -101,21 +101,9 @@ pub fn cmd_mcp() -> i32 {
     }
 }
 
-fn shell_escape(s: &str) -> String {
-    if s.chars()
-        .all(|c| c.is_ascii_alphanumeric() || "/._-:".contains(c))
-    {
-        s.to_string()
-    } else {
-        format!("'{}'", s.replace('\'', "'\\''"))
-    }
-}
-
-/// Print MCP client configuration for Cursor, Claude Code, or any stdio harness.
+/// Print MCP client configuration (stdio JSON) for any MCP-capable editor or harness.
 pub fn cmd_mcp_config(args: &[String]) -> i32 {
-    let json = args.iter().any(|a| a == "--json");
-    let cursor = args.iter().any(|a| a == "--cursor");
-    let claude = args.iter().any(|a| a == "--claude");
+    let _json = args.iter().any(|a| a == "--json");
 
     let fenster_bin = std::env::current_exe()
         .ok()
@@ -124,9 +112,8 @@ pub fn cmd_mcp_config(args: &[String]) -> i32 {
 
     let fenster_bin_str = fenster_bin.display().to_string();
 
-    if json || (!cursor && !claude) {
-        println!(
-            r#"{{
+    println!(
+        r#"{{
   "mcpServers": {{
     "terminal-fenster": {{
       "command": {cmd},
@@ -134,46 +121,8 @@ pub fn cmd_mcp_config(args: &[String]) -> i32 {
     }}
   }}
 }}"#,
-            cmd = serde_json_string(&fenster_bin_str)
-        );
-        if !json {
-            println!();
-            println!("Save as .cursor/mcp.json (Cursor) or .mcp.json (Claude Code), then enable the server in your client.");
-        }
-        return 0;
-    }
-
-    if cursor {
-        println!("Create `.cursor/mcp.json` in your project:");
-        println!();
-        println!(
-            r#"{{
-  "mcpServers": {{
-    "terminal-fenster": {{
-      "command": {cmd},
-      "args": ["mcp"]
-    }}
-  }}
-}}"#,
-            cmd = serde_json_string(&fenster_bin_str)
-        );
-        println!();
-        println!("Then: Cursor Settings → MCP → enable terminal-fenster.");
-        return 0;
-    }
-
-    if claude {
-        println!("From your project directory:");
-        println!();
-        println!(
-            "  claude mcp add terminal-fenster --scope project -- {cmd} mcp",
-            cmd = shell_escape(&fenster_bin_str)
-        );
-        println!();
-        println!("Approve the server when prompted (`/mcp` in Claude Code).");
-        return 0;
-    }
-
+        cmd = serde_json_string(&fenster_bin_str)
+    );
     0
 }
 

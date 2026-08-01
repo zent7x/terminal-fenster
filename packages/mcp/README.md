@@ -1,12 +1,12 @@
 # @terminal-fenster/mcp
 
-An MCP server that lets an AI agent drive an isolated Terminal-Fenster engine: real Chromium 150,
+An MCP server that drives an isolated Terminal-Fenster engine: real Chromium 150,
 offscreen-rendered through the same frame and input protocols as the terminal browser.
 
 stdio transport, newline-delimited JSON-RPC, **zero dependencies**.
 
 ```
-   MCP client (Claude Code, ...)
+   MCP client
         | stdio, JSON-RPC
    [ packages/mcp ]  <-- this package
         | unix socket, 0600
@@ -41,10 +41,9 @@ carries a `[ref=eN]` handle:
 ```
 
 The model then calls `browser_click { element: "Sign in button", ref: "e2" }`. No
-coordinate guessing, no vision tokens. For the page above the snapshot is 1442 bytes; the
-project's own earlier analysis put a typical accessibility diff at ~2 KB against ~350 KB
-for a frame (`artifacts/swarm/A03-user-journeys.md`). Screenshots remain available for the
-questions only pixels can answer — did the chart render, did the animation run.
+coordinate guessing, no vision tokens. For the page above the snapshot is 1442 bytes;
+screenshots remain available for the questions only pixels can answer — did the chart
+render, did the animation run.
 
 Editable AX values are always rendered as `<redacted:N chars>`. Chromium does not reliably mark
 password fields in its accessibility tree, so Terminal-Fenster treats every textbox/contenteditable
@@ -95,7 +94,7 @@ clicking something by text on the page.
 After `./install.sh`, run:
 
 ```bash
-terminal-fenster mcp-config --cursor   # or --claude, or --json
+terminal-fenster mcp-config
 ```
 
 Or wire any MCP client to stdio:

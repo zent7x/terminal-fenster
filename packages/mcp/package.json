@@ -2,7 +2,7 @@
   "name": "@terminal-fenster/mcp",
   "version": "0.1.0",
   "private": true,
-  "description": "MCP server exposing the Terminal-Fenster terminal browser to AI agents over stdio",
+  "description": "MCP server exposing the Terminal-Fenster terminal browser over stdio",
   "main": "index.js",
   "bin": {
     "terminal-fenster-mcp": "index.js"

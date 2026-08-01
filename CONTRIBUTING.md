@@ -20,6 +20,10 @@ For day-to-day iteration from a checkout:
 tools/dev-terminal-fenster.sh open example.com
 ```
 
+Always use `terminal-fenster`, not any stale `target/release/blackglass` left over from
+before the rename. If in doubt: `terminal-fenster version` prints the binary path; the MCP
+subcommand (`terminal-fenster mcp`) exists only on the current binary.
+
 ## Running tests
 
 Full release gate (formatting, Rust/JS tests, E2E, packaging smoke):

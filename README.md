@@ -25,24 +25,26 @@ This is honest about where it is. What follows is measured, not aspirational.
 - Real pages render in Ghostty via the Kitty graphics protocol, auto-detected.
 - Click, hover, ordered typing, scroll, resize, focus pacing, and idle wake-up all work —
   verified with real frame pixels, page state, and scheduler state
-  (`tests/e2e/input-injection.js`, 16/16).
+  (`tests/e2e/input-injection.js`, 20/20).
 - The terminal is restored on exit, `ctrl+q`, panic, SIGINT/SIGTERM/SIGHUP.
 - The headless engine probe now asserts process-tree cleanup; its reference `about:blank`
   upper-bound RSS is about 281 MB with no surviving Chromium helpers.
 - Renderer crashes produce a visible, escape-sanitized reload banner instead of a silent freeze.
 - A 16-tool MCP server drives an isolated Terminal-Fenster engine through accessibility refs and
   the private engine socket; its real-Chromium suite passes 28/28.
-- 161 Rust tests, 21 JS frame/security/compositor/discovery/privacy tests, 16 engine E2E checks, 14 browser fixtures,
+- 161 Rust tests, 21 JS frame/security/compositor/discovery/privacy tests, 20 engine E2E checks, 14 browser fixtures,
   24 MCP protocol checks, and 28 live MCP checks.
 
-**Not done** — see [Known gaps](#known-gaps). The adversarial review
-(`artifacts/swarm/F10-adversarial-report.md`) returned **NO-SHIP**, and it was right to.
+**Not done** — see [Known gaps](#known-gaps) and [RELEASE.md](RELEASE.md).
 
 ## Requirements
 
 - macOS or Linux. Developed and measured on macOS 26.1 / Apple M4.
 - A terminal with the Kitty graphics protocol for full fidelity: **Ghostty**, **kitty**, or
-  **WezTerm**. iTerm2 also speaks it. Anything else falls back to low-fidelity Unicode.
+  **WezTerm**. iTerm2 also speaks it. A terminal with no graphics protocol at all (e.g.
+  Apple Terminal) is headless-only — interactive `open` refuses it and points you to
+  `--headless`; sixel- or iTerm2-only terminals render interactively through a low-fidelity
+  Unicode half-block fallback.
 - Rust 1.80+, Node 22.12+ (required by the pinned Electron runtime).
 
 ## Install from a checkout
@@ -139,43 +141,23 @@ raw bytes your terminal replied with:
 | `ctrl+left` / `ctrl+right` | back / forward (`alt+arrow` where the terminal delivers it) |
 | mouse | click, hover, drag, scroll — forwarded to the page |
 
-## Agent / MCP (any harness)
+## MCP automation
 
 Terminal-Fenster ships a **stdio MCP server** with 16 browser tools (navigate, snapshot, click,
-type, screenshot, …). It works with Cursor, Claude Code, Cline, Windsurf, or any client
-that speaks MCP over stdio.
+type, screenshot, …). Any MCP client that launches subprocess servers over stdio can use it.
 
 ```bash
 ./install.sh
-terminal-fenster mcp-config          # prints JSON — save to .cursor/mcp.json or .mcp.json
-terminal-fenster mcp-config --claude # one-liner for Claude Code
-terminal-fenster mcp                 # run the server directly (agents launch this)
+terminal-fenster mcp-config    # JSON for your client's mcpServers block
+terminal-fenster mcp           # run the server directly
 ```
 
-**Cursor** — create `.cursor/mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "terminal-fenster": {
-      "command": "/path/to/terminal-fenster",
-      "args": ["mcp"]
-    }
-  }
-}
-```
-
-Use `terminal-fenster mcp-config --json` to print the exact path for your install.
-
-**Claude Code:**
-
-```bash
-claude mcp add terminal-fenster --scope project -- $(which terminal-fenster) mcp
-```
+Paste the JSON into your editor or harness MCP settings. The `command` must be the installed
+`terminal-fenster` binary; `args` is `["mcp"]`.
 
 Full tool list, security model, and env vars: [`packages/mcp/README.md`](packages/mcp/README.md).
 
-## Agent control (details)
+## Automation details
 
 [`packages/mcp/`](packages/mcp/) starts an isolated engine and exposes 16 browser tools over
 stdio: navigate, accessibility snapshot/find, click/type/key/scroll, screenshots, history,
@@ -239,7 +221,7 @@ TERMINAL_FENSTER_SHM=0 TERMINAL_FENSTER_TILE_CELLS=1x1 \
 |---|---|---|---|---|
 | Ghostty 1.3.1 | Kitty | yes | yes | **verified end-to-end** |
 | iTerm2 3.6.9 | Kitty | yes | **no** (permanently reset) | protocol-verified, app not driven |
-| Apple Terminal 465 | none → Unicode | no | no | capability-verified |
+| Apple Terminal 465 | none → headless-only | no | no | capability-verified |
 | kitty, WezTerm | Kitty | yes | yes | expected, **untested** |
 
 Every "yes" above comes from the terminal answering a protocol query, not from matching
@@ -254,7 +236,7 @@ corner — the pointer mapping handles both, with tests pinning the difference.
 ```bash
 cargo test                          # 161 Rust tests, no terminal needed
 cd apps/engine && npm test          # 7 frame-scheduler / security-policy unit tests
-cd ../.. && node tests/e2e/input-injection.js   # 16 real-pixel / page / security checks
+cd ../.. && node tests/e2e/input-injection.js   # 20 real-pixel / page / security checks
 apps/engine/node_modules/.bin/electron tests/fixtures/verify-fixtures.js  # 14 fixtures
 cd packages/mcp && npm test         # 14 compositor/discovery/privacy + 24 protocol checks
 npm run test:live                   # 28 tools against real Chromium
@@ -319,7 +301,7 @@ Ordered by how much they matter.
 Run [`tools/release-check.sh`](tools/release-check.sh), then close the manual terminal and
 distribution gates in [`RELEASE.md`](RELEASE.md) before tagging anything.
 
-See `artifacts/swarm/A09-threat-model.md` and `F01-security-review.md`.
+See [`SECURITY.md`](SECURITY.md) for reporting vulnerabilities.
 
 ## Licence
 

@@ -1,12 +1,11 @@
 #!/usr/bin/env node
-// Terminal-Fenster MCP server -- drive the terminal browser from an AI agent.
+// Terminal-Fenster MCP server — drive the terminal browser from an MCP harness.
 //
 // Transport: stdio, newline-delimited JSON-RPC. Dependencies: none.
 //
-// The model observes the page as an accessibility tree with element refs (cheap, precise,
-// ~2 KB) and only asks for pixels when it needs to reason about appearance (~300 KB). That
-// asymmetry is the whole design; see artifacts/swarm/A03-user-journeys.md section 4, which
-// specified this journey before this server existed.
+// The harness observes the page as an accessibility tree with element refs (cheap, precise,
+// ~2 KB) and only asks for pixels when appearance matters (~300 KB). That asymmetry is
+// deliberate: text for structure, screenshots for visuals.
 //
 // Actions travel over the engine's own 0600 unix socket as `input` commands -- the same
 // path interactive terminal input takes. The page receives the same events even though the

@@ -27,6 +27,8 @@ step "Rust formatting" cargo fmt --all -- --check
 step "Rust tests" cargo test --workspace --locked
 step "Rust lint" cargo clippy --workspace --all-targets -- -D warnings
 step "Optimized Rust build" cargo build --workspace --release --locked
+# Pre-rename orphan; cargo does not remove it when the binary was renamed.
+rm -f "$PROJECT_DIR/target/release/blackglass" "$PROJECT_DIR/target/release/blackglass.d"
 step "Installed-layout discovery smoke test" tools/install-layout-test.sh
 step "Prebuilt archive layout/checksum/install smoke test" tools/package-layout-test.sh
 step "Bash installer/packager syntax" bash -n install.sh uninstall.sh packaging/install-prebuilt.sh tools/package-release.sh

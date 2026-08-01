@@ -24,5 +24,5 @@ We aim to acknowledge reports within a few business days. Coordinated disclosure
 ## Scope notes
 
 The MCP server and engine control socket are local trust boundaries. Reports about missing
-hardening on unreleased features documented in `artifacts/swarm/` are welcome but may be
-triaged as known gaps until [RELEASE.md](RELEASE.md) gates are met.
+hardening on features listed in [RELEASE.md](RELEASE.md) may be triaged as known gaps until
+those gates are met.

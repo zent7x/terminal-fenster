@@ -15,8 +15,7 @@
 //      the box model is fetched only for the one element an action actually targets. A
 //      200-element page costs one round trip to snapshot, not 201.
 //   3. Epoch-guarded refs. Every ref records the navigation epoch it was minted in. Acting
-//      on a ref from a previous page is refused rather than silently mis-clicking -- the
-//      failure mode called out as c-F2 in artifacts/swarm/A03-user-journeys.md.
+//      on a ref from a previous page is refused rather than silently mis-clicking.
 'use strict';
 
 // Roles a model can meaningfully act on. Anything here gets a ref; everything else is

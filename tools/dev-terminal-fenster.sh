@@ -3,6 +3,11 @@
 set -euo pipefail
 ROOT=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)
 BIN="$ROOT/target/release/terminal-fenster"
+STALE="$ROOT/target/release/blackglass"
+if [[ -e "$STALE" ]]; then
+  echo "dev-terminal-fenster: removing stale $STALE (pre-rename orphan — use terminal-fenster)" >&2
+  rm -f "$STALE" "$ROOT/target/release/blackglass.d"
+fi
 if [[ ! -x "$BIN" ]]; then
   echo "dev-terminal-fenster: missing $BIN — run: cargo build -p terminal-fenster --release" >&2
   exit 1

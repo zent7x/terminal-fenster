@@ -115,9 +115,8 @@ never reuse the user's logged-in session.
   paint and the idle page stopped painting after load. Localized real-input stimuli confirm
   it beyond the synthetic canvas: hover (26 on-box partial paints) and a monospace text tick
   (78 on-box partial paints, the proxy for typing). Verdict line: *"PARTIAL DAMAGE CONFIRMED
-  (bitmap path)."* Committed digest with the full 21-stage table:
-  `artifacts/swarm/B02-RESULTS.md` (raw JSON at `apps/engine/spike/out/b02-{bitmap,shared}.json`,
-  gitignored).
+  (bitmap path)."* Full 21-stage table and raw JSON:
+  `apps/engine/spike/out/b02-{bitmap,shared}.json` (gitignored).
   - **The dirty rect is in device pixels**, in the same coordinate space as the bitmap: under
     `deviceScaleFactor=2` the same CSS box reports `(1200,800,80,80)` on a 1440×900 frame. The
     damage encoder therefore crops the BGRA buffer with the rect **as-is — no CSS→device
@@ -152,8 +151,7 @@ never reuse the user's logged-in session.
     p99). The dirty rect is now threaded to the renderer (`Renderer::last_dirty`) ready for
     it. It is deliberately **not** implemented blind: transmitting only the changed region
     means a scratch-image Kitty placement whose on-screen correctness cannot be verified
-    without a graphics terminal, and this repo does not ship unverified rendering. Design and
-    the interactive verification plan are in `artifacts/swarm/C08-damage-encoder.md`.
+    without a graphics terminal, and this repo does not ship unverified rendering.
 - Shared-texture mode was re-measured by B05 across 10 paired runs and was **0.52 ms
   *slower*** (t=0.41) — the p99 advantage recorded in the table above came from a single
   sample and does not reproduce. B05 additionally found IOSurface pads rows to a 64-byte
@@ -163,7 +161,7 @@ never reuse the user's logged-in session.
 
 ## Environment note (not a product decision)
 
-Chromium child processes fail to start under Claude Code's Bash sandbox with
+Chromium child processes fail to start under some restricted shell sandboxes with
 `bootstrap_look_up ... Permission denied (1100)` followed by `No rendezvous client,
 terminating process` — the harness blocks the Mach port rendezvous that Chromium's
 multi-process model needs. Spikes therefore run with the harness sandbox disabled. This does
