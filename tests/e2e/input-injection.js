@@ -204,6 +204,11 @@ class Harness {
     return p.g > 200 && p.r < 100 && p.b < 100;
   }
 
+  isYellow(x, y) {
+    const p = this.pixel(x, y);
+    return p.r > 200 && p.g > 200 && p.b < 100;
+  }
+
   async settle(ms = 700) {
     await new Promise((r) => setTimeout(r, ms));
   }
@@ -309,7 +314,7 @@ let activeHarness = null;
   h.send({ t: 'input', kind: 'mouse', action: 'move', x: 50, y: 50 });
   h.send({ t: 'input', kind: 'mouse', action: 'down', x: 50, y: 50, button: 'left', clickCount: 1 });
   h.send({ t: 'input', kind: 'mouse', action: 'up', x: 50, y: 50, button: 'left', clickCount: 1 });
-  await h.settle();
+  await h.waitFor(() => h.isGreen(50, 50), 5000, 'target A click repaint');
   check(
     'click changes the pixel under the cursor',
     h.isGreen(50, 50),
@@ -329,7 +334,7 @@ let activeHarness = null;
   h.send({ t: 'input', kind: 'mouse', action: 'move', x: 250, y: 50 });
   h.send({ t: 'input', kind: 'mouse', action: 'down', x: 250, y: 50, button: 'left', clickCount: 1 });
   h.send({ t: 'input', kind: 'mouse', action: 'up', x: 250, y: 50, button: 'left', clickCount: 1 });
-  await h.settle();
+  await h.waitFor(() => h.isGreen(250, 50), 5000, 'target B click repaint');
   check('click at a different x activates the correct target', h.isGreen(250, 50));
 
   // --- 3. hover ------------------------------------------------------------------
@@ -346,19 +351,17 @@ let activeHarness = null;
   for (const ch of 'hello') {
     h.send({ t: 'input', kind: 'key', action: 'press', keyCode: ch, text: ch });
   }
-  await h.settle();
+  await h.waitFor(() => h.isGreen(700, 500), 5000, 'the typed-value page repaint');
   // The page turns the body green only when the field contains exactly "hello",
   // so this asserts ordered character delivery, not just "something happened".
   check('typing inserts text in order into the focused field', h.isGreen(700, 500));
 
   // --- 5. scroll -----------------------------------------------------------------
   // The yellow marker sits at y=300. After scrolling down it must move up.
-  const markerBefore = h.pixel(600, 310);
-  const wasYellow = markerBefore.r > 200 && markerBefore.g > 200 && markerBefore.b < 100;
+  const wasYellow = h.isYellow(600, 310);
   h.send({ t: 'input', kind: 'mouse', action: 'wheel', x: 400, y: 400, deltaX: 0, deltaY: -400 });
-  await h.settle();
-  const markerAfter = h.pixel(600, 310);
-  const stillYellow = markerAfter.r > 200 && markerAfter.g > 200 && markerAfter.b < 100;
+  await h.waitFor(() => !h.isYellow(600, 310), 5000, 'the document scroll repaint');
+  const stillYellow = h.isYellow(600, 310);
   check(
     'wheel event scrolls the document',
     wasYellow && !stillYellow,
