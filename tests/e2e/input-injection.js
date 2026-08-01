@@ -334,7 +334,9 @@ let activeHarness = null;
 
   // --- 3. hover ------------------------------------------------------------------
   h.send({ t: 'input', kind: 'mouse', action: 'move', x: 450, y: 50 });
-  await h.settle();
+  // Hosted macOS offscreen rendering can deliver the CSS hover repaint later than the
+  // nominal scheduler delay. Synchronize on the visual contract itself instead of sleeping.
+  await h.waitFor(() => h.isGreen(450, 50), 5000, 'the CSS hover repaint');
   check('mouseMove triggers CSS :hover', h.isGreen(450, 50));
 
   // --- 4. typing -----------------------------------------------------------------
