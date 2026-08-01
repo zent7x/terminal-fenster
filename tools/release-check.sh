@@ -51,6 +51,12 @@ step "Headless memory/cleanup smoke test" node benchmarks/engine-rss.js --durati
   step "MCP live Chromium tools" npm run test:live
 )
 
+(
+  cd "$PROJECT_DIR/website"
+  step "Website dependency install" npm ci
+  step "Website production build" npm run build
+)
+
 step "Patch whitespace" git diff --check
 
 printf '\nAutomated release gates passed.\n'

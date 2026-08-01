@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 6% 4%;
+    --foreground: 240 5% 90%;
+    --card: 240 6% 8%;
+    --card-foreground: 240 5% 90%;
+    --secondary: 240 4% 14%;
+    --secondary-foreground: 240 5% 90%;
+    --muted: 240 4% 14%;
+    --muted-foreground: 240 5% 64%;
+    --border: 240 4% 16%;
+    --accent: 168 76% 64%;
+    --accent-foreground: 168 86% 9%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    background-image:
+      radial-gradient(circle at 14% 0%, hsl(var(--accent) / 0.08), transparent 30rem),
+      linear-gradient(hsl(var(--foreground) / 0.018) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--foreground) / 0.018) 1px, transparent 1px);
+    background-size: auto, 42px 42px, 42px 42px;
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    background: hsl(var(--accent) / 0.28);
+    color: hsl(var(--foreground));
+  }
+}

@@ -8,13 +8,17 @@ frames into terminal graphics and turns your keyboard and mouse back into browse
 terminal-fenster open news.ycombinator.com
 ```
 
-Website: [terminal-fenster.com](https://terminal-fenster.com) (source in [`website/`](website/))
+![Terminal-Fenster running real Chromium inside Ghostty](website/public/assets/demo.gif)
+
+_Real Ghostty capture on macOS: Chromium pixels rendered through the Kitty graphics protocol,
+with terminal keyboard and mouse input forwarded back to the page._
 
 ## Open source
 
 Licensed under [MIT](LICENSE). Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 Source: [github.com/zent7x/terminal-fenster](https://github.com/zent7x/terminal-fenster) ·
-[commit history](https://github.com/zent7x/terminal-fenster/commits/main)
+[commit history](https://github.com/zent7x/terminal-fenster/commits/main) ·
+[landing-page source](website/)
 
 This is experimental software: see [Known gaps](#known-gaps) and [RELEASE.md](RELEASE.md) before
 treating it as production-ready.
@@ -33,10 +37,12 @@ This is honest about where it is. What follows is measured, not aspirational.
 - The headless engine probe now asserts process-tree cleanup; its reference `about:blank`
   upper-bound RSS is about 281 MB with no surviving Chromium helpers.
 - Renderer crashes produce a visible, escape-sanitized reload banner instead of a silent freeze.
+- Interactive sessions support up to 16 tabs with a terminal-native tab strip; new, switch,
+  close, and preserved background-tab state are covered by the real-pixel E2E suite.
 - A 16-tool MCP server drives an isolated Terminal-Fenster engine through accessibility refs and
   the private engine socket; its real-Chromium suite passes 28/28.
-- 161 Rust tests, 21 JS frame/security/compositor/discovery/privacy tests, 20 engine E2E checks, 14 browser fixtures,
-  24 MCP protocol checks, and 28 live MCP checks.
+- 202 Rust checks, 14 engine unit tests, 20 engine E2E checks, 14 browser fixtures,
+  14 MCP compositor/discovery/privacy tests, 26 MCP protocol checks, and 28 live MCP checks.
 
 **Not done** — see [Known gaps](#known-gaps) and [RELEASE.md](RELEASE.md).
 
@@ -49,6 +55,11 @@ This is honest about where it is. What follows is measured, not aspirational.
   `--headless`; sixel- or iTerm2-only terminals render interactively through a low-fidelity
   Unicode half-block fallback.
 - Rust 1.80+, Node 22.12+ (required by the pinned Electron runtime).
+
+**Verification scope:** Ghostty on macOS is the only interactive configuration verified
+end-to-end today. Kitty and WezTerm should work through the same protocol but need community
+testing, and Linux has automated build/layout coverage rather than a live graphics-terminal run.
+There are no signed or notarized binary releases yet.
 
 ## Install from a checkout
 
@@ -104,7 +115,8 @@ terminal for interactive browsing, or `--headless` everywhere else.
 ## Build and run
 
 ```bash
-git clone <repo> && cd terminal-fenster
+git clone https://github.com/zent7x/terminal-fenster.git
+cd terminal-fenster
 cargo build --release                    # builds the terminal core
 cd apps/engine && npm ci                  # installs the pinned Electron package
 ./node_modules/.bin/electron --version    # materializes Chromium (~300 MB); required once
@@ -237,11 +249,11 @@ corner — the pointer mapping handles both, with tests pinning the difference.
 ## Testing
 
 ```bash
-cargo test                          # 161 Rust tests, no terminal needed
-cd apps/engine && npm test          # 7 frame-scheduler / security-policy unit tests
+cargo test --workspace --locked     # 202 Rust checks, no terminal needed
+cd apps/engine && npm test          # 14 frame/tab/security unit tests
 cd ../.. && node tests/e2e/input-injection.js   # 20 real-pixel / page / security checks
 apps/engine/node_modules/.bin/electron tests/fixtures/verify-fixtures.js  # 14 fixtures
-cd packages/mcp && npm test         # 14 compositor/discovery/privacy + 24 protocol checks
+cd packages/mcp && npm test         # 14 compositor/discovery/privacy + 26 protocol checks
 npm run test:live                   # 28 tools against real Chromium
 tools/package-layout-test.sh        # manifest tamper + prebuilt install/layout smoke test
 ```
@@ -267,16 +279,19 @@ Ordered by how much they matter.
    on the direct Kitty path (`{"t":"fps"}` + resize + pointer remap + Kitty `c`/`r` stretch).
    WAN measurement still open; `TERMINAL_FENSTER_LAG_BUDGET_MS` (default 100) tunes the credit
    window.
-4. **Single tab.** No tab strip, history UI, or bookmarks. Bottom-row omnibox (`ctrl+l`),
-   find-in-page (`ctrl+f`), and `ctrl+left`/`right` history exist; named profiles via
-   `--profile`.
+4. **Tabs are intentionally basic.** The interactive CLI has a tab strip and supports up to
+   16 live tabs, but has no persisted tab restore, bookmarks, or richer tab management. MCP
+   sessions remain intentionally single-tab and isolated from interactive sessions.
 5. **Sixel and iTerm2 backends are unimplemented.** If detection picks one, the CLI
    explicitly degrades to Unicode and `doctor` says so rather than silently faking it.
 6. **`onPaint` still copies via `toBitmap()`** — B04's finding; shared-texture path is not
    shipped.
 7. **Public artifacts are not signed or notarized.** The macOS arm64 archive pipeline is proven
    locally, but other target archives and a genuinely clean-machine install remain release gates.
-8. **The Electron memory floor is still high.** A short 1280×800 `about:blank` probe measured
+8. **Terminal coverage is narrow.** Ghostty on macOS is verified end-to-end. Kitty, WezTerm,
+   Linux interactive rendering, and the iTerm2 fallback need community testing before their
+   support can be promoted beyond expected/protocol-verified.
+9. **The Electron memory floor is still high.** A short 1280×800 `about:blank` probe measured
    280.6 MB peak/steady summed RSS (an upper bound because shared pages are double-counted). The
    idle frame throttle works, but a separately verified low-memory mode is not shipped.
 
@@ -306,9 +321,9 @@ distribution gates in [`RELEASE.md`](RELEASE.md) before tagging anything.
 
 See [`SECURITY.md`](SECURITY.md) for reporting vulnerabilities.
 
-## Licence
+## License
 
-MIT — see `LICENSE-MIT`. Third-party components and prior art studied (but not copied) are
+MIT — see [`LICENSE`](LICENSE). Third-party components and prior art studied (but not copied) are
 listed in `NOTICE.md`. Notably the benchmark product, `zenbu-labs/terminal-browser`, ships
 **no licence file**, so its implementation was treated as unavailable: only its public
 behaviour informed this work.

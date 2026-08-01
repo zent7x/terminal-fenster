@@ -12,11 +12,12 @@ With Electron already installed (`cd apps/engine && npm ci`):
 tools/release-check.sh
 ```
 
-This runs formatting, 161 Rust tests, Clippy with warnings denied, the optimized build, source and
+This runs formatting, 202 Rust checks, Clippy with warnings denied, the optimized build, source and
 prebuilt install-layout checks (including manifest-tamper rejection), installer/packager syntax,
-seven engine scheduler/damage/security tests, 16 real-pixel engine checks, 14 browser fixtures, the benchmark
-parser self-test, 14 MCP compositor/discovery/privacy tests, 24 MCP protocol checks, 28 live Chromium
-tool checks, a headless engine RSS/process-cleanup smoke test, and `git diff --check`.
+14 engine frame/tab/security tests, 20 real-pixel engine checks, 14 browser fixtures, the benchmark
+parser self-test, 14 MCP compositor/discovery/privacy tests, 26 MCP protocol checks, 28 live Chromium
+tool checks, a headless engine RSS/process-cleanup smoke test, the production website build, and
+`git diff --check`.
 
 ## Real-terminal gate (mandatory)
 

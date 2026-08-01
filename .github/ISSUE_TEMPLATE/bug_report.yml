@@ -1,0 +1,73 @@
+name: Bug report
+description: Report a reproducible Terminal-Fenster problem
+title: "bug: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing the experimental alpha. Do not include passwords, cookies, private URLs, or unredacted diagnostic logs. Report security vulnerabilities privately through the repository's Security tab.
+  - type: checkboxes
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched existing issues for this problem.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true
+        - label: I understand that Ghostty on macOS is currently the only interactive configuration verified end-to-end.
+          required: true
+  - type: textarea
+    attributes:
+      label: What happened?
+      description: Describe the failure and what you expected instead.
+      placeholder: The page rendered, but scrolling stopped after…
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Reproduction
+      description: Give the smallest repeatable sequence, preferably against a public URL or one of tests/fixtures.
+      placeholder: |
+        1. terminal-fenster open …
+        2. Press …
+        3. Observe …
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Terminal-Fenster version
+      description: Output of `terminal-fenster version` or the commit SHA.
+    validations:
+      required: true
+  - type: dropdown
+    attributes:
+      label: Mode
+      options:
+        - Interactive
+        - Headless
+        - MCP
+        - Installer or packaging
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: OS and architecture
+      placeholder: macOS 26.1 arm64, Ubuntu 24.04 x86_64, …
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Terminal
+      description: Name and version, or "not applicable" for headless mode.
+      placeholder: Ghostty 1.3.1
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Doctor output
+      description: Paste `terminal-fenster doctor` after removing any identifying paths or terminal response data you do not want public.
+      render: text
+  - type: textarea
+    attributes:
+      label: Additional evidence
+      description: Sanitized logs, screenshots, or a minimal fixture. Drag files here rather than linking an expiring private location.

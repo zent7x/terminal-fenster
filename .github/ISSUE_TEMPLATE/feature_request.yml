@@ -1,0 +1,44 @@
+name: Feature request
+description: Propose a focused capability or compatibility improvement
+title: "feature: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Terminal-Fenster is an experimental alpha. Please describe the user problem before prescribing an implementation.
+  - type: checkboxes
+    attributes:
+      label: Preflight
+      options:
+        - label: I checked the README known gaps and existing issues.
+          required: true
+        - label: This request is compatible with Terminal-Fenster's terminal-first scope.
+          required: true
+  - type: textarea
+    attributes:
+      label: Problem
+      description: What workflow is blocked or unnecessarily difficult?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Proposed outcome
+      description: Describe what success looks like from a user's perspective.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Alternatives considered
+      description: Include workarounds or smaller versions of the idea.
+  - type: dropdown
+    attributes:
+      label: Area
+      options:
+        - Terminal rendering
+        - Keyboard, mouse, or accessibility
+        - Browser engine
+        - Headless or MCP automation
+        - Terminal or OS compatibility
+        - Installer, packaging, or documentation
+    validations:
+      required: true

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/zent7x/terminal-fenster/security/advisories/new
+    about: Report vulnerabilities privately; do not open a public issue.
+  - name: Current limitations and release gates
+    url: https://github.com/zent7x/terminal-fenster/blob/main/RELEASE.md
+    about: Check the explicit NO-GO gates before filing a release-readiness issue.
