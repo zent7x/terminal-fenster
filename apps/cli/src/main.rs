@@ -28,6 +28,7 @@ mod display;
 mod mcp;
 mod search;
 mod sessions;
+mod socket_dir;
 mod split;
 
 #[cfg(target_os = "macos")]
@@ -172,7 +173,17 @@ fn main() {
         Some("action") => cmd_action(&args[1..]),
         Some("open") => cmd_open(&args[1..]),
         Some("version") | Some("--version") | Some("-V") => {
+            let exe = std::env::current_exe()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|_| "?".into());
             println!("terminal-fenster {VERSION}");
+            println!("binary: {exe}");
+            if exe.contains("blackglass") {
+                eprintln!(
+                    "warning: this executable is named blackglass — rebuild with \
+                     `cargo build -p terminal-fenster --release` and run terminal-fenster"
+                );
+            }
             0
         }
         Some("help") | Some("--help") | Some("-h") | None => {
@@ -199,7 +210,7 @@ USAGE:
                               Run the real engine without drawing to a terminal
     terminal-fenster setup          Install check + terminal verdict + next steps
     terminal-fenster mcp            Start the MCP server (stdio JSON-RPC for agents)
-    terminal-fenster mcp-config     Print MCP client config (Cursor, Claude Code, …)
+    terminal-fenster mcp-config     Print MCP server JSON for your client
     terminal-fenster ls [--json]    List running browser sessions on this machine
     terminal-fenster action <pid> <state|navigate|reload|back|forward|quit> [value]
                               Control a session over its private Unix socket
@@ -323,10 +334,26 @@ fn cmd_doctor(_args: &[String]) -> i32 {
         );
     }
     if !backend.is_pixel_exact() {
-        println!("        NOTE: this terminal has no graphics protocol. Terminal-Fenster will use");
-        println!("        the Unicode half-block fallback: layout and colour are visible but");
-        println!("        body text will not be legible. For full fidelity use Ghostty,");
-        println!("        kitty, or WezTerm.");
+        if c.has_pixel_graphics() {
+            // sixel/iTerm2-only: interactive browsing works, but through the low-fidelity
+            // Unicode half-block renderer because no native renderer is implemented yet.
+            println!("        NOTE: no native pixel renderer for this terminal, so interactive");
+            println!(
+                "        browsing uses the Unicode half-block fallback: layout and colour are"
+            );
+            println!("        visible but body text will not be legible. For full fidelity use");
+            println!("        Ghostty, kitty, or WezTerm.");
+        } else {
+            // No graphics protocol at all: `open` refuses interactively (see the
+            // has_pixel_graphics gate) and directs to headless.
+            println!(
+                "        NOTE: this terminal has no graphics protocol, so interactive browsing"
+            );
+            println!(
+                "        is unavailable here. Use `terminal-fenster open <url> --headless`, or"
+            );
+            println!("        switch to Ghostty, kitty, or WezTerm for full-fidelity rendering.");
+        }
     }
     println!("    sync output (2026)  {}", yesno(c.sync_output));
     println!();
@@ -486,11 +513,11 @@ fn cmd_setup(_args: &[String]) -> i32 {
         if code == 0 {
             println!("     browse              terminal-fenster open example.com");
             println!("     headless            terminal-fenster open example.com --headless");
-            println!("     agents (MCP)        terminal-fenster mcp-config --cursor");
+            println!("     automation (MCP)    terminal-fenster mcp-config");
         } else {
             println!("     headless always works:");
             println!("                         terminal-fenster open example.com --headless");
-            println!("     agents (MCP)        terminal-fenster mcp-config");
+            println!("     automation (MCP)    terminal-fenster mcp-config");
             println!(
                 "     for interactive browsing, switch to a supported terminal (see verdict above)"
             );
@@ -513,7 +540,7 @@ fn cmd_setup(_args: &[String]) -> i32 {
     println!();
     println!("  3. next steps");
     println!("     headless            terminal-fenster open example.com --headless");
-    println!("     agents (MCP)        terminal-fenster mcp-config");
+    println!("     automation (MCP)    terminal-fenster mcp-config");
     println!("     doctor (graphics)   run inside Ghostty / kitty / WezTerm / iTerm2");
     if locate_engine().is_err() {
         return 1;
@@ -1218,19 +1245,8 @@ impl Session {
             ));
         }
 
-        // Private directory for the socket. 0700 so no other local user can connect --
-        // an open control socket would be full browser takeover.
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos();
-        let socket_dir =
-            std::env::temp_dir().join(format!("terminal-fenster-{}-{}", std::process::id(), nanos));
-        std::fs::create_dir_all(&socket_dir)?;
+        let (socket_dir, socket_path, control_path) = socket_dir::allocate_session_sockets()?;
         set_mode(&socket_dir, 0o700)?;
-        let socket_path = socket_dir.join("engine.sock");
-        let control_path = socket_dir.join("control.sock");
-
         let listener = UnixListener::bind(&socket_path)?;
         set_mode(&socket_path, 0o600)?;
         let control_listener = UnixListener::bind(&control_path)?;

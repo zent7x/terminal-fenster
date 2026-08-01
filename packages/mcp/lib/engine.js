@@ -20,6 +20,7 @@ const net = require('net');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 const { spawn } = require('child_process');
 
 const T_FRAME = 1;
@@ -30,6 +31,37 @@ const MAX_MESSAGE_LEN = 64 * 1024 * 1024;
 
 const DEFAULT_WIDTH = 1280;
 const DEFAULT_HEIGHT = 800;
+
+const UNIX_PATH_MAX = process.platform === 'darwin' ? 103 : 107;
+const ENGINE_SOCK = 'engine.sock';
+
+function fitsUnixSocket(filePath) {
+  return Buffer.byteLength(filePath) <= UNIX_PATH_MAX;
+}
+
+function allocateSocketDir() {
+  const tag = crypto.randomBytes(6).toString('hex');
+  const uid = typeof process.getuid === 'function' ? process.getuid() : 0;
+  const { pid } = process;
+  const tmp = os.tmpdir();
+  const candidates = [
+    path.join(tmp, 'tf', tag),
+    path.join(tmp, `tf-${pid}-${tag}`),
+    `/tmp/tf-${uid}-${tag}`,
+    `/tmp/tf.${uid}.${tag}`,
+  ];
+  for (const dir of candidates) {
+    const sockPath = path.join(dir, ENGINE_SOCK);
+    if (fitsUnixSocket(sockPath)) {
+      fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+      fs.chmodSync(dir, 0o700);
+      return { dir, sockPath };
+    }
+  }
+  throw new Error(
+    `could not allocate a unix socket path shorter than ${UNIX_PATH_MAX + 1} bytes (try TMPDIR=/tmp)`
+  );
+}
 
 function locateEngine() {
   const probe = (candidate) => {
@@ -184,9 +216,7 @@ class Session {
 
     // Private directory for the socket, mirroring the Rust core's posture: 0700 dir so no
     // other local user can even reach the 0600 socket inside it.
-    this.dir = fs.mkdtempSync(path.join(os.tmpdir(), 'terminal-fenster-mcp-'));
-    fs.chmodSync(this.dir, 0o700);
-    this.sockPath = path.join(this.dir, 'engine.sock');
+    ({ dir: this.dir, sockPath: this.sockPath } = allocateSocketDir());
     this.profileDir = process.env.TERMINAL_FENSTER_MCP_PROFILE || path.join(this.dir, 'profile');
     fs.mkdirSync(this.profileDir, { recursive: true });
 
