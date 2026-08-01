@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Terminal-Fenster — a real browser inside your terminal</title>
+  <meta name="description" content="Chromium rendered as pixels in Ghostty, kitty, or WezTerm. Real clicks, typing, and scroll — not a text-mode hack. Open source, experimental.">
+  <meta property="og:title" content="Terminal-Fenster">
+  <meta property="og:description" content="A real Chromium browser that renders inside your terminal.">
+  <meta property="og:url" content="https://terminal-fenster.com">
+  <meta name="theme-color" content="#09090b">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%2309090b'/%3E%3Crect x='6' y='6' width='20' height='20' rx='2' fill='none' stroke='%235eead4' stroke-width='2'/%3E%3C/svg%3E">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="logo" href="/">
+        <span class="logo-mark" aria-hidden="true"></span>
+        Terminal-Fenster
+      </a>
+      <nav class="nav" aria-label="Primary">
+        <a href="#how">How it works</a>
+        <a href="#install">Install</a>
+        <a href="#mcp">MCP</a>
+        <a href="https://github.com/zent7x/terminal-fenster">GitHub</a>
+        <a class="btn btn-primary" href="#install">Get started</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div>
+          <p class="eyebrow">Open source · MIT</p>
+          <h1>A real browser inside your terminal.</h1>
+          <p class="lead">
+            Not Lynx. Not a screenshot viewer. Chromium 150 renders offscreen; a Rust core
+            paints Kitty graphics and forwards your keyboard and mouse back to the page.
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="https://github.com/zent7x/terminal-fenster">View on GitHub</a>
+            <a class="btn btn-ghost" href="#install">Build from source</a>
+          </div>
+          <p class="status-pill">Experimental — working vertical slice, not a signed release yet</p>
+        </div>
+
+        <div class="terminal" aria-label="Terminal preview">
+          <div class="terminal-bar">
+            <span class="dot dot-r"></span>
+            <span class="dot dot-y"></span>
+            <span class="dot dot-g"></span>
+            <span class="terminal-title">ghostty — zsh</span>
+          </div>
+          <div class="browser-chrome">
+            <div class="tab-row">
+              <span>■ example.com</span>
+              <span>+tab</span>
+            </div>
+            <div class="url-row">
+              <span>↻</span>
+              <span class="url-field">https://example.com</span>
+              <span>⌕</span>
+            </div>
+          </div>
+          <div class="viewport">
+            <div class="pixel-grid" aria-hidden="true">
+              <!-- 96 cells -->
+              <span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span>
+              <span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span>
+              <span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span>
+              <span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span>
+              <span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span>
+              <span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span>
+              <span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span>
+              <span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span><span class="pixel"></span>
+            </div>
+            <span class="viewport-caption">kitty graphics · real pixels</span>
+          </div>
+          <div class="terminal-prompt">
+            <span class="cmd">terminal-fenster open</span> news.ycombinator.com<span class="cursor-blink"></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="how">
+      <div class="wrap">
+        <h2>How it works</h2>
+        <p class="section-lead">
+          One process owns your TTY. Another runs sandboxed Chromium. They talk over a private
+          Unix socket — JSON for control, binary for frames.
+        </p>
+        <div class="grid-3">
+          <article class="card">
+            <h3>Real Chromium</h3>
+            <p>Electron 43 / Chromium 150 offscreen rendering. Same engine as a desktop browser, not a DOM-to-text hack.</p>
+          </article>
+          <article class="card">
+            <h3>Kitty graphics</h3>
+            <p>Frames go out as Kitty protocol images with damage encoding and optional shared-memory fast path on local terminals.</p>
+          </article>
+          <article class="card">
+            <h3>Your input, unchanged</h3>
+            <p>Clicks, hover, scroll, and keyboard events map back to the page. The terminal is restored on every exit path.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="install">
+      <div class="wrap">
+        <h2>Install</h2>
+        <p class="section-lead">
+          macOS or Linux. Rust 1.80+ and Node 22.12+ for a source build. Interactive browsing
+          needs a Kitty-graphics terminal — Ghostty is what we develop against.
+        </p>
+        <div class="install">
+<pre><span class="comment"># clone and install</span>
+<span class="cmd-line">git clone https://github.com/zent7x/terminal-fenster.git</span>
+<span class="cmd-line">cd terminal-fenster && ./install.sh</span>
+
+<span class="comment"># interactive (Ghostty / kitty / WezTerm)</span>
+<span class="cmd-line">terminal-fenster open example.com</span>
+
+<span class="comment"># headless — any terminal, scripts, CI</span>
+<span class="cmd-line">terminal-fenster open example.com --headless</span></pre>
+        </div>
+
+        <table class="term-table" style="margin-top: 2rem">
+          <thead>
+            <tr>
+              <th>Terminal</th>
+              <th>Graphics</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Ghostty</td>
+              <td>Kitty</td>
+              <td>Verified end-to-end</td>
+            </tr>
+            <tr>
+              <td>kitty, WezTerm</td>
+              <td>Kitty</td>
+              <td>Expected — untested in CI</td>
+            </tr>
+            <tr>
+              <td>Apple Terminal</td>
+              <td>None</td>
+              <td>Headless only</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="mcp">
+      <div class="wrap">
+        <h2>MCP automation</h2>
+        <p class="section-lead">
+          Sixteen browser tools over stdio: navigate, accessibility snapshot, click, type,
+          screenshot, and more. Real Chromium, same input path as the interactive browser.
+        </p>
+        <div class="install">
+<pre><span class="cmd-line">terminal-fenster mcp-config</span>
+<span class="comment"># paste JSON into your MCP client's mcpServers block</span>
+<span class="cmd-line">terminal-fenster mcp</span></pre>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <span>© 2026 Terminal-Fenster contributors · MIT</span>
+      <div class="footer-links">
+        <a href="https://github.com/zent7x/terminal-fenster">GitHub</a>
+        <a href="https://github.com/zent7x/terminal-fenster/blob/main/README.md">Docs</a>
+        <a href="https://github.com/zent7x/terminal-fenster/blob/main/SECURITY.md">Security</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

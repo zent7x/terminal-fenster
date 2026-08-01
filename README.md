@@ -8,7 +8,7 @@ frames into terminal graphics and turns your keyboard and mouse back into browse
 terminal-fenster open news.ycombinator.com
 ```
 
-Website: [terminal-fenster.com](https://terminal-fenster.com)
+Website: [terminal-fenster.com](https://terminal-fenster.com) (source in [`website/`](website/))
 
 ## Open source
 
