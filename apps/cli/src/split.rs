@@ -5,11 +5,17 @@
 //! deliberately tiny POSIX single-quote encoder and never interpolate into AppleScript.
 
 use std::ffi::OsString;
+// The imports below are used only by the macOS Ghostty-automation path (`launch_ghostty`);
+// on other platforms that function is a stub, so gate the imports to avoid unused warnings.
+#[cfg(target_os = "macos")]
 use std::fs;
+#[cfg(target_os = "macos")]
 use std::io::Write;
+#[cfg(target_os = "macos")]
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+#[cfg(target_os = "macos")]
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

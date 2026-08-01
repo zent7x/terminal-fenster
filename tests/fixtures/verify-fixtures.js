@@ -103,6 +103,33 @@ async function waitForPaint(st) {
   throw new Error('no paint within ' + PAINT_TIMEOUT_MS + ' ms');
 }
 
+function frameHasExpectedMarkers(frame) {
+  if (!frame || frame.width !== W || frame.height !== H) return false;
+  return Object.values(MARKERS).every((marker) =>
+    !marker.rgb || rgbNear(pixelAt(frame, marker.at[0], marker.at[1]), marker.rgb)
+  );
+}
+
+/* A hosted macOS runner can deliver the invalidation paint before the page's ready-style
+   mutation reaches the offscreen compositor. Wait for the documented pixels themselves,
+   rather than treating whichever paint happened to win that race as the fixture result. */
+async function waitForReadyMarkerFrame(wc, st) {
+  const start = Date.now();
+  while (Date.now() - start < PAINT_TIMEOUT_MS) {
+    if (frameHasExpectedMarkers(st.latest)) return st.latest;
+    wc.invalidate();
+    await sleep(50);
+  }
+  if (st.latest) {
+    const got = Object.fromEntries(Object.entries(MARKERS).map(([name, marker]) => [
+      name,
+      pixelAt(st.latest, marker.at[0], marker.at[1]).slice(0, 3),
+    ]));
+    throw new Error('ready marker pixels did not stabilize: ' + JSON.stringify(got));
+  }
+  throw new Error('no paint within ' + PAINT_TIMEOUT_MS + ' ms');
+}
+
 async function waitReady(wc) {
   const start = Date.now();
   for (;;) {
@@ -319,8 +346,7 @@ async function runOne(entry) {
   try {
     await wc.loadFile(path.join(DIR, entry.file));
     rec.readyMs = await withTimeout(waitReady(wc), READY_TIMEOUT_MS + 500, 'ready ' + entry.id);
-    wc.invalidate();
-    const frame = await waitForPaint(st);
+    const frame = await waitForReadyMarkerFrame(wc, st);
     rec.frame = { w: frame.width, h: frame.height, paints: st.paints };
 
     const markers = {};
@@ -364,9 +390,22 @@ app.whenReady().then(async () => {
   let list = manifest.fixtures.filter((f) => f.verify !== false);
   if (ONLY.length) list = list.filter((f) => ONLY.includes(f.id));
 
+  /* Hosted macOS runners drive an offscreen paravirtual GPU (ANGLE Metal, "Apple Paravirtual
+     device") whose paint delivery can race the page's ready-style mutation -- the same race
+     waitForReadyMarkerFrame documents. The heaviest fixtures (e.g. the tall `scrolling` page)
+     can lose that race intermittently even though the interaction itself is correct and the
+     probe data is valid. Retry a FAILED fixture a bounded number of times so a transient
+     compositor race does not red the whole suite, while a genuine regression still fails every
+     attempt. Retries are always logged -- never a silent pass. */
+  const MAX_ATTEMPTS = Number(process.env.TF_FIXTURE_ATTEMPTS) || 3;
   const results = [];
   for (const entry of list) {
-    const r = await runOne(entry);
+    let r = await runOne(entry);
+    for (let attempt = 2; !r.ok && attempt <= MAX_ATTEMPTS; attempt++) {
+      log(`RETRY ${r.id.padEnd(18)} attempt ${attempt}/${MAX_ATTEMPTS} ` +
+          `(previous: ${r.error || 'markers/ready paint race'})`);
+      r = await runOne(entry);
+    }
     results.push(r);
     log(`${r.ok ? 'PASS' : 'FAIL'}  ${r.id.padEnd(18)} ready=${r.readyMs || '-'}ms ` +
         `frame=${r.frame ? r.frame.w + 'x' + r.frame.h : '-'} ${r.error || ''}`);

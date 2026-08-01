@@ -89,9 +89,9 @@ mod tests {
     #[test]
     fn long_temp_dir_still_has_short_candidate() {
         let tag = session_tag();
-        let absurd = PathBuf::from(format!(
-            "/var/folders/zz/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/00000000000000000000000000000000/T"
-        ));
+        let absurd = PathBuf::from(
+            "/var/folders/zz/zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/00000000000000000000000000000000/T",
+        );
         let mut ok = false;
         for dir in dir_candidates(&absurd, &tag) {
             let engine = dir.join(ENGINE_SOCK);
