@@ -104,7 +104,12 @@ const refFor = (snapText, name) => {
   const typed = await HANDLERS.browser_type({ element: 'Search terms field', ref: boxRef, text: 'hello world' });
   check('browser_type reports success', !typed.isError && /Typed 11 character/.test(textOf(typed)), textOf(typed).split('\n')[0]);
   const snap3 = textOf(await HANDLERS.browser_snapshot({}));
-  check('typed text is present in the field, in order', /value="hello world"/.test(snap3), (snap3.match(/.*Search terms.*/) || [])[0]);
+  const fieldLine = (snap3.match(/.*textbox.*Search terms.*/) || [])[0] || '';
+  check(
+    'editable field value is present only as a redacted length',
+    /value=<redacted:11 chars>/.test(fieldLine) && !fieldLine.includes('hello world'),
+    fieldLine
+  );
 
   // ---- 7. checkbox state -------------------------------------------------------------
   const chkRef = refFor(snap3, 'Remember me');
@@ -145,12 +150,9 @@ const refFor = (snapText, name) => {
   const back = textOf(await HANDLERS.browser_navigate_back({}));
   check('browser_navigate_back returns to the first page', /CLICKED|Start/.test(back), (back.match(/title: "[^"]*"/) || [])[0]);
 
-  // ---- 12. resize, and the frame-lag guard -------------------------------------------
-  // The engine does not reliably emit a frame at the new size after a resize (measured;
-  // see README "Resize lag" and the report for the engine-side repro). We cannot fix that
-  // from here -- apps/engine/src/main.js is not ours to edit -- so what this suite asserts
-  // is that the discrepancy is DETECTED and reported, never papered over. An agent that is
-  // told the picture is stale can cope; one that is not will reason about the wrong pixels.
+  // ---- 12. resize ---------------------------------------------------------------------
+  // `resize` invalidates the OSR view and the engine promotes a geometry change to a full
+  // frame. Pin both the page's CSS viewport and the screenshot canvas to the new size.
   const resized = textOf(await HANDLERS.browser_resize({ width: 900, height: 700 }));
   check('browser_resize takes effect in the page (viewport reported from the page itself)',
     /Viewport is now 900x700/.test(resized), resized.split('\n')[0]);
@@ -161,12 +163,10 @@ const refFor = (snapText, name) => {
   const shotH = buf2.readUInt32BE(20);
   const shot2Text = textOf(shot2);
   const frameMatches = shotW === 900 && shotH === 700;
-  check('screenshot geometry is either current OR explicitly flagged as stale',
-    frameMatches || /WARNING: this frame is \d+x\d+ but the page viewport is now 900x700/.test(shot2Text),
-    frameMatches ? `frame caught up: ${shotW}x${shotH}` : `stale frame ${shotW}x${shotH}, warning emitted`);
-  check('a stale frame never passes silently',
-    frameMatches || shot2Text.includes('predates the last resize'),
-    frameMatches ? 'n/a - frame was current' : 'warning text present');
+  check('screenshot catches up to the resized viewport', frameMatches, `${shotW}x${shotH}`);
+  check('current resize produces no stale-frame warning',
+    frameMatches && !shot2Text.includes('predates the last resize'),
+    frameMatches ? 'current frame' : shot2Text);
 
   // ---- 13. shutdown ------------------------------------------------------------------
   const closed = textOf(await HANDLERS.browser_close({}));

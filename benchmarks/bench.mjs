@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 //
-// BlackGlass benchmark harness.
+// Terminal-Fenster benchmark harness.
 //
-// Measures the real binary at target/release/blackglass end to end:
+// Measures the real binary at target/release/terminal-fenster end to end:
 //   * cold and warm start to first frame
 //   * frames delivered and frames per second
 //   * encode milliseconds and wire bytes per frame
@@ -13,10 +13,10 @@
 // ---------------------------------------------------------------------------
 // WHY IT IS SHAPED THIS WAY
 //
-// 1. It must run in a real terminal. `blackglass open` calls isatty(stdin) and
+// 1. It must run in a real terminal. `terminal-fenster open` calls isatty(stdin) and
 //    refuses to run otherwise (apps/cli/src/main.rs:228). Capability detection
 //    then *asks the terminal questions*: the query bytes are written to STDOUT
-//    and the replies are read from STDIN (crates/bg-term/src/caps.rs:117-120).
+//    and the replies are read from STDIN (crates/tf-term/src/caps.rs:117-120).
 //
 // 2. Therefore stdout must NOT be redirected. If stdout goes to a pipe or a
 //    file, the terminal never sees the queries, never replies, cell size stays
@@ -24,7 +24,7 @@
 //    (main.rs:244-251) *before* it writes a single log line. So capturing
 //    stdout to count bytes is not an option, and this harness never tries.
 //
-// 3. That leaves $BLACKGLASS_LOG as the only safe measurement channel, which is
+// 3. That leaves $TERMINAL_FENSTER_LOG as the only safe measurement channel, which is
 //    exactly why it exists: "Logging must never go to stdout while browsing:
 //    stdout is the graphics channel" (main.rs:29-31). Every number below is
 //    parsed from that file or sampled from the OS. Nothing is inferred from
@@ -43,7 +43,11 @@
 //             payload_bytes=8081424                                 (main.rs:539)
 //   <unix_ms> event {"t":"title","v":"…"}                           (main.rs:549)
 //   <unix_ms> bounded-run complete frames=459 fps=60 \
-//             last_wire_bytes=53999 encode_ms=0.74                  (main.rs:467)
+//             last_wire_bytes=53999 encode_ms=0.74 convert_ms=0.21
+//   <unix_ms> frame-stats samples=459 encode_ms_p50=0.67 \
+//             encode_ms_p99=0.91 wire_bytes_p50=53120 \
+//             wire_bytes_p99=54788 gap_samples=458 gap_ms_p50=16.67 \
+//             gap_ms_p99=19.94 convert_ms_p50=0.19 convert_ms_p99=0.28
 //
 // The timestamp prefix is Unix epoch milliseconds (main.rs:34-37), the same
 // clock Node's Date.now() reads, so harness and binary timestamps are directly
@@ -67,10 +71,10 @@ const execFileAsync = promisify(execFile);
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '..');
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 const DEFAULTS = {
-  bin: path.join(REPO, 'target/release/blackglass'),
+  bin: path.join(REPO, 'target/release/terminal-fenster'),
   url: 'file://' + path.join(HERE, 'pages/repaint.html'),
   runs: 5,
   durationMs: 8000,
@@ -143,7 +147,7 @@ function fatal(msg) {
 
 function usage() {
   process.stdout.write(`
-BlackGlass benchmark harness
+Terminal-Fenster benchmark harness
 
   node benchmarks/bench.mjs [options]
 
@@ -160,7 +164,7 @@ OPTIONS
                       one ps call costs 170-700 ms on a busy machine, so lower
                       values are requests the sampler cannot honour
   --settle-ms MS      pause between runs                      (default ${DEFAULTS.settleMs})
-  --bin PATH          binary under test                       (default target/release/blackglass)
+  --bin PATH          binary under test                       (default target/release/terminal-fenster)
   --out DIR           results directory                       (default benchmarks/results)
   --label NAME        tag added to the result filename
   --json-only         print JSON only, no human summary
@@ -187,7 +191,8 @@ const RE = {
   // parens: `Some((2482, 814))`. The inner pair is optional-parenthesised here
   // only to survive a future switch to a flat tuple.
   firstFrame: /^(\d+)\s+first-frame after (\d+)ms geometry=(?:Some\(\(?(\d+),\s*(\d+)\)?\)|None) payload_bytes=(\d+)/,
-  complete: /^(\d+)\s+bounded-run complete frames=(\d+) fps=([\d.]+) last_wire_bytes=(\d+) encode_ms=([\d.]+)/,
+  frameStats: /^(\d+)\s+frame-stats samples=(\d+) encode_ms_p50=([\d.]+) encode_ms_p99=([\d.]+) wire_bytes_p50=(\d+) wire_bytes_p99=(\d+) gap_samples=(\d+) gap_ms_p50=([\d.]+) gap_ms_p99=([\d.]+)(?: convert_ms_p50=([\d.]+) convert_ms_p99=([\d.]+))?/,
+  complete: /^(\d+)\s+bounded-run complete frames=(\d+) fps=([\d.]+) last_wire_bytes=(\d+) encode_ms=([\d.]+)(?: convert_ms=([\d.]+))?/,
   event: /^(\d+)\s+event\s+(.*)$/,
 };
 
@@ -199,6 +204,7 @@ function parseStartFields(rest) {
   if (f.term_program === undefined && /\bterm=None\b/.test(rest)) f.term_program = null;
   grab(/\bbackend=(\w+)/,        (m) => { f.backend = m[1]; });
   grab(/\bkitty_gfx=(true|false)/,  (m) => { f.kitty_graphics = m[1] === 'true'; });
+  grab(/\bkitty_shm=(true|false)/,  (m) => { f.kitty_shared_memory = m[1] === 'true'; });
   grab(/\bkitty_kbd=(true|false)/,  (m) => { f.kitty_keyboard = m[1] === 'true'; });
   grab(/\bpixel_mouse=(true|false)/,(m) => { f.pixel_mouse = m[1] === 'true'; });
   grab(/\bviewport=(\d+)x(\d+)/, (m) => { f.viewport_px = [+m[1], +m[2]]; });
@@ -217,7 +223,7 @@ export function parseRunLog(text, { spawnedAtMs, exitedAtMs, exitCode, stderr })
   const errors = [];
   const lines = text.split('\n').filter((l) => l.trim().length > 0);
 
-  let start = null, firstFrame = null, complete = null;
+  let start = null, firstFrame = null, frameStats = null, complete = null;
   const events = [];
   for (const line of lines) {
     let m;
@@ -230,6 +236,20 @@ export function parseRunLog(text, { spawnedAtMs, exitedAtMs, exitCode, stderr })
         geometry: m[3] !== undefined ? [+m[3], +m[4]] : null,
         payload_bytes: +m[5],
       };
+    } else if ((m = line.match(RE.frameStats))) {
+      frameStats = {
+        ts: +m[1],
+        samples: +m[2],
+        encode_ms_p50: +m[3],
+        encode_ms_p99: +m[4],
+        wire_bytes_p50: +m[5],
+        wire_bytes_p99: +m[6],
+        gap_samples: +m[7],
+        gap_ms_p50: +m[8],
+        gap_ms_p99: +m[9],
+        convert_ms_p50: m[10] === undefined ? null : +m[10],
+        convert_ms_p99: m[11] === undefined ? null : +m[11],
+      };
     } else if ((m = line.match(RE.complete))) {
       complete = {
         ts: +m[1],
@@ -237,6 +257,7 @@ export function parseRunLog(text, { spawnedAtMs, exitedAtMs, exitCode, stderr })
         fps_logged: +m[3],
         last_wire_bytes: +m[4],
         last_encode_ms: +m[5],
+        last_convert_ms: m[6] === undefined ? null : +m[6],
       };
     } else if ((m = line.match(RE.event))) {
       events.push({ ts: +m[1], json: m[2] });
@@ -245,7 +266,7 @@ export function parseRunLog(text, { spawnedAtMs, exitedAtMs, exitCode, stderr })
 
   if (lines.length === 0) {
     errors.push(
-      'log is empty: blackglass exited before writing any line. The usual cause is ' +
+      'log is empty: terminal-fenster exited before writing any line. The usual cause is ' +
       'that the terminal did not answer the capability queries, so cmd_open bailed at ' +
       '"could not determine terminal pixel size" (main.rs:244-251). Run inside Ghostty.'
     );
@@ -253,7 +274,7 @@ export function parseRunLog(text, { spawnedAtMs, exitedAtMs, exitCode, stderr })
   if (!start) errors.push('missing "start" line');
   if (!firstFrame) errors.push('missing "first-frame" line: no frame ever reached the terminal');
   if (!complete) errors.push('missing "bounded-run complete" line: run did not finish its bounded window');
-  if (exitCode !== 0) errors.push(`blackglass exited ${exitCode}`);
+  if (exitCode !== 0) errors.push(`terminal-fenster exited ${exitCode}`);
 
   const m = {
     ok: errors.length === 0,
@@ -265,6 +286,7 @@ export function parseRunLog(text, { spawnedAtMs, exitedAtMs, exitCode, stderr })
       term_program: start.term_program ?? null,
       backend: start.backend ?? null,
       kitty_graphics: start.kitty_graphics ?? null,
+      kitty_shared_memory: start.kitty_shared_memory ?? null,
       kitty_keyboard: start.kitty_keyboard ?? null,
       pixel_mouse: start.pixel_mouse ?? null,
       viewport_px: start.viewport_px ?? null,
@@ -288,29 +310,47 @@ export function parseRunLog(text, { spawnedAtMs, exitedAtMs, exitCode, stderr })
     },
 
     frames: {
+      // Compatibility alias: engine frames accepted by the core.
       count: complete?.frames ?? null,
+      received_count: complete?.frames ?? null,
+      presented_count: frameStats?.samples ?? complete?.frames ?? null,
       // Instantaneous value the binary reports: frames seen in the trailing
       // second (main.rs:842-844). A sample, not an average.
       fps_logged_instantaneous: complete?.fps_logged ?? null,
-      // Frames over the whole bounded window, load time included. Pessimistic.
+      // Completed terminal presentations over the bounded window. A legacy log
+      // without frame-stats falls back to received frames and says so in bytes.
       fps_over_window: null,
-      // Frames after the first, over the window from first frame to exit.
-      // This is the number to quote for steady-state throughput.
+      // Completed presentations after the first, from first frame to exit.
       fps_steady_state: null,
+      // Diagnostic producer/consumer split: these count socket frames before
+      // the core coalesces multiple messages into one terminal presentation.
+      fps_received_over_window: null,
+      fps_received_steady_state: null,
       run_window_ms: null,
       steady_window_ms: null,
     },
 
     bytes: {
-      // NOTE: the binary logs only the LAST frame's encode and wire size
-      // (main.rs:467-470). These are single samples, not distributions. There
-      // is no p50/p99 available without a change to the CLI's logging.
+      // The final-frame values remain for compatibility and quick diagnosis.
+      // Bounded runs additionally report a distribution over every completed
+      // terminal presentation; normal interactive runs retain no sample history.
       last_encode_ms: complete?.last_encode_ms ?? null,
+      last_convert_ms: complete?.last_convert_ms ?? null,
       last_wire_bytes: complete?.last_wire_bytes ?? null,
+      frame_samples: frameStats?.samples ?? null,
+      encode_ms_p50: frameStats?.encode_ms_p50 ?? null,
+      encode_ms_p99: frameStats?.encode_ms_p99 ?? null,
+      convert_ms_p50: frameStats?.convert_ms_p50 ?? null,
+      convert_ms_p99: frameStats?.convert_ms_p99 ?? null,
+      wire_bytes_p50: frameStats?.wire_bytes_p50 ?? null,
+      wire_bytes_p99: frameStats?.wire_bytes_p99 ?? null,
+      present_gap_samples: frameStats?.gap_samples ?? null,
+      present_gap_ms_p50: frameStats?.gap_ms_p50 ?? null,
+      present_gap_ms_p99: frameStats?.gap_ms_p99 ?? null,
       first_frame_payload_bytes: firstFrame?.payload_bytes ?? null,
       raw_pixel_bytes: null,
       compression_ratio_approx: null,
-      samples_are_last_frame_only: true,
+      samples_are_last_frame_only: frameStats === null,
     },
 
     events: events.length,
@@ -329,11 +369,21 @@ export function parseRunLog(text, { spawnedAtMs, exitedAtMs, exitCode, stderr })
   if (firstFrame && complete && m._runStartTs != null) {
     const win = complete.ts - m._runStartTs;
     const steady = win - firstFrame.after_ms;
+    const received = complete.frames;
+    const presented = frameStats?.samples ?? received;
     m.frames.run_window_ms = win;
     m.frames.steady_window_ms = steady;
-    if (win > 0) m.frames.fps_over_window = round2((complete.frames * 1000) / win);
-    if (steady > 0 && complete.frames > 1) {
-      m.frames.fps_steady_state = round2(((complete.frames - 1) * 1000) / steady);
+    if (win > 0) {
+      m.frames.fps_over_window = round2((presented * 1000) / win);
+      m.frames.fps_received_over_window = round2((received * 1000) / win);
+    }
+    if (steady > 0) {
+      if (presented > 1) {
+        m.frames.fps_steady_state = round2(((presented - 1) * 1000) / steady);
+      }
+      if (received > 1) {
+        m.frames.fps_received_steady_state = round2(((received - 1) * 1000) / steady);
+      }
     }
   }
 
@@ -341,7 +391,7 @@ export function parseRunLog(text, { spawnedAtMs, exitedAtMs, exitCode, stderr })
     const [w, h] = firstFrame.geometry;
     const raw = w * h * 4;
     m.bytes.raw_pixel_bytes = raw;
-    // The payload carries a 32-byte header (bg-proto FRAME_HEADER_LEN). If this
+    // The payload carries a 32-byte header (tf-proto FRAME_HEADER_LEN). If this
     // does not hold, the wire format changed and the ratio below is nonsense.
     if (firstFrame.payload_bytes !== raw + 32) {
       errors.push(
@@ -350,11 +400,12 @@ export function parseRunLog(text, { spawnedAtMs, exitedAtMs, exitCode, stderr })
       );
       m.ok = false;
     }
-    if (complete?.last_wire_bytes > 0) {
+    const representativeWireBytes = frameStats?.wire_bytes_p50 || complete?.last_wire_bytes;
+    if (representativeWireBytes > 0) {
       // Approximate on purpose: the numerator is the FIRST frame's raw size and
-      // the denominator is the LAST frame's encoded size. Valid as an order of
-      // magnitude only, and only while the geometry does not change mid-run.
-      m.bytes.compression_ratio_approx = round2(raw / complete.last_wire_bytes);
+      // the denominator is the median presented frame's encoded size (or the
+      // legacy final-frame sample). Geometry/damage can differ across the run.
+      m.bytes.compression_ratio_approx = round2(raw / representativeWireBytes);
     }
   }
 
@@ -621,7 +672,7 @@ async function preflight(opt) {
   const isTty = Boolean(process.stdin.isTTY && process.stdout.isTTY);
   add('stdin and stdout are a tty', isTty,
     isTty ? 'ok'
-          : 'blackglass open calls isatty(stdin) and refuses otherwise (main.rs:228), and ' +
+          : 'terminal-fenster open calls isatty(stdin) and refuses otherwise (main.rs:228), and ' +
             'capability queries are written to stdout and answered on stdin (caps.rs:117-120). ' +
             'Run this from an interactive terminal window; do not pipe or redirect it.');
 
@@ -651,7 +702,7 @@ async function preflight(opt) {
   try { await fs.access(enginePath); engineOk = true; } catch { /* not there */ }
   add('electron engine present', engineOk,
     engineOk ? enginePath
-             : `${enginePath} not found. Run: (cd apps/engine && npm install), or set BLACKGLASS_ENGINE.`);
+             : `${enginePath} not found. Run: (cd apps/engine && npm install), or set TERMINAL_FENSTER_ENGINE.`);
 
   // The URL, when it is a local file.
   if (opt.url.startsWith('file://')) {
@@ -690,10 +741,10 @@ async function preflight(opt) {
 export async function runOnce(opt, index, logPath) {
   const env = {
     ...process.env,
-    BLACKGLASS_LOG: logPath,
-    BLACKGLASS_EXIT_AFTER_MS: String(opt.durationMs),
+    TERMINAL_FENSTER_LOG: logPath,
+    TERMINAL_FENSTER_EXIT_AFTER_MS: String(opt.durationMs),
   };
-  if (opt.backend) env.BLACKGLASS_BACKEND = opt.backend;
+  if (opt.backend) env.TERMINAL_FENSTER_BACKEND = opt.backend;
 
   // Start from a clean log so parsing is unambiguous: log_line appends
   // (main.rs:38), it does not truncate.
@@ -817,16 +868,27 @@ export function summarize(runs) {
     throughput: ok.length ? {
       fps_steady_state: stats(pick(ok, (r) => r.frames.fps_steady_state)),
       fps_over_window: stats(pick(ok, (r) => r.frames.fps_over_window)),
-      frames: stats(pick(ok, (r) => r.frames.count)),
+      fps_received_steady_state: stats(pick(ok, (r) => r.frames.fps_received_steady_state)),
+      received_frames: stats(pick(ok, (r) => r.frames.received_count)),
+      presented_frames: stats(pick(ok, (r) => r.frames.presented_count)),
     } : null,
     encode: ok.length ? {
+      frame_samples: stats(pick(ok, (r) => r.bytes.frame_samples)),
+      encode_ms_p50: stats(pick(ok, (r) => r.bytes.encode_ms_p50)),
+      encode_ms_p99: stats(pick(ok, (r) => r.bytes.encode_ms_p99)),
+      convert_ms_p50: stats(pick(ok, (r) => r.bytes.convert_ms_p50)),
+      convert_ms_p99: stats(pick(ok, (r) => r.bytes.convert_ms_p99)),
+      wire_bytes_p50: stats(pick(ok, (r) => r.bytes.wire_bytes_p50)),
+      wire_bytes_p99: stats(pick(ok, (r) => r.bytes.wire_bytes_p99)),
+      present_gap_ms_p50: stats(pick(ok, (r) => r.bytes.present_gap_ms_p50)),
+      present_gap_ms_p99: stats(pick(ok, (r) => r.bytes.present_gap_ms_p99)),
       last_encode_ms: stats(pick(ok, (r) => r.bytes.last_encode_ms)),
+      last_convert_ms: stats(pick(ok, (r) => r.bytes.last_convert_ms)),
       last_wire_bytes: stats(pick(ok, (r) => r.bytes.last_wire_bytes)),
       compression_ratio_approx: stats(pick(ok, (r) => r.bytes.compression_ratio_approx)),
       note:
-        'One sample per run: the CLI logs only the final frame\'s encode time and wire ' +
-        'size (main.rs:467-470). These are NOT distributions over frames. Per-frame ' +
-        'percentiles need a change to the CLI\'s logging.',
+        'p50/p99 values are computed by the CLI over completed terminal presentations ' +
+        'during each bounded run, then summarized across runs here.',
     } : null,
     memory: ok.length ? {
       peak_tree_total_mb: stats(pick(ok, (r) => r.rss.peak_tree_total_mb)),
@@ -845,7 +907,7 @@ function renderText(report) {
        : '        -';
 
   L.push('');
-  L.push('BlackGlass benchmark');
+  L.push('Terminal-Fenster benchmark');
   L.push('='.repeat(72));
   L.push(`binary      ${report.binary.path}`);
   L.push(`version     ${report.binary.version ?? '?'}   sha256 ${(report.binary.sha256 || '').slice(0, 16)}`);
@@ -879,17 +941,32 @@ function renderText(report) {
   L.push('THROUGHPUT');
   L.push('-'.repeat(72));
   if (s.throughput) {
-    L.push(`  fps, steady state            ${fmt(s.throughput.fps_steady_state, 'fps')}`);
-    L.push(`  fps, whole window            ${fmt(s.throughput.fps_over_window, 'fps')}`);
-    L.push(`  frames per run               ${fmt(s.throughput.frames, '   ')}`);
+    L.push(`  presented fps, steady state  ${fmt(s.throughput.fps_steady_state, 'fps')}`);
+    L.push(`  presented fps, whole window  ${fmt(s.throughput.fps_over_window, 'fps')}`);
+    L.push(`  received fps, steady state   ${fmt(s.throughput.fps_received_steady_state, 'fps')}`);
+    L.push(`  presentations per run        ${fmt(s.throughput.presented_frames, '   ')}`);
+    L.push(`  engine frames per run        ${fmt(s.throughput.received_frames, '   ')}`);
   } else L.push('  - (no valid run)');
   L.push('');
 
-  L.push('ENCODE AND WIRE  (last frame of each run -- one sample per run, not a distribution)');
+  L.push('PRESENTATION DISTRIBUTION  (per-frame percentiles, summarized across runs)');
   L.push('-'.repeat(72));
   if (s.encode) {
-    L.push(`  encode                       ${fmt(s.encode.last_encode_ms)}`);
-    L.push(`  wire bytes                   ${fmt(s.encode.last_wire_bytes, 'B ')}`);
+    if (s.encode.encode_ms_p50) {
+      L.push(`  BGRA conversion p50 / frame  ${fmt(s.encode.convert_ms_p50)}`);
+      L.push(`  BGRA conversion p99 / frame  ${fmt(s.encode.convert_ms_p99)}`);
+      L.push(`  encode p50 / frame           ${fmt(s.encode.encode_ms_p50)}`);
+      L.push(`  encode p99 / frame           ${fmt(s.encode.encode_ms_p99)}`);
+      L.push(`  wire bytes p50 / frame       ${fmt(s.encode.wire_bytes_p50, 'B ')}`);
+      L.push(`  wire bytes p99 / frame       ${fmt(s.encode.wire_bytes_p99, 'B ')}`);
+      L.push(`  presentation gap p50         ${fmt(s.encode.present_gap_ms_p50)}`);
+      L.push(`  presentation gap p99         ${fmt(s.encode.present_gap_ms_p99)}`);
+      L.push(`  presented frames sampled     ${fmt(s.encode.frame_samples, '   ')}`);
+    } else {
+      L.push(`  conversion (legacy final)    ${fmt(s.encode.last_convert_ms)}`);
+      L.push(`  encode (legacy final frame)  ${fmt(s.encode.last_encode_ms)}`);
+      L.push(`  wire (legacy final frame)    ${fmt(s.encode.last_wire_bytes, 'B ')}`);
+    }
     L.push(`  raw -> wire reduction        ${fmt(s.encode.compression_ratio_approx, 'x ')}`);
   } else L.push('  - (no valid run)');
   L.push('');
@@ -899,7 +976,7 @@ function renderText(report) {
   if (s.memory) {
     L.push(`  peak tree RSS                ${fmt(s.memory.peak_tree_total_mb, 'MB')}`);
     L.push(`  processes at peak            ${fmt(s.memory.peak_n_procs, '   ')}`);
-    L.push(`  peak RSS, blackglass itself  ${fmt(s.memory.peak_main_process_kb, 'KB')}`);
+    L.push(`  peak RSS, terminal-fenster itself  ${fmt(s.memory.peak_main_process_kb, 'KB')}`);
     const bd = report.runs.find((r) => r.ok && r.rss.peak_breakdown)?.rss.peak_breakdown;
     if (bd) {
       L.push('  breakdown at peak (first ok run):');
@@ -941,11 +1018,12 @@ function renderText(report) {
 // This is NOT a benchmark result: no browser runs, no timing is measured.
 
 const FIXTURE_OK = [
-  '1000000000320 start url=file:///x/repaint.html term=Some("ghostty") backend=kitty kitty_gfx=true kitty_kbd=true pixel_mouse=true viewport=2482x851 cell=Some((17, 37)) page=2482x814',
+  '1000000000320 start url=file:///x/repaint.html term=Some("ghostty") backend=kitty kitty_gfx=true kitty_shm=true kitty_kbd=true pixel_mouse=true viewport=2482x851 cell=Some((17, 37)) page=2482x814',
   '1000000000897 event {"t":"loading","v":true}',
   '1000000000898 first-frame after 366ms geometry=Some((2482, 814)) payload_bytes=8081424',
-  '1000000000901 event {"t":"title","v":"BlackGlass repaint bench"}',
-  '1000000008540 bounded-run complete frames=459 fps=60 last_wire_bytes=53999 encode_ms=0.74',
+  '1000000000901 event {"t":"title","v":"Terminal-Fenster repaint bench"}',
+  '1000000008539 frame-stats samples=459 encode_ms_p50=0.67 encode_ms_p99=0.91 wire_bytes_p50=53120 wire_bytes_p99=54788 gap_samples=458 gap_ms_p50=16.67 gap_ms_p99=19.94 convert_ms_p50=0.19 convert_ms_p99=0.28',
+  '1000000008540 bounded-run complete frames=459 fps=60 last_wire_bytes=53999 encode_ms=0.74 convert_ms=0.21',
 ].join('\n');
 
 async function selfTest() {
@@ -971,6 +1049,7 @@ async function selfTest() {
   eq('ok', r.ok, true);
   eq('backend', r.terminal.backend, 'kitty');
   eq('kitty_graphics', r.terminal.kitty_graphics, true);
+  eq('kitty_shared_memory', r.terminal.kitty_shared_memory, true);
   eq('page width', r.terminal.page_px[0], 2482);
   eq('cell height', r.terminal.cell_px[1], 37);
   eq('tty_and_detect_ms', r.startup.tty_and_detect_ms, 320);
@@ -979,24 +1058,53 @@ async function selfTest() {
   eq('spawn_to_first_frame_ms', r.startup.spawn_to_first_frame_ms, 898);
   eq('spawn_to_exit_ms', r.startup.spawn_to_exit_ms, 10100);
   eq('frames', r.frames.count, 459);
+  eq('received frames', r.frames.received_count, 459);
+  eq('presented frames', r.frames.presented_count, 459);
   eq('run_window_ms', r.frames.run_window_ms, 8008);
   eq('steady_window_ms', r.frames.steady_window_ms, 7642);
   near('fps_steady_state', r.frames.fps_steady_state, 59.93, 0.02);
   near('fps_over_window', r.frames.fps_over_window, 57.32, 0.02);
+  near('received fps steady state', r.frames.fps_received_steady_state, 59.93, 0.02);
   eq('last_wire_bytes', r.bytes.last_wire_bytes, 53999);
   eq('last_encode_ms', r.bytes.last_encode_ms, 0.74);
+  eq('last_convert_ms', r.bytes.last_convert_ms, 0.21);
+  eq('per-frame samples', r.bytes.frame_samples, 459);
+  eq('encode p50', r.bytes.encode_ms_p50, 0.67);
+  eq('encode p99', r.bytes.encode_ms_p99, 0.91);
+  eq('conversion p50', r.bytes.convert_ms_p50, 0.19);
+  eq('conversion p99', r.bytes.convert_ms_p99, 0.28);
+  eq('wire bytes p50', r.bytes.wire_bytes_p50, 53120);
+  eq('wire bytes p99', r.bytes.wire_bytes_p99, 54788);
+  eq('presentation gap samples', r.bytes.present_gap_samples, 458);
+  eq('presentation gap p50', r.bytes.present_gap_ms_p50, 16.67);
+  eq('presentation gap p99', r.bytes.present_gap_ms_p99, 19.94);
+  eq('uses per-frame distribution', r.bytes.samples_are_last_frame_only, false);
   eq('raw_pixel_bytes', r.bytes.raw_pixel_bytes, 8081392);
   eq('payload = raw + 32 header', r.bytes.first_frame_payload_bytes, 8081392 + 32);
-  near('compression_ratio_approx', r.bytes.compression_ratio_approx, 149.66, 0.02);
+  near('compression_ratio_approx', r.bytes.compression_ratio_approx, 152.14, 0.02);
   eq('events counted', r.events, 2);
 
   out.push('');
+  out.push('fixture: received frames coalesce before terminal presentation');
+  const c = parseRunLog(FIXTURE_OK.replace(
+    'frame-stats samples=459',
+    'frame-stats samples=230'
+  ).replace('gap_samples=458', 'gap_samples=229'), {
+    spawnedAtMs: 1000000000000, exitedAtMs: 1000000010100, exitCode: 0, stderr: '',
+  });
+  eq('coalesced run remains valid', c.ok, true);
+  eq('received count preserved', c.frames.received_count, 459);
+  eq('presentation count used', c.frames.presented_count, 230);
+  near('headline fps is terminal presentations', c.frames.fps_steady_state, 29.97, 0.02);
+  near('received fps remains diagnostic', c.frames.fps_received_steady_state, 59.93, 0.02);
+
+  out.push('');
   out.push('fixture: empty log (terminal never answered the capability queries)');
-  const e = parseRunLog('', { spawnedAtMs: 1, exitedAtMs: 2, exitCode: 1, stderr: 'blackglass: could not determine terminal pixel size.' });
+  const e = parseRunLog('', { spawnedAtMs: 1, exitedAtMs: 2, exitCode: 1, stderr: 'terminal-fenster: could not determine terminal pixel size.' });
   eq('not ok', e.ok, false);
   eq('start metric is null, not zero', e.startup.spawn_to_first_frame_ms, null);
   eq('frame count is null, not zero', e.frames.count, null);
-  eq('stderr captured', e.stderr, 'blackglass: could not determine terminal pixel size.');
+  eq('stderr captured', e.stderr, 'terminal-fenster: could not determine terminal pixel size.');
   const hasHint = e.errors.some((x) => x.includes('terminal pixel size'));
   eq('diagnoses the tty cause', hasHint, true);
 
@@ -1070,7 +1178,7 @@ async function selfTest() {
       rss: s,
     };
     const rep = {
-      binary: { path: '/x/blackglass', version: 'blackglass 0.1.0', sha256: 'deadbeefdeadbeef' },
+      binary: { path: '/x/terminal-fenster', version: 'terminal-fenster 0.1.0', sha256: 'deadbeefdeadbeef' },
       host: { cpu_brand: 'Apple M4', arch: 'arm64', platform: 'darwin', os_version: '26.1', release: '25.1.0' },
       config: { url: 'file:///x/repaint.html', runs: 1, duration_ms: 8000, sample_ms: 250 },
       runs: [fixtureRun],
@@ -1106,7 +1214,7 @@ async function main() {
   const fatalChecks = pre.checks.filter((c) => c.fatal);
 
   if (opt.dryRun || fatalChecks.length > 0) {
-    const L = ['', 'BlackGlass benchmark — preflight', '='.repeat(72)];
+    const L = ['', 'Terminal-Fenster benchmark — preflight', '='.repeat(72)];
     for (const c of pre.checks) {
       L.push(`  [${c.ok ? ' ok ' : c.fatal ? 'FAIL' : 'warn'}] ${c.name}`);
       L.push(`         ${c.detail}`);
@@ -1116,9 +1224,9 @@ async function main() {
     L.push('-'.repeat(72));
     L.push(`  ${opt.runs} run(s) of ${opt.durationMs} ms each  (run 0 = cold, rest = warm)`);
     L.push(`  command per run:`);
-    L.push(`    BLACKGLASS_LOG=<out>/logs/run-N.log \\`);
-    L.push(`    BLACKGLASS_EXIT_AFTER_MS=${opt.durationMs} \\`);
-    if (opt.backend) L.push(`    BLACKGLASS_BACKEND=${opt.backend} \\`);
+    L.push(`    TERMINAL_FENSTER_LOG=<out>/logs/run-N.log \\`);
+    L.push(`    TERMINAL_FENSTER_EXIT_AFTER_MS=${opt.durationMs} \\`);
+    if (opt.backend) L.push(`    TERMINAL_FENSTER_BACKEND=${opt.backend} \\`);
     L.push(`    ${opt.bin} open ${opt.url}`);
     L.push(`  RSS sampled every ${opt.sampleMs} ms over the process tree`);
     L.push(`  results -> ${opt.out}`);
@@ -1146,7 +1254,7 @@ async function main() {
   if (!opt.keepLogs) await fs.rm(logsDir, { recursive: true, force: true });
 
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const name = `blackglass-bench-${stamp}${opt.label ? '-' + opt.label : ''}.json`;
+  const name = `terminal-fenster-bench-${stamp}${opt.label ? '-' + opt.label : ''}.json`;
   const jsonPath = path.join(opt.out, name);
 
   const report = {
@@ -1179,16 +1287,18 @@ async function main() {
       warm: 'runs 1..n-1 — launched after a previous run of the same binary, so the ' +
             'Electron framework and Chromium are already in the page cache.',
       spawn_to_first_frame_ms:
-        'wall clock from spawn() of the blackglass process to the timestamp of its ' +
+        'wall clock from spawn() of the terminal-fenster process to the timestamp of its ' +
         '"first-frame" log line. Crosses the process boundary; both sides read the same ' +
         'Unix millisecond clock.',
       fps_steady_state:
-        '(frames - 1) / (time from first frame to end of the bounded window). Excludes ' +
-        'load time, so it reflects the pipeline rather than the page.',
-      last_encode_ms_and_last_wire_bytes:
-        'the FINAL frame only. The CLI logs no per-frame series, so no percentile over ' +
-        'frames is available from the current binary.',
-      rss: 'sum of per-process RSS across the blackglass process tree, sampled by ps. ' +
+        '(completed terminal presentations - 1) / (time from first frame to end of the ' +
+        'bounded window). Excludes load time and does not overcount socket frames that ' +
+        'the core coalesces before presenting.',
+      presentation_distribution:
+        'nearest-rank p50/p99 over every completed terminal presentation in a bounded ' +
+        'run. Encode time excludes the terminal write; presentation gaps are measured ' +
+        'after each stdout flush and therefore include output backpressure.',
+      rss: 'sum of per-process RSS across the terminal-fenster process tree, sampled by ps. ' +
            'Chromium helpers share pages, so the sum is an upper bound.',
     },
     summary: summarize(runs),

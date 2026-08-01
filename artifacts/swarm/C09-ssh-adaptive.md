@@ -1,7 +1,7 @@
 # C09 — SSH Adaptive Transport
 
 **Mission:** specify in-band bandwidth/latency measurement, the quality/fps adaptation ladder,
-frame-dropping policy, and reconnect, for BlackGlass over SSH.
+frame-dropping policy, and reconnect, for Terminal-Fenster over SSH.
 
 **Status:** design spec. Every number below is either measured on this machine, taken from a
 named prior artifact, or computed from a formula that is validated against our one real
@@ -35,7 +35,7 @@ process death to B08.
    Both are carried through every table below.
 4. **Drop frame rate before resolution.** A browser is read, not watched. Downscaling blurs text,
    which is the entire payload; a slideshow of sharp text beats smooth mush (§5.2).
-5. **Change `q=2` to `q=1` on the frame path** (`crates/bg-term/src/kitty.rs:130`). `q=2`
+5. **Change `q=2` to `q=1` on the frame path** (`crates/tf-term/src/kitty.rs:130`). `q=2`
    suppresses errors as well as acknowledgements, so a terminal that rejects a frame tells us
    nothing and the screen silently diverges forever. This is C01 defect D1, and adaptive
    transport is where it actually bites.
@@ -128,7 +128,7 @@ rounding error. Use bracketing.
 
 ### 2.3 The marker primitive already exists
 
-`crates/bg-term/src/kitty.rs:225` is exactly the marker:
+`crates/tf-term/src/kitty.rs:225` is exactly the marker:
 
 ```rust
 pub fn support_query(id: u32) -> Vec<u8>     // ESC _ G i=<id>,s=1,v=1,a=q,t=d,f=24;AAAA ESC \
@@ -171,7 +171,7 @@ one per marker — and nothing else.
 
 ### 2.5 Frame acknowledgement and the `q=2` problem
 
-`crates/bg-term/src/kitty.rs:130` emits `a=T,f=24,t=d,q=2` on every frame. The kitty `q` key has
+`crates/tf-term/src/kitty.rs:130` emits `a=T,f=24,t=d,q=2` on every frame. The kitty `q` key has
 three levels: `q=0` reply always, `q=1` suppress success but **report errors**, `q=2` suppress
 everything including errors.
 
@@ -190,10 +190,10 @@ third, tagged with the frame's own image id — trivially distinguishable from m
 This is the one thing that stops C09 being implementable today, and it is a core-file change I am
 not making.
 
-`crates/bg-term/src/caps.rs:92-120` reads terminal replies with a blocking `read_reply` against a
+`crates/tf-term/src/caps.rs:92-120` reads terminal replies with a blocking `read_reply` against a
 deadline. That is correct for a one-shot startup handshake and unusable in steady state, because
 in steady state marker replies arrive **interleaved with the user's keystrokes on the same fd**.
-`crates/bg-term/src/input.rs` has no APC branch at all (C01 defect D3), so today an incoming
+`crates/tf-term/src/input.rs` has no APC branch at all (C01 defect D3), so today an incoming
 `ESC _ G i=…;OK ESC \` is decoded as an Escape keypress followed by literal text typed into the
 page.
 
@@ -356,7 +356,7 @@ every pair of frames. Our 54 KB frame:
 At 100 Mbit / 100 ms the link carries 223 fps, the engine can produce 60, and the pacer delivers
 **9.57** — a **6.3× loss**, entirely self-inflicted. At 1 Gbit / 250 ms it is 15× off. The rule
 costs nothing at 1 Mbit (2.21 vs 2.23) because there the link genuinely is the constraint; it is
-catastrophic exactly where BlackGlass should look best.
+catastrophic exactly where Terminal-Fenster should look best.
 
 ### 4.2 The rule
 
@@ -696,27 +696,27 @@ Ordered by whether C09 is implementable without them.
 
 **Blocking:**
 
-1. `crates/bg-term/src/input.rs` — **add a terminal-reply demultiplexer.** A state machine
+1. `crates/tf-term/src/input.rs` — **add a terminal-reply demultiplexer.** A state machine
    recognising APC (`ESC _ … ESC \`) and CSI responses, routing them to a transport channel and
    passing all other bytes to the existing key decoder. Without this, marker replies are decoded
    as keystrokes and MBDT cannot exist. Also closes C01 defect D3 (keystroke injection). One fix,
    two problems.
-2. `crates/bg-term/src/kitty.rs:130` — **`q=2` → `q=1`** on the frame path. Restores the error
+2. `crates/tf-term/src/kitty.rs:130` — **`q=2` → `q=1`** on the frame path. Restores the error
    channel that §6.4's repair rule and §5.5's down-trigger both depend on. C01 defect D1.
 
 **Needed for full function:**
 
 3. `apps/cli/src/main.rs:404-411, 670` — **detach the engine and adopt an existing socket.** Turns
    every reconnect from R-B (lose all page state) into R-A (sub-second, state intact). See §7.2.
-4. `crates/bg-proto/src/lib.rs` — transport telemetry in the event stream: `drain_rate_ewma`,
+4. `crates/tf-proto/src/lib.rs` — transport telemetry in the event stream: `drain_rate_ewma`,
    `rtt_ewma`, `rung`, `bytes_outstanding`, drop counters by class. Needed for §6.5 and for any
    field diagnosis of a slow link.
-5. `crates/bg-term/src/caps.rs` — expose `detect()` for **re-invocation on reconnect** (§7.4 step
+5. `crates/tf-term/src/caps.rs` — expose `detect()` for **re-invocation on reconnect** (§7.4 step
    4). It is currently shaped as a startup-only path.
 
 **Nice to have:**
 
-6. `crates/bg-term/src/kitty.rs` — a `marker(id)` alias for `support_query(id)`. Purely naming;
+6. `crates/tf-term/src/kitty.rs` — a `marker(id)` alias for `support_query(id)`. Purely naming;
    the function is already exactly right, and a caller reading `support_query` in the frame hot
    path will reasonably wonder why capability detection runs every frame.
 

@@ -3,7 +3,7 @@
 **Status:** Draft for commander review
 **Date:** 2026-07-31
 **Machine:** macOS 26.1 (build 25B78), Apple M4, arm64, Homebrew 6.0.11-32-gee47dad, rustc 1.93.0, node v24.11.1
-**Scope:** how a user gets `blackglass` onto their machine without us shipping 276 MiB of Chromium inside a cargo crate — acquisition, integrity, pinning, codesigning, Homebrew, and a clean uninstall.
+**Scope:** how a user gets `terminal-fenster` onto their machine without us shipping 276 MiB of Chromium inside a cargo crate — acquisition, integrity, pinning, codesigning, Homebrew, and a clean uninstall.
 
 Every number below was measured on this machine in this session, or read out of a primary source at a cited path. Anything I could not execute is marked **UNVERIFIED** and nothing is built on top of it.
 
@@ -17,7 +17,7 @@ Every number below was measured on this machine in this session, or read out of 
 
 | Component | Exact size | How obtained |
 |---|---:|---|
-| `target/release/blackglass` | **619,424 B** (605 KiB) | `ls -la target/release/blackglass` |
+| `target/release/terminal-fenster` | **619,424 B** (605 KiB) | `ls -la target/release/terminal-fenster` |
 | `Electron.app` (as shipped by npm, untrimmed) | **276 MiB** | `du -sh .../electron/dist/Electron.app` |
 | `electron/dist` (app + licences + version) | 295 MiB | `du -sh node_modules/electron/dist` |
 | `apps/engine/node_modules` (everything npm put there) | 309 MiB | `du -sh apps/engine/node_modules` |
@@ -69,20 +69,20 @@ The `Electron Framework.framework` is the same: `flags=0x20002(adhoc,linker-sign
 ### 0.4 Our own binary
 
 ```
-$ codesign -dv target/release/blackglass
-Identifier=blackglass-9a83d9e6a502de54
+$ codesign -dv target/release/terminal-fenster
+Identifier=terminal-fenster-9a83d9e6a502de54
 Format=Mach-O thin (arm64)
 Signature=adhoc          TeamIdentifier=not set
 
-$ otool -L target/release/blackglass
+$ otool -L target/release/terminal-fenster
 	/usr/lib/libiconv.2.dylib
 	/usr/lib/libSystem.B.dylib
 
-$ shasum -a 256 target/release/blackglass
+$ shasum -a 256 target/release/terminal-fenster
 cddd7d49d214653c2069fefb4d501cf1d81e0de10a3267d96afebd076012c5e0
 ```
 
-Two dylib dependencies, both OS-provided, both at absolute `/usr/lib` paths. The CLI is fully relocatable and contains no Homebrew Cellar prefix. That matters more than it looks: Homebrew rewrites prefixes inside installed Mach-O files and then **re-signs them ad-hoc** (`/opt/homebrew/Library/Homebrew/keg_relocate.rb:285` → `codesign_patched_binary(file.to_s)`). Because `blackglass` contains no prefix strings to patch, Homebrew will not touch it and cannot invalidate a future Developer ID signature on it. Bottled Electron would not be so lucky, which is a second reason (§6.4) to stage Electron as a *resource* rather than let it through the relocation path.
+Two dylib dependencies, both OS-provided, both at absolute `/usr/lib` paths. The CLI is fully relocatable and contains no Homebrew Cellar prefix. That matters more than it looks: Homebrew rewrites prefixes inside installed Mach-O files and then **re-signs them ad-hoc** (`/opt/homebrew/Library/Homebrew/keg_relocate.rb:285` → `codesign_patched_binary(file.to_s)`). Because `terminal-fenster` contains no prefix strings to patch, Homebrew will not touch it and cannot invalidate a future Developer ID signature on it. Bottled Electron would not be so lucky, which is a second reason (§6.4) to stage Electron as a *resource* rather than let it through the relocation path.
 
 ---
 
@@ -99,12 +99,12 @@ Two dylib dependencies, both OS-provided, both at absolute `/usr/lib` paths. The
 ```mermaid
 flowchart TB
     subgraph CH["Channels (how the CLI arrives)"]
-      A["cargo install blackglass<br/>605 KiB, builds from source"]
-      B["brew install zent7x/tap/blackglass<br/>CLI + engine, one command"]
+      A["cargo install terminal-fenster<br/>605 KiB, builds from source"]
+      B["brew install zent7x/tap/terminal-fenster<br/>CLI + engine, one command"]
       C["curl | sh installer<br/>prebuilt CLI tarball"]
     end
     subgraph ACQ["Engine acquisition (one implementation)"]
-      D["blackglass setup<br/>fetch + verify + stage + trim"]
+      D["terminal-fenster setup<br/>fetch + verify + stage + trim"]
     end
     subgraph RT["Runtime"]
       E["locate_engine()<br/>apps/cli/src/main.rs:319"]
@@ -123,7 +123,7 @@ The rule: **the engine is never inside the distributed artifact of the CLI.** Ho
 
 Cargo has no post-install hook. The only code that runs during `cargo install` is `build.rs`, at *build* time. Downloading 122 MiB from a `build.rs` is wrong on four counts: it breaks `cargo vendor` and offline/air-gapped builds, it breaks reproducible builds, it runs before the user has consented to anything, and it puts a network fetch inside a context where `cargo` may be running as a build user with no `$HOME`.
 
-Therefore: **`cargo install blackglass` installs a 605 KiB binary that does not yet have an engine.** The first invocation must detect that and say so, in one line, with the exact command to fix it. `locate_engine()` already returns `None` cleanly and `main.rs:364` already produces `electron not found; set BLACKGLASS_ENGINE to the engine directory` — that message needs to become an actionable one (§10, item 4).
+Therefore: **`cargo install terminal-fenster` installs a 605 KiB binary that does not yet have an engine.** The first invocation must detect that and say so, in one line, with the exact command to fix it. `locate_engine()` already returns `None` cleanly and `main.rs:364` already produces `electron not found; set TERMINAL_FENSTER_ENGINE to the engine directory` — that message needs to become an actionable one (§10, item 4).
 
 ### 2.2 Crate-size sanity
 
@@ -218,15 +218,15 @@ Create `packaging/engine.lock.json` — the single source of truth, reviewed in 
 
 `bytes` is populated only for `darwin-arm64` because that is the only artifact whose size I measured. Do not guess the other three; fill them in when CI first downloads them.
 
-The four hashes above are transcribed from the upstream `SHASUMS256.txt` fetched in §3.2 and cross-checked against `checksums.json`. The two Linux entries are **UNVERIFIED as running software** — the hashes are authentic, but no Linux artifact was downloaded or executed in this session, and BlackGlass has never been run on Linux.
+The four hashes above are transcribed from the upstream `SHASUMS256.txt` fetched in §3.2 and cross-checked against `checksums.json`. The two Linux entries are **UNVERIFIED as running software** — the hashes are authentic, but no Linux artifact was downloaded or executed in this session, and Terminal-Fenster has never been run on Linux.
 
-### 3.5 `blackglass setup` — the acquisition command
+### 3.5 `terminal-fenster setup` — the acquisition command
 
 The verification must be a hard gate that fails closed and leaves nothing behind on failure. Concretely, the shape (and the exact commands a shell implementation would run, so this is testable before any Rust exists):
 
 ```sh
 #!/bin/sh
-# packaging/fetch-engine.sh — reference implementation of `blackglass setup`
+# packaging/fetch-engine.sh — reference implementation of `terminal-fenster setup`
 set -eu
 
 VER=43.2.0
@@ -235,13 +235,13 @@ case "$(uname -s)-$(uname -m)" in
   Darwin-x86_64) SLUG=darwin-x64;  SHA=1349ff423539cfe2b3edf1b14111e618db234d9ba761cbe97ea549edcb2e7a98 ;;
   Linux-x86_64) SLUG=linux-x64;    SHA=f77ca6ed67bbc68702b69b56ad499bca6ae090705ade7d04f0ac545e409dec68 ;;
   Linux-aarch64) SLUG=linux-arm64; SHA=50e1cdefbf8590e0d89b0276314a99c7b98e8eed732204c6f1a1c2a38376ed87 ;;
-  *) echo "blackglass: no engine build for $(uname -s)-$(uname -m)" >&2; exit 1 ;;
+  *) echo "terminal-fenster: no engine build for $(uname -s)-$(uname -m)" >&2; exit 1 ;;
 esac
 
 ZIP="electron-v${VER}-${SLUG}.zip"
 URL="https://github.com/electron/electron/releases/download/v${VER}/${ZIP}"
-DEST="${XDG_DATA_HOME:-$HOME/.local/share}/blackglass/engine"
-[ "$(uname -s)" = Darwin ] && DEST="$HOME/Library/Application Support/blackglass/engine"
+DEST="${XDG_DATA_HOME:-$HOME/.local/share}/terminal-fenster/engine"
+[ "$(uname -s)" = Darwin ] && DEST="$HOME/Library/Application Support/terminal-fenster/engine"
 
 # Staging dir is a sibling of DEST so the final move is atomic (same filesystem).
 STAGE="$(dirname "$DEST")/.staging.$$"
@@ -253,7 +253,7 @@ curl -fSL --proto '=https' --tlsv1.2 -o "$STAGE/$ZIP" "$URL"
 
 # Fail closed on mismatch. Note the two-space separator shasum expects.
 echo "$SHA  $STAGE/$ZIP" | shasum -a 256 -c - || {
-  echo "blackglass: engine checksum MISMATCH — refusing to install" >&2
+  echo "terminal-fenster: engine checksum MISMATCH — refusing to install" >&2
   exit 65
 }
 
@@ -273,7 +273,7 @@ rm -rf "$DEST"
 mkdir -p "$(dirname "$DEST")"
 mv "$STAGE" "$DEST"
 trap - EXIT
-echo "blackglass: engine ready at $DEST"
+echo "terminal-fenster: engine ready at $DEST"
 ```
 
 Four things in there are load-bearing and easy to get wrong:
@@ -333,7 +333,7 @@ Step 4 is the point of the exercise: it turns two independently-published manife
 
 ### 4.3 Refusing to run a mismatched engine
 
-`blackglass doctor` should print the engine's own version and compare it to the pin. `Electron --version` is cheap and correct:
+`terminal-fenster doctor` should print the engine's own version and compare it to the pin. `Electron --version` is cheap and correct:
 
 ```
 $ .../Electron.app/Contents/MacOS/Electron --version
@@ -356,7 +356,7 @@ $ xattr -w -r com.apple.quarantine "0083;6a6cccc8;Safari;" QT.app
 $ xattr -l QT.app/Contents/MacOS/QT
 com.apple.quarantine: 0083;6a6cccc8;Safari;
 
-$ ./QT.app/Contents/MacOS/QT      # direct exec — what blackglass does
+$ ./QT.app/Contents/MacOS/QT      # direct exec — what terminal-fenster does
 QTEST-RAN
 exit=0
 
@@ -375,8 +375,8 @@ There is a second reason we have been getting away with it: the extant install c
 It licenses shipping day one without an Apple Developer ID. It does **not** license calling the problem solved. Four things remain true:
 
 1. **`spctl` rejects the bundle today.** Any user or IT policy that assesses it — MDM, an EDR agent, a `codesign --verify` in a corporate build gate — sees a bundle whose signature does not verify. §0.3.
-2. **This is undocumented behaviour, not a contract.** Apple has tightened the exec path repeatedly. A macOS 27 that extends full assessment to `posix_spawn` of quarantined Mach-O files would break every BlackGlass install simultaneously, with no warning and no fix short of a signed release. That is an unhedged single point of catastrophic failure.
-3. **Hardened runtime is a prerequisite for other things we will want** — TCC prompts that name *BlackGlass* rather than *Electron*, camera/microphone access, and any future `.app`-shaped distribution.
+2. **This is undocumented behaviour, not a contract.** Apple has tightened the exec path repeatedly. A macOS 27 that extends full assessment to `posix_spawn` of quarantined Mach-O files would break every Terminal-Fenster install simultaneously, with no warning and no fix short of a signed release. That is an unhedged single point of catastrophic failure.
+3. **Hardened runtime is a prerequisite for other things we will want** — TCC prompts that name *Terminal-Fenster* rather than *Electron*, camera/microphone access, and any future `.app`-shaped distribution.
 4. **The framework is `Sealed Resources=none`.** Re-signing is not cosmetic; it is what makes the bundle a bundle.
 
 **Recommendation: ship unsigned in 0.1.0, and treat "obtain a Developer ID and sign" as a release-blocker for 0.2.0, not a nice-to-have.** Say so in the README so nobody is surprised by a Gatekeeper dialog on a future macOS.
@@ -423,7 +423,7 @@ codesign --force --timestamp --options runtime \
          --sign "$CERT" "$APP"
 
 # Sign the CLI too — it is the thing the user actually invokes.
-codesign --force --timestamp --options runtime --sign "$CERT" target/release/blackglass
+codesign --force --timestamp --options runtime --sign "$CERT" target/release/terminal-fenster
 
 # This must now pass. Today it does not (§0.3).
 codesign --verify --deep --strict --verbose=2 "$APP"
@@ -432,10 +432,10 @@ codesign --verify --deep --strict --verbose=2 "$APP"
 Notarization takes a zip or a disk image, not a loose binary:
 
 ```sh
-ditto -c -k --keepParent "$APP" /tmp/blackglass-engine.zip
+ditto -c -k --keepParent "$APP" /tmp/terminal-fenster-engine.zip
 
-xcrun notarytool submit /tmp/blackglass-engine.zip \
-  --keychain-profile "BLACKGLASS_NOTARY" --wait
+xcrun notarytool submit /tmp/terminal-fenster-engine.zip \
+  --keychain-profile "TERMINAL_FENSTER_NOTARY" --wait
 
 # Staple the app bundle so it validates offline. A bare CLI binary
 # CANNOT be stapled — that is a format limitation, not an oversight.
@@ -445,7 +445,7 @@ xcrun stapler validate "$APP"
 spctl -a -vvv -t exec "$APP"   # expect: accepted, source=Notarized Developer ID
 ```
 
-**`xcrun stapler` cannot staple a standalone Mach-O executable.** `target/release/blackglass` gets signed and notarized (notarization covers it inside the submitted archive) but its ticket must be fetched online on first run. For a Homebrew-installed CLI this is invisible; for a `curl | sh` tarball on a machine that is offline at first launch, it is a real, if rare, failure mode. Package the CLI and engine in **one** notarized archive so the stapled engine ticket covers the pair.
+**`xcrun stapler` cannot staple a standalone Mach-O executable.** `target/release/terminal-fenster` gets signed and notarized (notarization covers it inside the submitted archive) but its ticket must be fetched online on first run. For a Homebrew-installed CLI this is invisible; for a `curl | sh` tarball on a machine that is offline at first launch, it is a real, if rare, failure mode. Package the CLI and engine in **one** notarized archive so the stapled engine ticket covers the pair.
 
 **UNVERIFIED, entire subsection:** no Developer ID certificate exists on this machine (`TeamIdentifier=not set` everywhere), so none of the `codesign --sign`, `notarytool`, or `stapler` commands above were executed. They are transcribed from the Apple and Electron documented procedure and must be proven in CI before 0.2.0 ships.
 
@@ -455,7 +455,7 @@ spctl -a -vvv -t exec "$APP"   # expect: accepted, source=Notarized Developer ID
 
 ### 6.1 Formula, not cask; own tap, not homebrew-core
 
-- **Formula.** BlackGlass is a CLI on `$PATH`. Casks install `.app` bundles into `/Applications` and are wrong here.
+- **Formula.** Terminal-Fenster is a CLI on `$PATH`. Casks install `.app` bundles into `/Applications` and are wrong here.
 - **Own tap** (`zent7x/homebrew-tap`). homebrew-core has a strong preference for building from source and against formulae that download large precompiled third-party binaries at install time; a 122 MiB Chromium resource is exactly the shape it resists. A third-party tap has no such constraint, and `brew tap` is one extra word for the user. Do not spend weeks arguing with core reviewers over a resource we cannot build from source on a 5.5 GiB disk anyway.
 
 ### 6.2 A quarantine fact that removes a whole class of worry
@@ -474,19 +474,19 @@ $ grep -n quarantine /opt/homebrew/Library/Homebrew/download_strategy.rb
 (no matches)
 ```
 
-Quarantine application lives entirely in the **cask** code path (`cask/installer.rb:271,274` pass `quarantine: quarantine?` into `Download`). The formula download strategy never applies `com.apple.quarantine`. So a Homebrew-installed BlackGlass engine arrives unquarantined — the §5.1 exec-path escape is not even needed on this channel. A GitHub-release tarball a user downloads **in a browser** is the channel where quarantine bites, which is a further argument for making Homebrew the recommended path.
+Quarantine application lives entirely in the **cask** code path (`cask/installer.rb:271,274` pass `quarantine: quarantine?` into `Download`). The formula download strategy never applies `com.apple.quarantine`. So a Homebrew-installed Terminal-Fenster engine arrives unquarantined — the §5.1 exec-path escape is not even needed on this channel. A GitHub-release tarball a user downloads **in a browser** is the channel where quarantine bites, which is a further argument for making Homebrew the recommended path.
 
 ### 6.3 The formula
 
 ```ruby
-# zent7x/homebrew-tap/Formula/blackglass.rb
+# zent7x/homebrew-tap/Formula/terminal-fenster.rb
 class Blackglass < Formula
   desc "Chromium-class browser that renders as pixels inside your terminal"
-  homepage "https://github.com/zent7x/blackglass"
-  url "https://github.com/zent7x/blackglass/archive/refs/tags/v0.1.0.tar.gz"
+  homepage "https://github.com/zent7x/terminal-fenster"
+  url "https://github.com/zent7x/terminal-fenster/archive/refs/tags/v0.1.0.tar.gz"
   sha256 "<sha256 of the release tarball>"
   license any_of: ["MIT", "Apache-2.0"]
-  head "https://github.com/zent7x/blackglass.git", branch: "main"
+  head "https://github.com/zent7x/terminal-fenster.git", branch: "main"
 
   depends_on "rust" => :build
 
@@ -541,16 +541,16 @@ class Blackglass < Formula
     # MANDATORY: the exe-relative fallback in locate_engine() does not survive
     # Homebrew's symlink. Verified — B10 §6.5. Without this env script,
     # `brew install` produces a binary that cannot find its own engine.
-    (bin/"blackglass").write_env_script libexec/"bin/blackglass",
-                                        BLACKGLASS_ENGINE: engine
+    (bin/"terminal-fenster").write_env_script libexec/"bin/terminal-fenster",
+                                        TERMINAL_FENSTER_ENGINE: engine
   end
 
   def caveats
     <<~EOS
-      BlackGlass needs a terminal with kitty graphics support for pixel
+      Terminal-Fenster needs a terminal with kitty graphics support for pixel
       rendering (Ghostty, kitty, WezTerm). Others fall back to Unicode
       half-blocks. Check yours with:
-        blackglass doctor
+        terminal-fenster doctor
 
       The bundled Chromium engine is not code-signed with a Developer ID
       in this release. See B10 §5.
@@ -560,9 +560,9 @@ class Blackglass < Formula
   test do
     # Must not need a TTY: `doctor` has a non-TTY branch that still resolves
     # and prints the engine path (apps/cli/src/main.rs:105-108).
-    assert_match "blackglass doctor", shell_output("#{bin}/blackglass doctor 2>&1", 1)
-    assert_match "engine:", shell_output("#{bin}/blackglass doctor 2>&1", 1)
-    refute_match "NOT FOUND", shell_output("#{bin}/blackglass doctor 2>&1", 1)
+    assert_match "terminal-fenster doctor", shell_output("#{bin}/terminal-fenster doctor 2>&1", 1)
+    assert_match "engine:", shell_output("#{bin}/terminal-fenster doctor 2>&1", 1)
+    refute_match "NOT FOUND", shell_output("#{bin}/terminal-fenster doctor 2>&1", 1)
 
     # The engine is the pinned version and runs without Node.
     electron = libexec/"engine/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron"
@@ -571,7 +571,7 @@ class Blackglass < Formula
 end
 ```
 
-The `test do` block is designed around a constraint I verified: `blackglass doctor` exits **1** and prints `status: NOT A TTY` under CI, but it *still* prints the resolved engine path first. That makes engine resolution testable in a headless runner, which is the one thing most likely to silently regress.
+The `test do` block is designed around a constraint I verified: `terminal-fenster doctor` exits **1** and prints `status: NOT A TTY` under CI, but it *still* prints the resolved engine path first. That makes engine resolution testable in a headless runner, which is the one thing most likely to silently regress.
 
 ### 6.4 Why `resource`, not a bottle
 
@@ -579,7 +579,7 @@ A bottle would put Electron under Homebrew's relocation pass, and `keg_relocate.
 
 ### 6.5 The engine-discovery bug — verified, and it blocks the formula
 
-`locate_engine()` (`apps/cli/src/main.rs:319-352`) tries three strategies in order: `$BLACKGLASS_ENGINE`, the baked-in `CARGO_MANIFEST_DIR` dev layout, and finally an exe-relative walk of up to four parents looking for `<base>/engine/node_modules/.bin/electron`.
+`locate_engine()` (`apps/cli/src/main.rs:319-352`) tries three strategies in order: `$TERMINAL_FENSTER_ENGINE`, the baked-in `CARGO_MANIFEST_DIR` dev layout, and finally an exe-relative walk of up to four parents looking for `<base>/engine/node_modules/.bin/electron`.
 
 **The exe-relative strategy cannot work under Homebrew.** Two measurements:
 
@@ -596,24 +596,24 @@ $ ./linkdir/ce-link
 /private/tmp/.../scratchpad/linkdir/ce-link      <-- the SYMLINK, not the target
 ```
 
-So a user running `/opt/homebrew/bin/blackglass` gets `current_exe() == /opt/homebrew/bin/blackglass`, and the four-parent walk probes `/opt/homebrew/bin/engine`, `/opt/homebrew/engine`, `/opt/engine`, `/engine`. None exist. The engine is at `/opt/homebrew/Cellar/blackglass/0.1.0/libexec/engine` and is never found.
+So a user running `/opt/homebrew/bin/terminal-fenster` gets `current_exe() == /opt/homebrew/bin/terminal-fenster`, and the four-parent walk probes `/opt/homebrew/bin/engine`, `/opt/homebrew/engine`, `/opt/engine`, `/engine`. None exist. The engine is at `/opt/homebrew/Cellar/terminal-fenster/0.1.0/libexec/engine` and is never found.
 
 Two independent fixes; the formula above takes the first, which needs no core change:
 
-1. **`write_env_script` sets `BLACKGLASS_ENGINE`.** Verified safe for a raw-mode TTY program: `extend/pathname.rb:349-352` emits `#!/bin/bash` + `KEY="value" exec "target" "$@"`. Because it `exec`s, the PID is preserved, the controlling terminal is inherited, and `TtyGuard`'s signal and panic restore paths are unaffected.
+1. **`write_env_script` sets `TERMINAL_FENSTER_ENGINE`.** Verified safe for a raw-mode TTY program: `extend/pathname.rb:349-352` emits `#!/bin/bash` + `KEY="value" exec "target" "$@"`. Because it `exec`s, the PID is preserved, the controlling terminal is inherited, and `TtyGuard`'s signal and panic restore paths are unaffected.
 2. **Canonicalise in the core** — `std::fs::canonicalize(exe)` before the parent walk. Better long-term (it fixes `curl | sh` installs into symlinked prefixes too), but it is a change to `apps/cli/src/main.rs`, which I do not own. §10, item 2.
 
 ### 6.6 The packaged layout, validated against the real binary
 
-I staged the exact layout the formula produces (symlinks instead of a 276 MiB copy, to respect the disk budget) and ran the real `blackglass`:
+I staged the exact layout the formula produces (symlinks instead of a 276 MiB copy, to respect the disk budget) and ran the real `terminal-fenster`:
 
 ```
 stage/engine/src/main.js
 stage/engine/node_modules/electron            -> (the real electron dir)
 stage/engine/node_modules/.bin/electron       (the 2-line exec shim)
 
-$ BLACKGLASS_ENGINE=$PWD/stage/engine target/release/blackglass doctor
-blackglass doctor 0.1.0
+$ TERMINAL_FENSTER_ENGINE=$PWD/stage/engine target/release/terminal-fenster doctor
+terminal-fenster doctor 0.1.0
   status: NOT A TTY -- run this from an interactive terminal.
   engine: /private/tmp/.../stage/engine/node_modules/.bin/electron
 
@@ -644,7 +644,7 @@ v43.2.0
 
 ### 7.3 `LICENSES.chromium.html` stays
 
-19,956,019 B, and it is 8% of the shipped payload. It is also the Chromium/Electron third-party attribution notice, and both the MIT licence on Electron (`node_modules/electron/LICENSE`, present, verified) and the BSD-style licences of Chromium's dependencies require the notices travel with the binary. **Ship it.** Do not gzip it into unreadability; a `blackglass licenses` subcommand that prints its path is a reasonable ergonomic compromise.
+19,956,019 B, and it is 8% of the shipped payload. It is also the Chromium/Electron third-party attribution notice, and both the MIT licence on Electron (`node_modules/electron/LICENSE`, present, verified) and the BSD-style licences of Chromium's dependencies require the notices travel with the binary. **Ship it.** Do not gzip it into unreadability; a `terminal-fenster licenses` subcommand that prints its path is a reasonable ergonomic compromise.
 
 Note for §10: `Cargo.toml:9` declares `license = "MIT OR Apache-2.0"` but **no `LICENSE` file exists in the repo** (`ls LICENSE*` → no match). Shipping a Homebrew formula with `license any_of: ["MIT", "Apache-2.0"]` against a tree with no licence text is a defect `brew audit` may well flag, and it is wrong regardless.
 
@@ -657,7 +657,7 @@ $ ls -la node_modules/.bin/
 electron -> ../electron/cli.js
 ```
 
-That means the shipped product would need a Node runtime on the user's machine, and would put a Node process between `blackglass` and Chromium — an extra PID that complicates the kill path at `main.rs:670` (`self.child.kill()` would signal Node, not Chromium; `cli.js` forwards SIGINT/SIGTERM/SIGUSR2 but nothing else).
+That means the shipped product would need a Node runtime on the user's machine, and would put a Node process between `terminal-fenster` and Chromium — an extra PID that complicates the kill path at `main.rs:670` (`self.child.kill()` would signal Node, not Chromium; `cli.js` forwards SIGINT/SIGTERM/SIGUSR2 but nothing else).
 
 Replacing that symlink with the two-line `exec` shim removes Node from the runtime entirely and makes `child.kill()` hit Chromium's own PID. All three launch modes were tested:
 
@@ -673,15 +673,15 @@ $ ./shimtest/electron-shim --version                   → v43.2.0  (exec shim)
 
 ## 8. Uninstall that leaves nothing behind
 
-### 8.1 What BlackGlass actually leaves on disk — measured
+### 8.1 What Terminal-Fenster actually leaves on disk — measured
 
 | Path | Size now | Created by | Currently removed? |
 |---|---:|---|---|
 | `~/Library/Application Support/Electron/` | **4.9 MiB** | Electron default userData | **No** |
 | `~/Library/Caches/electron/` | **116 MiB** | `@electron/get` download cache | No (build-time only) |
-| `$TMPDIR/blackglass-<pid>-<nanos>/` | ~0 | `main.rs:393-397` | Only on graceful exit |
-| `$BLACKGLASS_LOG` | user-chosen | `main.rs:33-42` | No (opt-in, user's file) |
-| Cellar / `~/.cargo/bin/blackglass` | 605 KiB | install channel | Yes, by the package manager |
+| `$TMPDIR/terminal-fenster-<pid>-<nanos>/` | ~0 | `main.rs:393-397` | Only on graceful exit |
+| `$TERMINAL_FENSTER_LOG` | user-chosen | `main.rs:33-42` | No (opt-in, user's file) |
+| Cellar / `~/.cargo/bin/terminal-fenster` | 605 KiB | install channel | Yes, by the package manager |
 
 ### 8.2 The `Application Support/Electron` finding is a privacy defect, not a tidiness one
 
@@ -702,56 +702,56 @@ Three separate problems, one cause:
 
 1. **Uninstall cannot clean it** without deleting a directory that might belong to some other developer's Electron app.
 2. **Collision.** Any other unbranded Electron app on the machine shares this profile. Our cookies mix with theirs.
-3. **Surprise.** A user who uninstalls BlackGlass reasonably expects their browsing cookies to go with it. They will not, and they will not know where to look.
+3. **Surprise.** A user who uninstalls Terminal-Fenster reasonably expects their browsing cookies to go with it. They will not, and they will not know where to look.
 
 Fix (core file, §10 item 3): in `apps/engine/src/main.js`, before `app.whenReady()`:
 
 ```js
-app.setName('BlackGlass');
-app.setPath('userData', path.join(app.getPath('appData'), 'BlackGlass', 'engine-profile'));
+app.setName('Terminal-Fenster');
+app.setPath('userData', path.join(app.getPath('appData'), 'Terminal-Fenster', 'engine-profile'));
 ```
 
 Then everything lives under one removable root and uninstall becomes truthful.
 
 ### 8.3 The socket-directory leak
 
-`main.rs:676-677` removes `socket_path` and `socket_dir`, but from `shutdown()`, not from a `Drop` impl. On `SIGKILL`, a panic that escapes the hook, or a terminal that vanishes, `$TMPDIR/blackglass-<pid>-<nanos>/` survives. It is a 0700 empty directory — small, but it accumulates, and a stale `engine.sock` in a predictable location is exactly the sort of thing A09's threat model cares about.
+`main.rs:676-677` removes `socket_path` and `socket_dir`, but from `shutdown()`, not from a `Drop` impl. On `SIGKILL`, a panic that escapes the hook, or a terminal that vanishes, `$TMPDIR/terminal-fenster-<pid>-<nanos>/` survives. It is a 0700 empty directory — small, but it accumulates, and a stale `engine.sock` in a predictable location is exactly the sort of thing A09's threat model cares about.
 
-Two mitigations: move the cleanup into `impl Drop for Session`, and have `blackglass setup` / `uninstall` sweep `$TMPDIR/blackglass-*` on the way through. The first is a core change (§10 item 5); the second is free.
+Two mitigations: move the cleanup into `impl Drop for Session`, and have `terminal-fenster setup` / `uninstall` sweep `$TMPDIR/terminal-fenster-*` on the way through. The first is a core change (§10 item 5); the second is free.
 
-### 8.4 `blackglass uninstall`
+### 8.4 `terminal-fenster uninstall`
 
 Uninstall must be *honest*: it must name every path, distinguish "our data" from "your data", and never silently delete browsing state.
 
 ```sh
-$ blackglass uninstall --dry-run
-blackglass 0.1.0 — the following would be removed:
+$ terminal-fenster uninstall --dry-run
+terminal-fenster 0.1.0 — the following would be removed:
 
-  engine  (229 MiB)  ~/Library/Application Support/blackglass/engine
+  engine  (229 MiB)  ~/Library/Application Support/terminal-fenster/engine
   cache   (116 MiB)  ~/Library/Caches/electron
-  temp    (0 B)      /var/folders/.../blackglass-*  (3 stale dirs)
+  temp    (0 B)      /var/folders/.../terminal-fenster-*  (3 stale dirs)
 
   KEPT unless you pass --purge:
-  profile (4.9 MiB)  ~/Library/Application Support/BlackGlass/engine-profile
+  profile (4.9 MiB)  ~/Library/Application Support/Terminal-Fenster/engine-profile
                      ^ cookies, local storage, HSTS state from pages you visited
 
   NOT ours — remove with your package manager:
-                     /opt/homebrew/bin/blackglass  (brew uninstall blackglass)
+                     /opt/homebrew/bin/terminal-fenster  (brew uninstall terminal-fenster)
 ```
 
 ```sh
-$ blackglass uninstall --purge      # engine + cache + temp + profile
-$ blackglass uninstall --engine-only # just the 229 MiB, keep everything else
+$ terminal-fenster uninstall --purge      # engine + cache + temp + profile
+$ terminal-fenster uninstall --engine-only # just the 229 MiB, keep everything else
 ```
 
 The corresponding shell truth, so the command is auditable and a user can do it by hand:
 
 ```sh
-# macOS, full removal after `brew uninstall blackglass`
-rm -rf "$HOME/Library/Application Support/blackglass"
-rm -rf "$HOME/Library/Application Support/BlackGlass"   # profile, post-fix
+# macOS, full removal after `brew uninstall terminal-fenster`
+rm -rf "$HOME/Library/Application Support/terminal-fenster"
+rm -rf "$HOME/Library/Application Support/Terminal-Fenster"   # profile, post-fix
 rm -rf "$HOME/Library/Caches/electron"
-rm -rf "${TMPDIR:-/tmp}"/blackglass-*
+rm -rf "${TMPDIR:-/tmp}"/terminal-fenster-*
 # Pre-fix installs only — inspect before deleting, this dir may not be ours:
 #   ~/Library/Application Support/Electron
 ```
@@ -773,12 +773,12 @@ Every claim in this document that can be re-checked mechanically, should be:
 | Downloaded zip matches pin | `shasum -a 256 -c packaging/engine.sha256` | §3.5 |
 | npm pin is exact, not caret | `jq -e '.dependencies.electron == "43.2.0"' apps/engine/package.json` | §4.1 |
 | Engine version matches pin | `"$ELECTRON" --version \| grep -qx v43.2.0` | §4.3 |
-| Packaged layout resolves | `BLACKGLASS_ENGINE=… blackglass doctor \| grep -q 'engine: '` | §6.6 |
+| Packaged layout resolves | `TERMINAL_FENSTER_ENGINE=… terminal-fenster doctor \| grep -q 'engine: '` | §6.6 |
 | No Node in the chain | `file engine/node_modules/.bin/electron \| grep -qv Node` | §7.4 |
 | Trim did not break launch | `"$ELECTRON" --version` after locale removal | §7.1 |
 | Signature verifies (0.2.0+) | `codesign --verify --deep --strict "$APP"` | §5.3 |
 | Notarised (0.2.0+) | `spctl -a -t exec "$APP"` → `accepted` | §5.3 |
-| Uninstall is complete | `blackglass uninstall --purge && find ~ -name 'blackglass*' -maxdepth 6` | §8.4 |
+| Uninstall is complete | `terminal-fenster uninstall --purge && find ~ -name 'terminal-fenster*' -maxdepth 6` | §8.4 |
 
 All of these run without a TTY and without a display, which is the constraint the whole project is operating under.
 
@@ -798,17 +798,17 @@ Per the file-ownership rule, these are described, not made. Ordered by how much 
    ```
    Without this, the exe-relative discovery is dead on every symlinked install prefix, Homebrew included (§6.5, measured). The formula works around it with `write_env_script`, but the workaround should not be load-bearing.
 
-3. **`apps/engine/src/main.js`** — `app.setName('BlackGlass')` and an explicit `app.setPath('userData', …)`. Fixes a real browsing-data leak into a generically-named shared directory and is the precondition for an honest uninstall (§8.2, measured).
+3. **`apps/engine/src/main.js`** — `app.setName('Terminal-Fenster')` and an explicit `app.setPath('userData', …)`. Fixes a real browsing-data leak into a generically-named shared directory and is the precondition for an honest uninstall (§8.2, measured).
 
 4. **`apps/cli/src/main.rs:364-368`** — make the not-found error actionable:
    ```
-   blackglass: no engine found.
-     run  `blackglass setup`             to download it (116 MiB), or
-     set  BLACKGLASS_ENGINE=<dir>        to point at an existing one
+   terminal-fenster: no engine found.
+     run  `terminal-fenster setup`             to download it (116 MiB), or
+     set  TERMINAL_FENSTER_ENGINE=<dir>        to point at an existing one
    ```
    This is the first thing every `cargo install` user will see (§2.1).
 
-5. **`apps/cli/src/main.rs:354-360`** — move socket cleanup into `impl Drop for Session` so `$TMPDIR/blackglass-*` does not survive an ungraceful exit (§8.3).
+5. **`apps/cli/src/main.rs:354-360`** — move socket cleanup into `impl Drop for Session` so `$TMPDIR/terminal-fenster-*` does not survive an ungraceful exit (§8.3).
 
 6. **Repo root** — add `LICENSE-MIT` and `LICENSE-APACHE`. `Cargo.toml:9` claims `MIT OR Apache-2.0` and neither file exists (§7.3).
 
@@ -834,4 +834,4 @@ The good news is that the same investigation produced the fix and proved it. The
 
 Concretely, in order: pin `electron` to `43.2.0` exactly (one character, protects every measurement in the repo); land `std::fs::canonicalize` in `locate_engine`; replace `.bin/electron` with the `exec` shim; then write the formula in §6.3 against a layout that has already been tested. Ship 0.1.0 unsigned — the §5.1 measurement shows direct `exec` bypasses Gatekeeper's bundle assessment today — but book the Developer ID as a 0.2.0 release-blocker, because that behaviour is undocumented and would break every install at once if Apple tightens it.
 
-And fix `app.setName('BlackGlass')` before the first public install, not after. Right now every page a user visits writes cookies into a directory called `Electron` that we cannot safely delete on uninstall, and that is not a bug you get to fix retroactively on someone else's disk.
+And fix `app.setName('Terminal-Fenster')` before the first public install, not after. Right now every page a user visits writes cookies into a directory called `Electron` that we cannot safely delete on uninstall, and that is not a bug you get to fix retroactively on someone else's disk.

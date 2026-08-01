@@ -1,12 +1,20 @@
-# BlackGlass
+# Terminal-Fenster
 
 A real Chromium browser that renders as **pixels inside your terminal** — not a text-mode
 approximation, not a screenshot viewer. Chromium 150 renders offscreen; a Rust core turns
 frames into terminal graphics and turns your keyboard and mouse back into browser input.
 
 ```
-blackglass open news.ycombinator.com
+terminal-fenster open news.ycombinator.com
 ```
+
+Website: [terminal-fenster.com](https://terminal-fenster.com)
+
+## Open source
+
+Licensed under [MIT](LICENSE). Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+This is experimental software: see [Known gaps](#known-gaps) and [RELEASE.md](RELEASE.md) before
+treating it as production-ready.
 
 ## Status: working vertical slice, not shippable yet
 
@@ -15,10 +23,17 @@ This is honest about where it is. What follows is measured, not aspirational.
 **Verified working**
 
 - Real pages render in Ghostty via the Kitty graphics protocol, auto-detected.
-- Click, hover, ordered typing, and scroll all reach the page — verified by reading actual
-  frame pixels, not by trusting an event log (`tests/e2e/input-injection.js`, 9/9).
+- Click, hover, ordered typing, scroll, resize, focus pacing, and idle wake-up all work —
+  verified with real frame pixels, page state, and scheduler state
+  (`tests/e2e/input-injection.js`, 16/16).
 - The terminal is restored on exit, `ctrl+q`, panic, SIGINT/SIGTERM/SIGHUP.
-- 101 unit tests, 9 end-to-end checks.
+- The headless engine probe now asserts process-tree cleanup; its reference `about:blank`
+  upper-bound RSS is about 281 MB with no surviving Chromium helpers.
+- Renderer crashes produce a visible, escape-sanitized reload banner instead of a silent freeze.
+- A 16-tool MCP server drives an isolated Terminal-Fenster engine through accessibility refs and
+  the private engine socket; its real-Chromium suite passes 28/28.
+- 161 Rust tests, 21 JS frame/security/compositor/discovery/privacy tests, 16 engine E2E checks, 14 browser fixtures,
+  24 MCP protocol checks, and 28 live MCP checks.
 
 **Not done** — see [Known gaps](#known-gaps). The adversarial review
 (`artifacts/swarm/F10-adversarial-report.md`) returned **NO-SHIP**, and it was right to.
@@ -28,17 +43,70 @@ This is honest about where it is. What follows is measured, not aspirational.
 - macOS or Linux. Developed and measured on macOS 26.1 / Apple M4.
 - A terminal with the Kitty graphics protocol for full fidelity: **Ghostty**, **kitty**, or
   **WezTerm**. iTerm2 also speaks it. Anything else falls back to low-fidelity Unicode.
-- Rust 1.80+, Node 18+.
+- Rust 1.80+, Node 22.12+ (required by the pinned Electron runtime).
+
+## Install from a checkout
+
+```bash
+./install.sh
+```
+
+The source installer builds with the lockfile, stages and materializes Electron before touching
+the active install, validates the pinned runtime, then atomically swaps
+`~/.local/share/terminal-fenster` and links `~/.local/bin/terminal-fenster`. A failed upgrade restores the
+previous prefix. Set `TERMINAL_FENSTER_REUSE_ENGINE=1` to reuse this checkout's already-materialized
+engine for an offline/same-machine install. Until a signed release tag exists, do not present the
+`curl | bash` form as a reproducible binary release.
+
+```bash
+./uninstall.sh                 # preserve browser profiles
+./uninstall.sh --purge-profile # also permanently remove Terminal-Fenster profiles
+```
+
+The uninstaller refuses unmarked/unrelated prefixes and never removes the shared Electron cache.
+
+## Build a prebuilt release archive
+
+```bash
+tools/package-release.sh
+```
+
+This produces a host-native `.tar.gz` and SHA-256 sidecar under `dist/`. The archive contains a
+minimal engine launcher and the pinned Electron runtime, so installing it needs neither Rust,
+Node, npm, a source checkout, nor network access. The packager independently verifies Electron
+and its free-codecs FFmpeg artifact, includes all Cargo/Electron/Chromium license material,
+checks every extracted payload file, then installs and launches from the archive layout. On
+macOS the local artifact is ad-hoc signed for structural verification only; it is not a public
+release until Developer-ID signing and notarization pass the gate in `RELEASE.md`.
+
+The `Unsigned release candidates` workflow runs the same native packager on macOS arm64/x64 and
+Linux arm64/x64 for an exact version tag or manual dispatch. It retains archives and sidecars as
+short-lived CI artifacts only; it deliberately cannot publish a GitHub release or turn an ad-hoc
+macOS signature into a production signature.
+
+## Quick start
+
+```bash
+./install.sh                 # one-shot install (Rust + Node required once)
+terminal-fenster setup             # verify engine + terminal, get next steps
+terminal-fenster open example.com  # interactive (Ghostty / kitty / WezTerm / iTerm2)
+terminal-fenster open example.com --headless   # scripts, CI, agents — any terminal
+```
+
+**macOS Terminal.app** cannot render pages (no graphics protocol). Use a Kitty-capable
+terminal for interactive browsing, or `--headless` everywhere else.
 
 ## Build and run
 
 ```bash
-git clone <repo> && cd blackglass
+git clone <repo> && cd terminal-fenster
 cargo build --release                    # builds the terminal core
-cd apps/engine && npm install && cd ../.. # downloads Electron (~300 MB)
+cd apps/engine && npm ci                  # installs the pinned Electron package
+./node_modules/.bin/electron --version    # materializes Chromium (~300 MB); required once
+cd ../..
 
-./target/release/blackglass doctor        # what your terminal can do
-./target/release/blackglass open example.com
+./target/release/terminal-fenster doctor        # what your terminal can do
+./target/release/terminal-fenster open example.com
 ```
 
 `doctor` first. It tells you which backend you get and, more usefully, *why*, including the
@@ -63,23 +131,75 @@ raw bytes your terminal replied with:
 | Key | Action |
 |---|---|
 | `ctrl+q` | quit |
+| `ctrl+c` | copy selection |
 | `ctrl+r` | reload |
-| `alt+left` / `alt+right` | back / forward |
+| `ctrl+l` | open URL (omnibox on the status row) |
+| `ctrl+f` | find in page (`ctrl+n` / `ctrl+p` next/prev) |
+| `ctrl+=` / `ctrl+-` / `ctrl+0` | zoom in / out / reset |
+| `ctrl+left` / `ctrl+right` | back / forward (`alt+arrow` where the terminal delivers it) |
 | mouse | click, hover, drag, scroll — forwarded to the page |
+
+## Agent / MCP (any harness)
+
+Terminal-Fenster ships a **stdio MCP server** with 16 browser tools (navigate, snapshot, click,
+type, screenshot, …). It works with Cursor, Claude Code, Cline, Windsurf, or any client
+that speaks MCP over stdio.
+
+```bash
+./install.sh
+terminal-fenster mcp-config          # prints JSON — save to .cursor/mcp.json or .mcp.json
+terminal-fenster mcp-config --claude # one-liner for Claude Code
+terminal-fenster mcp                 # run the server directly (agents launch this)
+```
+
+**Cursor** — create `.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "terminal-fenster": {
+      "command": "/path/to/terminal-fenster",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+Use `terminal-fenster mcp-config --json` to print the exact path for your install.
+
+**Claude Code:**
+
+```bash
+claude mcp add terminal-fenster --scope project -- $(which terminal-fenster) mcp
+```
+
+Full tool list, security model, and env vars: [`packages/mcp/README.md`](packages/mcp/README.md).
+
+## Agent control (details)
+
+[`packages/mcp/`](packages/mcp/) starts an isolated engine and exposes 16 browser tools over
+stdio: navigate, accessibility snapshot/find, click/type/key/scroll, screenshots, history,
+resize, wait, status, and close.
+Semantic inspection uses Electron's in-process debugger API proxied through the existing 0600
+Unix socket; it opens no DevTools TCP port. See [`packages/mcp/README.md`](packages/mcp/README.md)
+for client configuration.
 
 ## How it works
 
 ```
 your terminal
      │  tty in raw mode, owned by an RAII guard that restores it on every exit path
-[blackglass]        Rust: capability detection, compositor, input decoding, Kitty encoding
+[terminal-fenster]        Rust: capability detection, compositor, input decoding, Kitty encoding
      │  unix socket, 0600, inside a 0700 dir — no network listener is ever opened
 [engine host]       Electron: offscreen Chromium, sandbox ON
 ```
 
-Frames are raw BGRA from Chromium's `paint` event. The core converts to RGB, deflates, and
-transmits with the Kitty graphics protocol. Commands and events are JSON on the same socket;
-frames are binary, length-prefixed, because a 5 MB bitmap through JSON would be indefensible.
+Frames are raw BGRA from Chromium's `paint` event. The core retains an RGB canvas and uses a
+hybrid Kitty compositor: a runtime-probed POSIX shared-memory base for dense local repaints,
+and zlib-compressed position-bound tile overlays for sparse damage. SSH, multiplexers, a failed
+probe, or four unconsumed shared objects fall back to direct/zlib transmission. Commands and
+events are JSON on the private socket; frames are binary and length-prefixed because a 5 MB
+bitmap through JSON would be indefensible.
 
 Architecture decisions with their measurements and their reversal costs live in
 [`docs/adr/`](docs/adr/). ADR-0001 records the engine choice *and* the argument it was
@@ -87,26 +207,30 @@ originally defended with, which later measurement proved false.
 
 ## Measured performance
 
-Ghostty 1.3.1, macOS 26.1, Apple M4 (10 cores, 24 GB), release build.
+Ghostty 1.3.1, macOS 26.1, Apple M4 (10 cores, 24 GB), release build. These are real
+core-to-terminal runs, not engine-only paint rates:
 
-| Page | Viewport | Frame in | Wire out | Ratio | Encode |
-|---|---|---|---|---|---|
-| example.com | 2482×814 | 8,081,424 B | 53,999 B | 112× | 2.61 ms |
-| example.com | 1513×1073 | 6,493,828 B | 46,282 B | 105× | 8.24 ms |
-| example.com | 714×481 | 1,373,768 B | 23,162 B | 44× | 1.89 ms |
-| Hacker News | 2482×814 | 8,081,424 B | 292,833 B | 21× | 7.00 ms |
+| Workload | Viewport | Steady received FPS | Trailing FPS | Final image wire | Encode |
+|---|---:|---:|---:|---:|---:|
+| Local 80×80 animation, default 4×4-cell mosaic | 2108×1332 | 46.5 | 54 | 2,540 B | 0.18 ms |
+| Full-viewport repaint, direct/zlib monolithic baseline | 2108×1406 | 7.2 | 7 | 82,086 B | 2.68 ms |
 
-Time to first frame: 600 ms / 802 ms / 1576 ms across three runs on example.com; 3228 ms on
-Hacker News including real network load.
-
-Engine frame production sustains **60 fps** (p50 gap 16.65 ms, p99 19.94 ms) on a repainting
-page — but note that is measured at the engine, not through the terminal. See gaps.
+The localized workload is the intended fast path: Chromium sends damage, the core updates a
+retained RGB canvas, and only intersecting Kitty tiles cross the terminal boundary. The
+direct full-viewport baseline shows the old bottleneck honestly: encoding is only 2.68 ms, but
+base64/APC terminal presentation held throughput near 7 fps. The current build runtime-probes
+Kitty shared memory and keeps an 8,891,544-byte 2108×1406 RGB frame behind a sub-160-byte PTY
+command in OS-level tests; its real Ghostty FPS is deliberately not claimed until the release
+gate is rerun. The older logs above count engine frames received; benchmark schema v2 now also
+records completed presentations plus BGRA conversion, encode, wire, and presentation-gap p50/p99
+so coalescing or hidden conversion work cannot inflate future results.
 
 Reproduce with `benchmarks/`, or directly:
 
 ```bash
-BLACKGLASS_LOG=/tmp/bg.log BLACKGLASS_EXIT_AFTER_MS=6000 \
-  ./target/release/blackglass open https://example.com
+node benchmarks/bench.mjs --page local-damage
+TERMINAL_FENSTER_SHM=0 TERMINAL_FENSTER_TILE_CELLS=1x1 \
+  node benchmarks/bench.mjs --page repaint --label direct-control
 ```
 
 ## Terminal support
@@ -119,7 +243,7 @@ BLACKGLASS_LOG=/tmp/bg.log BLACKGLASS_EXIT_AFTER_MS=6000 \
 | kitty, WezTerm | Kitty | yes | yes | expected, **untested** |
 
 Every "yes" above comes from the terminal answering a protocol query, not from matching
-`$TERM`. Detection is in `crates/bg-term/src/caps.rs`.
+`$TERM`. Detection is in `crates/tf-term/src/caps.rs`.
 
 Note the iTerm2 row: it reports SGR-Pixels mouse mode *permanently reset*, so coordinates
 arrive as cells. Treating those as pixels would collapse the whole page into its top-left
@@ -128,8 +252,13 @@ corner — the pointer mapping handles both, with tests pinning the difference.
 ## Testing
 
 ```bash
-cargo test                          # 101 unit tests, no terminal needed
-node tests/e2e/input-injection.js   # 9 end-to-end input checks against real pixels
+cargo test                          # 161 Rust tests, no terminal needed
+cd apps/engine && npm test          # 7 frame-scheduler / security-policy unit tests
+cd ../.. && node tests/e2e/input-injection.js   # 16 real-pixel / page / security checks
+apps/engine/node_modules/.bin/electron tests/fixtures/verify-fixtures.js  # 14 fixtures
+cd packages/mcp && npm test         # 14 compositor/discovery/privacy + 24 protocol checks
+npm run test:live                   # 28 tools against real Chromium
+tools/package-layout-test.sh        # manifest tamper + prebuilt install/layout smoke test
 ```
 
 The e2e test speaks the engine wire protocol directly, so it runs without a graphics
@@ -140,32 +269,55 @@ colour under the cursor, and clicking one target must *not* activate another.
 
 Ordered by how much they matter.
 
-1. **Damage tracking is unproven and unused.** The engine writes a dirty rect into every
-   frame header and then sends the entire bitmap anyway. Worse, both original spikes forced
-   full-viewport damage by construction, so we have never observed whether Chromium reports
-   small rects at all. This is the largest performance gap and it gates the SSH story.
-2. **SSH is designed but not implemented or measured.** No adaptive transport exists.
-3. **Single tab.** No tab strip, omnibox, history, bookmarks, downloads, or profiles.
-4. **No agent interfaces wired up.** CDP broker, MCP server, Playwright attach and the
-   automation CLI are specified in `artifacts/swarm/` but not integrated.
+1. **The hybrid compositor still needs eyes on a graphics terminal.** Capture-side damage,
+   retained RGB, the dense-base/sparse-overlay switch, exact encoder round trips, real POSIX
+   shared-memory objects, stale-overlay deletion, and bounded fallback are tested. On-screen
+   placement and teardown after switching between shared bases and tile overlays still need a
+   Ghostty run before release.
+2. **Full-viewport motion needs a fresh measurement.** The direct fallback measured about
+   7 fps at 2108×1406. The new local `t=s` path removes pixels, compression, base64, and APC
+   chunking from the PTY, but no honest displayed-FPS number exists yet. `RELEASE.md` makes
+   20 displayed fps and a 2× improvement over direct control the go/no-go threshold.
+3. **SSH adaptive transport: MBDT, byte-credit, fps ladder, and OSR scale downs are wired**
+   on the direct Kitty path (`{"t":"fps"}` + resize + pointer remap + Kitty `c`/`r` stretch).
+   WAN measurement still open; `TERMINAL_FENSTER_LAG_BUDGET_MS` (default 100) tunes the credit
+   window.
+4. **Single tab.** No tab strip, history UI, or bookmarks. Bottom-row omnibox (`ctrl+l`),
+   find-in-page (`ctrl+f`), and `ctrl+left`/`right` history exist; named profiles via
+   `--profile`.
 5. **Sixel and iTerm2 backends are unimplemented.** If detection picks one, the CLI
    explicitly degrades to Unicode and `doctor` says so rather than silently faking it.
-6. **`onPaint` copies each frame three times** (~1.45 GB/s at 60 fps) — B04's finding.
-7. **No visual confirmation.** The development machine was locked, so `screencapture`
-   returned black. Correctness is established by protocol handshake, byte arithmetic, and
-   pixel assertions instead. A human should still look at it.
+6. **`onPaint` still copies via `toBitmap()`** — B04's finding; shared-texture path is not
+   shipped.
+7. **Public artifacts are not signed or notarized.** The macOS arm64 archive pipeline is proven
+   locally, but other target archives and a genuinely clean-machine install remain release gates.
+8. **The Electron memory floor is still high.** A short 1280×800 `about:blank` probe measured
+   280.6 MB peak/steady summed RSS (an upper bound because shared pages are double-counted). The
+   idle frame throttle works, but a separately verified low-memory mode is not shipped.
 
 ## Security posture
 
 - Chromium's sandbox stays **on**; web content gets no Node integration and context
   isolation is enforced.
+- Camera, microphone, location, clipboard, device, and every other privileged page permission
+  are denied by explicit session handlers. External-application URL schemes are blocked before
+  navigation; denied permissions, schemes, and popups produce a sanitized terminal notice.
 - Page-derived text (titles, URLs) is sanitized before it can reach the terminal — a
   malicious title otherwise smuggles escape sequences through us and can drive OSC 52 to
-  overwrite your clipboard. C0, C1, DEL and separators are all stripped.
-- The control socket is 0600 inside a 0700 directory. No port is opened. There is no CDP
-  endpoint exposed today.
+  overwrite your clipboard. C0/C1 controls, bidi overrides/isolates, and invisible formatting
+  characters are stripped; the final chrome line is column-clipped before the autowrap cell.
+- The control socket is 0600 inside a 0700 directory. MCP CDP calls use Electron's
+  in-process debugger through that socket; no DevTools TCP endpoint is exposed.
+- Initial URLs travel over that socket rather than process arguments. Diagnostic and MCP audit
+  logs are 0600, refuse symlinks, and structurally redact URL secrets; agent snapshots redact
+  every editable value and agent navigation cannot open local files, blobs, or custom schemes.
+- Shared-memory frame objects are 0600, carry unique collision-checked names, are unlinked by
+  the terminal or our guard, and are capped at four outstanding objects before direct fallback.
 - The frame reader caps message size, so a bad length prefix cannot turn into a 4 GiB
   allocation.
+
+Run [`tools/release-check.sh`](tools/release-check.sh), then close the manual terminal and
+distribution gates in [`RELEASE.md`](RELEASE.md) before tagging anything.
 
 See `artifacts/swarm/A09-threat-model.md` and `F01-security-review.md`.
 

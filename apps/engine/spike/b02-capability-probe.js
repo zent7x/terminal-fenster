@@ -681,7 +681,7 @@ app.whenReady().then(async () => {
 
   // <select> renders as a SEPARATE Chromium widget (TextureInfo.widgetType can be 'popup').
   // If that widget is never composited into our frame, every dropdown on the web is
-  // invisible in BlackGlass. Detected without screenshots by diffing the bitmap region
+  // invisible in Terminal-Fenster. Detected without screenshots by diffing the bitmap region
   // directly below the select, before and after the click.
   await stage('popup-select-dropdown', {
     ms: 6000,

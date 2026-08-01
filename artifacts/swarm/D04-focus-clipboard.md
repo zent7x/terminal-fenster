@@ -4,12 +4,12 @@
 implementation, and define the exact user-consent model for a page touching the clipboard.
 
 **Ownership note.** Per the swarm rules this document writes to no source file. Every defect below
-lives in commander-owned code (`crates/bg-term/`, `apps/cli/`, `apps/engine/src/main.js`) and is
+lives in commander-owned code (`crates/tf-term/`, `apps/cli/`, `apps/engine/src/main.js`) and is
 therefore *described*, with the exact change, exact test vector, and exact file:line — not applied.
 The one artifact I created is a throwaway probe harness outside the repo, at
-`/private/tmp/claude-501/-Users-adeebbashir/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/d04probe/`,
-which path-depends on `crates/bg-term` read-only and is reproduced verbatim in §9 so it can be
-re-run or promoted into `crates/bg-term/src/input.rs` tests by whoever owns that file.
+`/private/tmp/claude-501/-Users-builder/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/d04probe/`,
+which path-depends on `crates/tf-term` read-only and is reproduced verbatim in §9 so it can be
+re-run or promoted into `crates/tf-term/src/input.rs` tests by whoever owns that file.
 
 ---
 
@@ -20,8 +20,8 @@ Five findings, four of them measured on this machine against the shipped code.
 | # | Severity | Finding | Evidence |
 |---|---|---|---|
 | **F1** | **CRITICAL** | The input decoder has no OSC/DCS/APC/PM state. Any string-terminated reply arriving on stdin is decoded into individual **keystrokes and delivered to the page**. An `OSC 52` clipboard-read reply becomes the base64 of the user's clipboard typed into whatever input the page has focused. | §3.1, measured |
-| **F2** | **HIGH** | A pasted payload containing a literal `CSI 201~` truncates the paste in our decoder, and the bytes after it are parsed as input. I measured a paste synthesizing a **left mouse click at page coordinates the attacker chose**. A raw `0x11` in the same position exits BlackGlass (`main.rs:572`). | §3.2, measured |
-| **F3** | **HIGH** | Enabling `DECSET 2004` **disables Ghostty's copy/paste-attack protection** — verified from the shipped binary's own documentation for `clipboard-paste-bracketed-safe`, default `true`. The terminal has explicitly delegated paste safety to BlackGlass, and BlackGlass currently implements none. | §3.3, verified primary source |
+| **F2** | **HIGH** | A pasted payload containing a literal `CSI 201~` truncates the paste in our decoder, and the bytes after it are parsed as input. I measured a paste synthesizing a **left mouse click at page coordinates the attacker chose**. A raw `0x11` in the same position exits Terminal-Fenster (`main.rs:572`). | §3.2, measured |
+| **F3** | **HIGH** | Enabling `DECSET 2004` **disables Ghostty's copy/paste-attack protection** — verified from the shipped binary's own documentation for `clipboard-paste-bracketed-safe`, default `true`. The terminal has explicitly delegated paste safety to Terminal-Fenster, and Terminal-Fenster currently implements none. | §3.3, verified primary source |
 | **F4** | **HIGH** | Paste is delivered as synthetic per-character `char` key events (`main.rs:645`, `main.js:213`), not as a DOM `paste` event. Consequences: no `onpaste` handler ever fires; no size cap anywhere in the chain; an unterminated paste wedges input **permanently** with unbounded memory growth; no `\r\n` normalisation; a trailing newline is retyped as Enter, which implicitly submits forms. | §3.4, measured (wedge) |
 | **F5** | **MEDIUM** | `DECSET 1004` focus reporting is enabled (`tty.rs:152`) and decoded (`input.rs:270`) but then **discarded** (`main.rs:653`). The engine never learns about focus. This is the root cause of the async Clipboard API's `NotAllowedError: Document is not focused` risk in offscreen rendering, and it forfeits a free idle-power win. | §5 |
 
@@ -64,7 +64,7 @@ clipboard-paste-bracketed-safe = true
 ```
 
 This is the F3 finding stated by the vendor. The protection exists; it is switched off for any
-program that sets mode 2004; BlackGlass sets mode 2004 unconditionally at `tty.rs:153`.
+program that sets mode 2004; Terminal-Fenster sets mode 2004 unconditionally at `tty.rs:153`.
 
 Corroborating strings in the same binary confirm the enforcement path is real, not vestigial:
 
@@ -92,7 +92,7 @@ sides; only ST should be emitted by us (§4.2).
 
 ### 1.3 iTerm2 3.6.9 — clipboard policy, from the shipped binary
 
-iTerm2 is installed at `/Users/adeebbashir/Applications/iTerm.app` (not `/Applications`, which is why
+iTerm2 is installed at `$HOME/Applications/iTerm.app` (not `/Applications`, which is why
 earlier probes missed it), `CFBundleShortVersionString = 3.6.9`.
 
 ```
@@ -199,10 +199,10 @@ Two distinct consequences, and both matter.
 **Security.** This is A09's threat **T4** ("Exfiltration via OSC 52 read reply on our stdin"),
 promoted from theoretical to demonstrated against the current build. A09 §3 already establishes the
 correct doctrine — *"stdin is untrusted input"* — but the doctrine is not implemented in the steady-state
-decoder. The mitigating factor is that BlackGlass never *sends* `OSC 52 ; c ; ?`, so an attacker must
+decoder. The mitigating factor is that Terminal-Fenster never *sends* `OSC 52 ; c ; ?`, so an attacker must
 find another way to make the terminal emit one. That is a real constraint but not a guarantee: a
 multiplexer, a sibling process sharing the tty, a shell hook, a terminal that emits an unsolicited
-reply, or a future BlackGlass feature that queries the clipboard all produce the same bytes. Defence
+reply, or a future Terminal-Fenster feature that queries the clipboard all produce the same bytes. Defence
 belongs at the parser, which is one place, rather than at every possible source, which is unbounded.
 
 **Correctness, today, with no attacker.** The `APC` line above is a kitty graphics response. The
@@ -220,7 +220,7 @@ terminator; it falls into the `0x01..=0x1a` control range at `input.rs:189` and 
 The same arm maps `0x11` to **Ctrl+Q**, which `main.rs:572` treats as *quit the browser*, and `0x12`
 to Ctrl+R, *reload*. Any raw C0 byte that reaches `step_plain` is a browser command.
 
-**Fix (core-owned; `crates/bg-term/src/input.rs`).** Add a string-sequence arm to `step`:
+**Fix (core-owned; `crates/tf-term/src/input.rs`).** Add a string-sequence arm to `step`:
 
 ```rust
 match self.buf[1] {
@@ -270,7 +270,7 @@ is clickjacking with no iframe and no overlay: the "Confirm payment", "Allow", "
 and the session exits; `0x12` reloads.
 
 This is the CVE-2021-31701 / CVE-2021-37326 / CVE-2021-40147 family that A09 §1.2 already catalogues
-from the CyberArk *Don't Trust This Title* research, reproduced against BlackGlass's own decoder.
+from the CyberArk *Don't Trust This Title* research, reproduced against Terminal-Fenster's own decoder.
 
 The usual defence is that the terminal filters `CSI 201~` out of pasted data before bracketing it,
 and A06 §5 asserts kitty and Ghostty do. **I could not verify that claim in this mission** — driving
@@ -300,19 +300,19 @@ Neither rule requires the terminal to be trustworthy, which is the point.
 Verified in §1.1 from Ghostty's shipped documentation. `clipboard-paste-protection = true` prompts
 before pasting text that "appears unsafe … text with newlines", and
 `clipboard-paste-bracketed-safe = true` exempts pastes made while the program has bracketed paste
-mode on. BlackGlass sets `DECSET 2004` unconditionally (`tty.rs:153`) for the whole session.
+mode on. Terminal-Fenster sets `DECSET 2004` unconditionally (`tty.rs:153`) for the whole session.
 
 The exemption is correct terminal design. A shell with bracketed paste on does not execute a pasted
 newline, so the warning would be pure friction. But that reasoning **does not transfer to
-BlackGlass**, because of F4: we take the bracketed payload and retype it as per-character key events,
+Terminal-Fenster**, because of F4: we take the bracketed payload and retype it as per-character key events,
 so a pasted `\n` becomes a synthetic Enter after all. We have taken the exemption without honouring
 the premise it rests on.
 
 The exposure is concrete and chains with A09's headline attack. A09 §1.2A establishes that on
 Ghostty a page title is an unprompted clipboard-write primitive (`clipboard-write = allow`, verified
 §1.1) and notes that `clipboard-paste-protection` only warns on newlines. F3 removes even that
-warning for the entire duration of a BlackGlass session — including for text the user pastes into
-*other* windows later, if they copied it while BlackGlass had the terminal.
+warning for the entire duration of a Terminal-Fenster session — including for text the user pastes into
+*other* windows later, if they copied it while Terminal-Fenster had the terminal.
 
 **Fix.** Two parts, one of which is free.
 
@@ -320,11 +320,11 @@ The free part: fixing F4 (deliver a real `paste` ClipboardEvent instead of retyp
 restores the premise the exemption assumes, because a DOM paste event does not submit a form on a
 newline. That is the structural fix and it should be the primary one.
 
-The explicit part: BlackGlass must reimplement the protection it disabled, on the *outbound* side,
+The explicit part: Terminal-Fenster must reimplement the protection it disabled, on the *outbound* side,
 in §7's content gate — because the value we are protecting is not what the page receives, it is what
 the user's system clipboard holds when they later paste into a shell.
 
-Consider also emitting `DECRST 2004` when BlackGlass is backgrounded or suspended (`SIGTSTP`), so a
+Consider also emitting `DECRST 2004` when Terminal-Fenster is backgrounded or suspended (`SIGTSTP`), so a
 suspended session does not leave a shell running with paste protection silently disabled. The
 existing `RESTORE_SEQ` (`tty.rs:35`) already handles clean exit correctly; the gap is suspend/resume.
 
@@ -408,7 +408,7 @@ that save on blur) behaves as if the user never left. Sticky modifiers are unrec
 held down while the user switches away is never released, because the release event goes to the
 other window — the standard TUI bug, and focus-out is the standard place to clear it. The idle-power
 win is forfeited: `webContents.setFrameRate(60)` is set once at `main.js:115` and never lowered, so
-an unfocused BlackGlass keeps Chromium compositing at 60 fps behind another window. And most
+an unfocused Terminal-Fenster keeps Chromium compositing at 60 fps behind another window. And most
 importantly for this mission, focus is a **precondition of the async Clipboard API** — see §5.2.
 
 ---
@@ -468,7 +468,7 @@ Fallback when the terminal has no OSC 52 (Apple Terminal, verified): the write m
 surface `NotAllowedError` to the page — the same error Chromium raises when a clipboard write is
 denied, so pages already handle it. Feature detection is `Ms` in terminfo plus the capability probe;
 it must **not** be DA1 parameter `52`, because iTerm2's own binary says that claim is unreliable
-(§1.3). Absence of OSC 52 is also the case to surface in `blackglass doctor`.
+(§1.3). Absence of OSC 52 is also the case to surface in `terminal-fenster doctor`.
 
 ### 4.3 What triggers a write, and how the engine learns about it
 
@@ -493,7 +493,7 @@ Main applies §7's consent gate and, on grant, sends event type 2 to the CLI:
 The CLI re-applies the size cap (never trust the engine's cap — B06's IPC hardening treats the
 engine as a lower-trust peer), then calls `write_clipboard`. The payload crosses the socket already
 base64-encoded, which conveniently means the control-plane JSON never carries raw page text and
-`json_escape` (`bg-proto/src/lib.rs:106`) is never asked to escape a control character.
+`json_escape` (`tf-proto/src/lib.rs:106`) is never asked to escape a control character.
 
 There is a second, more robust signal available when the engine runs on a machine with a real
 desktop: Chromium has already written the text to the OS clipboard by the time the `copy` event
@@ -503,7 +503,7 @@ be headless and `clipboard.readText()` will return empty or throw. Never make it
 
 ### 4.4 OSC 52 READ — the verdict is never, in v1
 
-**BlackGlass must not emit `OSC 52 ; c ; ?` under any configuration in v1.** Not behind a flag, not
+**Terminal-Fenster must not emit `OSC 52 ; c ; ?` under any configuration in v1.** Not behind a flag, not
 with a deadline, not once at startup. This is a stronger position than A06 §6.2's "offer it behind an
 explicit opt-in flag with a 2-second deadline", and the evidence supports the stronger position:
 
@@ -523,13 +523,13 @@ And the upstream reference implementation says the same thing in its own words. 
 `write-clipboard write-primary read-clipboard-ask read-primary-ask`, with the note that disabling the
 read confirmation *"is a security risk as it means that any program, even the ones running on a
 remote server via SSH can read your clipboard"* (A06 §6.2, quoting `kitty/options/definition.py`).
-BlackGlass is exactly the "program running on a remote server" that warning is about (A07).
+Terminal-Fenster is exactly the "program running on a remote server" that warning is about (A07).
 
 The consequence for the parser is worth stating explicitly, because it is a nice property: since we
 never emit the request, **any** `OSC 52` on our stdin is unsolicited, and unsolicited means hostile
 or broken. F1's fix should therefore not merely drop it but count it separately
 (`stdin_osc52_reply_dropped_total`) as a tripwire. And there must remain **no base64 decoder in
-`bg-term`** — the absence is itself a structural guarantee that no code path can turn a clipboard
+`tf-term`** — the absence is itself a structural guarantee that no code path can turn a clipboard
 reply into a string.
 
 ### 4.5 The substitute: `navigator.clipboard.readText()` → gesture-mediated paste
@@ -598,7 +598,7 @@ focused by the window server, because there is no window. Chromium's async Clipb
 `navigator.clipboard.writeText()` with `NotAllowedError: Document is not focused` when the focus
 controller reports the page unfocused. If an offscreen `BrowserWindow` reports unfocused by default,
 then **every** page that uses the modern clipboard API — which is most "click to copy" buttons —
-fails in BlackGlass regardless of how good §4 is.
+fails in Terminal-Fenster regardless of how good §4 is.
 
 Whether `webContents.focus()` is sufficient to satisfy that check for an offscreen view in Electron
 43 / Chromium 150 is **UNVERIFIED** — it needs a running Electron, which needs the sandbox disabled
@@ -630,7 +630,7 @@ a paste can legitimately straddle a focus event on a slow link.
 
 ## 6. Bracketed paste: the corrected path
 
-### 6.1 Decoder changes (`crates/bg-term/src/input.rs`, core-owned)
+### 6.1 Decoder changes (`crates/tf-term/src/input.rs`, core-owned)
 
 Add three fields alongside `in_paste` / `paste_buf` (`input.rs:117-118`): a byte counter, a
 `last_byte_at: Instant`, and a `paste_seq: u64` used to tag the events for the F2 quarantine.
@@ -664,8 +664,8 @@ Replace the synthetic-keystroke command at `main.rs:645-651` with:
 {"t":"input","kind":"paste","text":"<normalised utf-8>"}
 ```
 
-The framing is unchanged — type 10, JSON, per `bg-proto/src/lib.rs:13`. `json_escape`
-(`bg-proto/src/lib.rs:106`) already handles the payload; after §6.1's control stripping there is
+The framing is unchanged — type 10, JSON, per `tf-proto/src/lib.rs:13`. `json_escape`
+(`tf-proto/src/lib.rs:106`) already handles the payload; after §6.1's control stripping there is
 nothing exotic left in it.
 
 ### 6.3 Engine: deliver a real paste event
@@ -710,13 +710,13 @@ what the user's shell does with it later.
 
 ### 7.1 Clipboard write — three provenance tiers
 
-**Tier U — user-initiated.** The user selected content in the page and pressed BlackGlass's copy
+**Tier U — user-initiated.** The user selected content in the page and pressed Terminal-Fenster's copy
 chord. The gesture is the consent. Write immediately, no prompt, no per-origin state; show a
 one-line status-bar confirmation (`copied 42 chars`) so the action is never silent.
 
 This tier is not optional, and it is worth explaining why. The terminal's own ⌘C copies the *rendered
-cells*, and BlackGlass's cells are pixels — the user would get nothing, or mojibake. BlackGlass must
-own copy, which means BlackGlass must own OSC 52 write. There is no configuration in which we can
+cells*, and Terminal-Fenster's cells are pixels — the user would get nothing, or mojibake. Terminal-Fenster must
+own copy, which means Terminal-Fenster must own OSC 52 write. There is no configuration in which we can
 opt out of this feature.
 
 **Tier G — page-initiated with transient user activation.** The page called
@@ -745,7 +745,7 @@ selected the bytes themselves.
 The gate exists because of F3. Ghostty's paste protection — the thing that would have caught this —
 is disabled for the entire session precisely because we hold mode 2004 (verified §1.1). We disabled
 it; we owe the user a replacement. And the replacement belongs on the write side, not the paste side,
-because the dangerous paste happens *later*, in a shell, possibly after BlackGlass has exited.
+because the dangerous paste happens *later*, in a shell, possibly after Terminal-Fenster has exited.
 
 Escalate to a blocking confirmation when the decoded payload contains any of `\n`, `\r`, `\x1b`, or
 any C0 control other than `\t`. The confirmation shows the first 200 characters with controls
@@ -755,7 +755,7 @@ sharing their terminal.
 
 Never rewrite the payload to make it pass. Stripping newlines from a page's clipboard write would
 silently corrupt legitimate multi-line copies (code snippets, addresses, SQL) and would teach users
-that BlackGlass mangles clipboards. Confirm or deny; do not edit.
+that Terminal-Fenster mangles clipboards. Confirm or deny; do not edit.
 
 Deny above **1 MiB** decoded with `NotAllowedError` and a status-bar note, per §4.2.
 
@@ -839,8 +839,8 @@ correct.
 Reproducing the measurements in this document — the probe harness, verbatim:
 
 ```rust
-// scratchpad/d04probe/src/main.rs ; Cargo.toml path-depends on crates/bg-term
-use bg_term::input::{Decoder, Event, KeyCode};
+// scratchpad/d04probe/src/main.rs ; Cargo.toml path-depends on crates/tf-term
+use tf_term::input::{Decoder, Event, KeyCode};
 fn line(label: &str, bytes: &[u8]) {
     let mut d = Decoder::default();
     let evs = d.decode(bytes);
@@ -884,7 +884,7 @@ confident guess.
 
 **P1 — Does an offscreen `BrowserWindow` satisfy Chromium's document-focused check after
 `webContents.focus()`?** This determines whether `navigator.clipboard.writeText()` works at all in
-BlackGlass (§5.2). Blocked: needs a running Electron, and Chromium children fail under the agent
+Terminal-Fenster (§5.2). Blocked: needs a running Electron, and Chromium children fail under the agent
 sandbox with `bootstrap_look_up … Permission denied`. Probe: load a data URL that calls
 `navigator.clipboard.writeText('x').then(()=>log('ok')).catch(e=>log(e.name+': '+e.message))`, once
 before and once after `wc.focus()`, and read the console over the existing event channel. Log-based,

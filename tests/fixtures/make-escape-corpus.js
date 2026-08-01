@@ -5,7 +5,7 @@
  *   node tests/fixtures/make-escape-corpus.js
  *
  * The corpus is the input side of the tty-safe projection test (A09 s1.3). Every entry is
- * a string that a hostile page can put into a sink BlackGlass renders to the terminal:
+ * a string that a hostile page can put into a sink Terminal-Fenster renders to the terminal:
  * document.title, location, a link, a filename, a console message, an alert.
  *
  * Encoding: payloads are UTF-16 code unit sequences, expressed as repeated segments so a
@@ -42,8 +42,8 @@ const CASES = [
     description:
       'ESC ] 5 2 ; c ; <base64> BEL. On Ghostty 1.3.1 clipboard-write defaults to allow, ' +
       'with no prompt, so an unsanitised title is a silent clipboard-write primitive.',
-    canary: 'BLACKGLASS_CANARY_OSC52',
-    segments: [U([ESC]), S(']52;c;' + b64('echo BLACKGLASS_CANARY_OSC52')), U([BEL]), S('SAFE-TAIL')],
+    canary: 'TERMINAL_FENSTER_CANARY_OSC52',
+    segments: [U([ESC]), S(']52;c;' + b64('echo TERMINAL_FENSTER_CANARY_OSC52')), U([BEL]), S('SAFE-TAIL')],
     mustStripCodeUnits: [0x1b, 0x07],
     mustSurviveSubstring: 'SAFE-TAIL',
     verify: 'pbcopy </dev/null before the run; pbpaste after must be empty'
@@ -57,8 +57,8 @@ const CASES = [
       'U+009D (OSC) ... U+009C (ST). Defeats any sanitiser that only strips 0x1B. ' +
       'Whether a UTF-8 terminal decodes C2 9D as C1 is terminal-specific and UNVERIFIED ' +
       'on Ghostty/iTerm2/Apple Terminal; strip it regardless, it costs nothing.',
-    canary: 'BLACKGLASS_CANARY_C1',
-    segments: [U([0x9d]), S('52;c;' + b64('echo BLACKGLASS_CANARY_C1')), U([0x9c]), S('SAFE-TAIL')],
+    canary: 'TERMINAL_FENSTER_CANARY_C1',
+    segments: [U([0x9d]), S('52;c;' + b64('echo TERMINAL_FENSTER_CANARY_C1')), U([0x9c]), S('SAFE-TAIL')],
     mustStripCodeUnits: [0x9d, 0x9c],
     mustSurviveSubstring: 'SAFE-TAIL'
   },
@@ -68,8 +68,8 @@ const CASES = [
     severity: 'critical',
     title: 'OSC 52 terminated by 7-bit ST instead of BEL',
     description: 'Same primitive, ESC \\ terminator. Parsers that only look for BEL miss it.',
-    canary: 'BLACKGLASS_CANARY_ST',
-    segments: [U([ESC]), S(']52;c;' + b64('echo BLACKGLASS_CANARY_ST')), U([ESC, 0x5c]), S('SAFE-TAIL')],
+    canary: 'TERMINAL_FENSTER_CANARY_ST',
+    segments: [U([ESC]), S(']52;c;' + b64('echo TERMINAL_FENSTER_CANARY_ST')), U([ESC, 0x5c]), S('SAFE-TAIL')],
     mustStripCodeUnits: [0x1b],
     mustSurviveSubstring: 'SAFE-TAIL'
   },
@@ -96,8 +96,8 @@ const CASES = [
       'PuTTY CVE-2021-33500, MobaXterm CVE-2021-28847, MinTTY CVE-2021-28848, ' +
       'ZOC CVE-2021-32198, Xshell CVE-2021-42095. Ghostty ships title-report=false, but ' +
       'that is the terminal being careful, not us.',
-    canary: 'BLACKGLASS_CANARY_T3',
-    segments: [U([ESC]), S(']2;echo BLACKGLASS_CANARY_T3'), U([BEL]), U([ESC]), S('[21t')],
+    canary: 'TERMINAL_FENSTER_CANARY_T3',
+    segments: [U([ESC]), S(']2;echo TERMINAL_FENSTER_CANARY_T3'), U([BEL]), U([ESC]), S('[21t')],
     mustStripCodeUnits: [0x1b, 0x07]
   },
   {
@@ -108,13 +108,13 @@ const CASES = [
     description:
       'CSI 201~ ends a bracketed paste early, so the remainder is treated as typed input ' +
       'rather than pasted text.',
-    canary: 'BLACKGLASS_CANARY_BP',
-    segments: [U([ESC]), S('[201~echo BLACKGLASS_CANARY_BP'), U([0x0a])],
+    canary: 'TERMINAL_FENSTER_CANARY_BP',
+    segments: [U([ESC]), S('[201~echo TERMINAL_FENSTER_CANARY_BP'), U([0x0a])],
     mustStripCodeUnits: [0x1b, 0x0a]
   },
   {
     id: 'dcs-sixel',
-    threat: 'BlackGlass-specific: collides with our own graphics stream',
+    threat: 'Terminal-Fenster-specific: collides with our own graphics stream',
     severity: 'high',
     title: 'DCS / sixel introducer inside untrusted text',
     description:
@@ -127,13 +127,13 @@ const CASES = [
   },
   {
     id: 'apc-kitty-graphics',
-    threat: 'BlackGlass-specific: collides with the kitty graphics backend',
+    threat: 'Terminal-Fenster-specific: collides with the kitty graphics backend',
     severity: 'high',
     title: 'APC / kitty graphics introducer inside untrusted text',
     description:
       'ESC _ G ... ESC \\. The kitty backend is our primary renderer, so a page that can ' +
       'emit APC can inject or truncate an image transmission. This case is not in the ' +
-      'usual terminal-injection literature; it exists because of what BlackGlass is.',
+      'usual terminal-injection literature; it exists because of what Terminal-Fenster is.',
     canary: null,
     segments: [U([ESC]), S('_Ga=T,f=24,s=1,v=1;AAAA'), U([ESC, 0x5c]), S('SAFE-TAIL')],
     mustStripCodeUnits: [0x1b],
@@ -423,7 +423,7 @@ function unitCount(segments) {
 }
 
 const corpus = {
-  schema: 'blackglass.escape-corpus/1',
+  schema: 'terminal-fenster.escape-corpus/1',
   generatedBy: 'tests/fixtures/make-escape-corpus.js',
   encoding: 'payload = concat over segments of (UTF-16 code units, repeated n times). ' +
             'u is a hex string, 4 hex digits per UTF-16 code unit, big-endian, no separator.',

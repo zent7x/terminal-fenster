@@ -81,7 +81,7 @@ Plus modifier bits (shift 4, alt 8, ctrl 16). That is the entire vocabulary. The
   from "gesture ended";
 * **no device class** — nothing distinguishes a $10 notched mouse wheel from a Magic Trackpad.
 
-Sibling `A06-input-research.md:490-493` and `crates/bg-term/src/input.rs:352-361` already decode
+Sibling `A06-input-research.md:490-493` and `crates/tf-term/src/input.rs:352-361` already decode
 exactly this and nothing more. The decoder is correct; there is simply no more information present.
 
 ### 1.2 Terminals *have* high-resolution data and deliberately keep it
@@ -127,7 +127,7 @@ seven scroll events for a single physical wheel movement (ghostty#4259, ghostty#
 ghostty discussion #3955 is titled, verbatim in substance, that mouse-based programs should
 probably receive only a single scroll signal.
 
-**Consequence for BlackGlass:** a fixed 120 px per received event is multiplied by an unknown,
+**Consequence for Terminal-Fenster:** a fixed 120 px per received event is multiplied by an unknown,
 per-terminal, per-device, user-configurable factor of roughly 1–7 before it reaches us. That is the
 actual defect — not the constant's value.
 
@@ -510,7 +510,7 @@ slow deliberate scrolling immediately earns full 120 px steps rather than being 
 
 ### 5.4 Why the EMA is load-bearing over SSH
 
-Sibling artifacts `A07-ssh-remote.md` and `C09-ssh-adaptive.md` establish that BlackGlass runs over
+Sibling artifacts `A07-ssh-remote.md` and `C09-ssh-adaptive.md` establish that Terminal-Fenster runs over
 SSH. Input arrival there is bursty: Nagle coalescing and RTT jitter deliver several notches in one
 packet after a pause, so raw `dt` alternates between ~0 ms and ~200 ms for a physically *uniform*
 gesture. Feeding raw `dt` into the curve would make the step oscillate between 16 px and 120 px —
@@ -698,7 +698,7 @@ Probes were run from `apps/engine` against the vendored Electron, with the agent
 (Chromium children cannot spawn under it — `bootstrap_look_up ... Permission denied`):
 
 ```sh
-cd /Users/adeebbashir/projects/blackglass/apps/engine
+cd $REPO/apps/engine
 ./node_modules/.bin/electron <probe>.js <mode>
 ```
 
@@ -742,7 +742,7 @@ const CEIL_FRAC:   f64 = 0.9;    // fraction of viewport height per event
 
 Local primary evidence: `/Applications/Ghostty.app/Contents/MacOS/ghostty +show-config --default
 --docs`; `apps/engine/node_modules/electron/electron.d.ts:8917,9790,9795,18346`;
-`crates/bg-term/src/input.rs:344-378`; `apps/cli/src/main.rs:629-640`;
+`crates/tf-term/src/input.rs:344-378`; `apps/cli/src/main.rs:629-640`;
 `apps/engine/src/main.js:194-202`; sibling artifact `artifacts/swarm/A06-input-research.md`.
 Live measurement: Electron 43.2.0 / Chromium 150.0.7871.129 OSR probes (Appendix A).
 

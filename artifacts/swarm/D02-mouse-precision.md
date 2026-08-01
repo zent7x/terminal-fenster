@@ -5,7 +5,7 @@
 menu, and cursor shape reporting.
 
 **Date:** 2026-07-31 · **Host:** macOS 26.1, Apple M4 · **Engine:** Electron 43.2.0 / Chromium
-150.0.7871.129 · **Baseline:** `cargo test` = 96 passing (70 `bg-term`, 14 `blackglass`, 12 `bg-proto`)
+150.0.7871.129 · **Baseline:** `cargo test` = 96 passing (70 `tf-term`, 14 `terminal-fenster`, 12 `tf-proto`)
 
 **Ownership:** this document is the only file D02 wrote. Every fix below is *described*, not applied.
 `crates/`, `apps/cli/`, and `apps/engine/src/main.js` belong to the commander.
@@ -24,7 +24,7 @@ menu, and cursor shape reporting.
 
 Two probe harnesses were built in the scratchpad (never in the repo) and driven the same Electron
 binary and the *same* `webPreferences` as `apps/engine/src/main.js`:
-`/private/tmp/claude-501/-Users-adeebbashir-projects/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/probe-main.js`
+`/private/tmp/claude-501/-Users-builder/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/probe-main.js`
 and `.../probe2.js`. Chromium children require `dangerouslyDisableSandbox` under the agent Bash
 sandbox, as the brief predicted.
 
@@ -84,7 +84,7 @@ part of the mapping is right and should not be changed.**
 
 ### 2.2 Are they physical or logical pixels?
 
-**Terminal-dependent, and nothing in BlackGlass accounts for it.**
+**Terminal-dependent, and nothing in Terminal-Fenster accounts for it.**
 
 Ghostty reports **device pixels**. Derivation from MEAS on this machine: cell = 17×37, grid =
 146×23, `CSI 14t` = 2482×851, and 146×17 = 2482, 23×37 = 851 exactly. A 17-*point* cell at 2×
@@ -123,7 +123,7 @@ window size with `deviceScaleFactor` left at its default of 1. See M-15.
 
 ## 3. The coordinate-frame defect: which viewport is authoritative
 
-`Capabilities::viewport_px()` (`crates/bg-term/src/caps.rs:73`) prefers `CSI 14t` over `TIOCGWINSZ`,
+`Capabilities::viewport_px()` (`crates/tf-term/src/caps.rs:73`) prefers `CSI 14t` over `TIOCGWINSZ`,
 and its doc comment at `caps.rs:70-72` asserts *"the ioctl excludes padding"*. The measurements say
 the two terminals **swap** which query means what:
 
@@ -184,7 +184,7 @@ exact multiple of the cell size.
 
 ### M-01 (High) — extended buttons become clicks on the page
 
-`decode_sgr_mouse` (`crates/bg-term/src/input.rs:353`) extracts the base button with `btn & 3` and
+`decode_sgr_mouse` (`crates/tf-term/src/input.rs:353`) extracts the base button with `btn & 3` and
 tests only `btn & 64` for wheel. Buttons 8–11 (`Cb` 128–131) have neither bit set, so they fall into
 the ordinary-button path with a truncated base.
 
@@ -220,7 +220,7 @@ forwards a bare `mouseMove`. Blink therefore reports `buttons === 0` to the page
 **PROBE** (`probe-main.js`, tests A and B; the page pushes `e.buttons` from a `mousemove` listener):
 
 ```
-PROBE A_drag_current_move_buttons  :: [0,0]     <- exactly what BlackGlass sends today
+PROBE A_drag_current_move_buttons  :: [0,0]     <- exactly what Terminal-Fenster sends today
 PROBE B_drag_with_leftbuttondown   :: [1]       <- modifiers:['leftbuttondown']
 ```
 
@@ -259,7 +259,7 @@ PROBE F_clickCount4                  :: "second paragraph here for triple click 
 Two rapid `clickCount:1` pairs produce **zero** `dblclick` events and leave `event.detail` at 1.
 Asserting `clickCount:2` on the second pair produces exactly one `dblclick` with `detail === 2` and
 selects the word. E2 is the architecturally important one: the same assertion works after a 1500 ms
-gap, proving there is **no server-side time window**. BlackGlass owns 100% of the double-click policy.
+gap, proving there is **no server-side time window**. Terminal-Fenster owns 100% of the double-click policy.
 `clickCount:4` behaves as 3, so clamping is safe.
 
 Today: no `dblclick` anywhere, no double-click-to-select-word, no triple-click-to-select-paragraph.
@@ -325,7 +325,7 @@ A right `mouseDown`+`mouseUp` pair fires both the DOM `contextmenu` event and El
 `webContents` `context-menu` event with full params. **`sendInputEvent({type:'contextMenu'})` fires
 nothing at all** — it is in Electron's accepted `type` list but is inert here. Do not use it.
 
-So pages that render their own menu already work; what is missing is that BlackGlass never learns a
+So pages that render their own menu already work; what is missing is that Terminal-Fenster never learns a
 menu was requested, and in offscreen rendering there is no native menu to fall back on. Spec in §6.3.
 
 ### M-09 (Med) — no cursor reporting, and the naive mapping is inverted
@@ -511,7 +511,7 @@ emission on a positive capability signal, not on `$TERM`. Ghostty's push/pop/que
 **Teardown.** A pointer shape left set outlives the process and follows the user into their shell —
 the same class of bug `RESTORE_SEQ` already guards against for images and mouse modes. Because
 push/pop is not universally available, the safe universal teardown is an explicit
-`\x1b]22;default\x1b\\` appended to `RESTORE_SEQ` (`crates/bg-term/src/tty.rs:27`). **That file is
+`\x1b]22;default\x1b\\` appended to `RESTORE_SEQ` (`crates/tf-term/src/tty.rs:27`). **That file is
 not mine to edit; the change is described here and the existing test at `tty.rs:223` should gain a
 matching assertion.**
 
@@ -527,7 +527,7 @@ Assertions worth making cheap and permanent (described, not written):
    pointer map from the frame rather than silently diverging (M-05).
 3. On `SIGWINCH`: re-detect geometry, send `{"t":"resize"}`, rebuild `PointerMap`, clear `held`.
 
-Unit tests (`bg-term`): a table-driven decode test over `Cb ∈ {0,1,2,3,16,20,32,33,35,64,65,66,67,128,
+Unit tests (`tf-term`): a table-driven decode test over `Cb ∈ {0,1,2,3,16,20,32,33,35,64,65,66,67,128,
 129,130,131,160,288}` asserting kind, button and modifiers for each — this is the test that would have
 caught M-01, M-07 and M-11, and its absence is why they are all still present at 96 green tests.
 Also a negative-parameter test for `CSI <0;-5;100M`.

@@ -170,6 +170,12 @@ class StdioServer {
         return await this.callTool(params.name, params.arguments || {});
       }
 
+      case 'resources/list':
+        return { resources: [] };
+
+      case 'prompts/list':
+        return { prompts: [] };
+
       default: {
         if (isNotification) return undefined; // unknown notifications are ignored, per spec
         const err = new Error(`Method not found: ${method}`);

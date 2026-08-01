@@ -8,12 +8,12 @@ is specified explicitly in §3.
 **Status of the underlying code:** there is **no agent RPC in the repository today**. `apps/cli`
 speaks only to the tty and the engine socket. Everything in this document is design-forward, and
 §12 lists precisely what that means for confidence. What *is* grounded is the loop it must live in
-(`apps/cli/src/main.rs:441-558`), the input decoder it must classify (`crates/bg-term/src/input.rs`),
-the terminal modes already enabled (`crates/bg-term/src/tty.rs:152-161`), and four measurements I
+(`apps/cli/src/main.rs:441-558`), the input decoder it must classify (`crates/tf-term/src/input.rs`),
+the terminal modes already enabled (`crates/tf-term/src/tty.rs:152-161`), and four measurements I
 took on this host (§1.3, §7.4).
 
 **File ownership:** I wrote only this file. Every change described for `apps/cli/src/main.rs`,
-`crates/bg-term/`, `crates/bg-proto/`, and `apps/engine/src/main.js` is described for the commander,
+`crates/tf-term/`, `crates/tf-proto/`, and `apps/engine/src/main.js` is described for the commander,
 not made by me.
 
 ---
@@ -132,7 +132,7 @@ These are in core files I must not edit. Severity is about the shared-control mo
 ### F1 — HIGH — "any input = takeover" is unimplementable as literally stated, because mode 1003 is on
 
 `tty.rs:156` enables any-motion mouse tracking, deliberately, because CSS `:hover` does not work
-without it. The consequence is that moving the mouse anywhere over the BlackGlass pane emits SGR
+without it. The consequence is that moving the mouse anywhere over the Terminal-Fenster pane emits SGR
 motion reports on stdin **continuously, with no button held**. A takeover rule of "any byte on
 stdin" would seize control from the agent every time the user's palm nudged the trackpad while they
 watched the agent work in an adjacent pane — which is the exact posture journey (c) is designed for.
@@ -186,7 +186,7 @@ and I will not pretend otherwise. A09 §4 already treats local uid compromise as
 TB4, and this inherits that boundary; §12 restates it as a limitation rather than burying it.
 
 The practical consequence is narrow but worth writing down: an agent framework that drives
-BlackGlass by `tmux send-keys` instead of by RPC would be *invisible to the arbiter*, would appear
+Terminal-Fenster by `tmux send-keys` instead of by RPC would be *invisible to the arbiter*, would appear
 in the audit log as `actor: "human"`, and would bypass every gate in §6. The mitigation is
 documentation plus a refusal: §7.5 makes the audit log mandatory whenever `--agent` is present, so
 at minimum the two integration styles are distinguishable after the fact.
@@ -487,8 +487,8 @@ not the decoder.
 
 ### 4.3 Focus is deliberately *not* a takeover or pause trigger
 
-Tempting, and wrong for the primary journey. In A03 journey (c) the human watches BlackGlass in an
-adjacent tmux pane while working elsewhere; the BlackGlass pane is unfocused for most of the task.
+Tempting, and wrong for the primary journey. In A03 journey (c) the human watches Terminal-Fenster in an
+adjacent tmux pane while working elsewhere; the Terminal-Fenster pane is unfocused for most of the task.
 Pausing the agent on `FocusLost` would make the headline use case unusable.
 
 Focus does matter in two narrower ways. A gate raised while the pane is unfocused must not have its
@@ -809,8 +809,8 @@ The schema below carries `ax_hash` for the second and `seq`/`prev` for the first
 ### 7.2 Physical format
 
 - **JSONL.** One object per line, UTF-8, `\n`-terminated, no trailing commas, no pretty-printing.
-- **Path:** `~/Library/Application Support/BlackGlass/audit/<sid>.jsonl` on macOS,
-  `$XDG_STATE_HOME/blackglass/audit/<sid>.jsonl` on Linux. Directory `0700`, file `0600`, created
+- **Path:** `~/Library/Application Support/Terminal-Fenster/audit/<sid>.jsonl` on macOS,
+  `$XDG_STATE_HOME/terminal-fenster/audit/<sid>.jsonl` on Linux. Directory `0700`, file `0600`, created
   with `O_CREAT|O_EXCL`.
 - **Not inside the Chromium profile directory.** The renderer must have no path to it (A09 §5.2).
 - **The core is the sole writer.** The engine never opens it; engine-side events reach the log by
@@ -899,7 +899,7 @@ that to detecting *edits*. It is cheap at runtime — **1.67 µs/record measured
 core at 100 rec/s — but it is not cheap architecturally: this workspace depends on exactly `libc` and
 `flate2` (`Cargo.toml:12-14`), and SHA-256 means either a new dependency or ~150 lines of
 hand-rolled crypto. Hand-rolling is not out of character here (`b64.rs`, the kitty encoder, the JSON
-reader in `bg-proto` are all deliberate hand-rolls), but hand-rolled crypto is a different risk class
+reader in `tf-proto` are all deliberate hand-rolls), but hand-rolled crypto is a different risk class
 from hand-rolled base64, and the honest v1 answer is to ship neither and revisit.
 
 If adopted: `sha2` (RustCrypto) is `MIT OR Apache-2.0`, compatible with this workspace's
@@ -959,7 +959,7 @@ Handback with re-grounding — the `ax_hash` differs from seq 41, which is exact
 
 ### 7.8 Reading it back
 
-`blackglass audit --session <sid>` renders the JSONL as a human timeline; `--gates` filters to
+`terminal-fenster audit --session <sid>` renders the JSONL as a human timeline; `--gates` filters to
 decisions; `--json` passes through for `jq`. Two things it must do that are easy to forget: verify
 `seq` continuity and say so loudly on a gap, and pass **every** string through
 `unicode::sanitize_for_terminal` before printing. The log contains attacker-chosen origins and
@@ -970,7 +970,7 @@ the moment a security reviewer is reading.
 
 ## 8. Protocol additions
 
-Framing is unchanged (`crates/bg-proto/src/lib.rs:1-9`); every message is a flat JSON object with a
+Framing is unchanged (`crates/tf-proto/src/lib.rs:1-9`); every message is a flat JSON object with a
 `t` field, parseable by the existing hand-rolled reader.
 
 **Core ↔ engine** (additions to `apps/engine/src/main.js`):
@@ -1073,7 +1073,7 @@ fn arbiter_step(s: State, e: Event, ctx: &Ctx) -> (State, Vec<Effect>, AuditReco
 - Every emitted `act` is in §7.3's closed set.
 - Durability tiering: assert `fsync` is called for decision records and **not** for routine ones, and
   `F_FULLFSYNC` **only** at session boundaries (a counting fake around the fd).
-- Round-trip: `blackglass audit --json` reproduces the input records byte-identically.
+- Round-trip: `terminal-fenster audit --json` reproduces the input records byte-identically.
 
 ### 10.4 What cannot be tested here
 
@@ -1096,7 +1096,7 @@ verification of §5's mockups. §12.
 8. `classifyTarget`/`targetClass` in the engine; the shared `REDACT_SELECTOR` constant.
 9. RPC socket as `fds[2]`; `attach`/`detach`/`read_ax` only.
 10. Action verbs, `ActionPlan` expansion with `K = 8`, budgets.
-11. `blackglass audit` reader.
+11. `terminal-fenster audit` reader.
 
 Steps 1–7 deliver a complete, tested arbiter and audit trail with **no agent in the system**. That
 ordering is deliberate: the control model should be provably correct before there is anything to
@@ -1141,7 +1141,7 @@ This document proposes **no third-party code**. Dependencies remain `libc` and `
 (`Cargo.toml:12-14`). The only crate this design could imply is `sha2` for the optional hash chain
 (§7.6), which is RustCrypto and dual-licensed `MIT OR Apache-2.0` — compatible — and which §7.6
 recommends **deferring past v1** rather than adopting. JSON-RPC 2.0 (§8) is a specification, not
-code; the existing hand-rolled reader in `bg-proto` already handles the flat-object subset needed.
+code; the existing hand-rolled reader in `tf-proto` already handles the flat-object subset needed.
 
 No code was copied from any source. The `REDACT_SELECTOR` list in §6.4 is cited from A09 §7.3 within
 this repository and is reused by reference, not duplicated — which is the point of §6.4.

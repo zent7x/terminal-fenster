@@ -37,7 +37,7 @@ and every result below is reproducible from them. I left no tmux servers or sock
 | 1 | `allow-passthrough` is a **window** option, default **`off`**, added in tmux **3.3**; the `all` state added in **3.4** | Every tmux user hits this on first run |
 | 2 | With it off, graphics sequences are **silently swallowed** — zero bytes, no error | Blank pane, no diagnostic |
 | 3 | `tmux show-options` answers this question **wrongly in three different ways** | The obvious detector nags correctly-configured users |
-| 4 | `wrap_tmux` (`crates/bg-term/src/kitty.rs:241`) is **byte-for-byte correct**, now verified end-to-end | Closes C01's open item D |
+| 4 | `wrap_tmux` (`crates/tf-term/src/kitty.rs:241`) is **byte-for-byte correct**, now verified end-to-end | Closes C01's open item D |
 | 5 | APC replies **do** round-trip through tmux; CSI replies **do not** | Kitty detection works inside tmux; DA1-style detection cannot |
 | 6 | tmux answers DA1 as `ESC[?1;2;4c` — **param 4 = sixel** | `parse_da1_has_sixel` is a **false positive** inside tmux |
 | 7 | `TIOCGWINSZ` inside a pane is **pixel-exact**; `CSI 16t` is confidently **wrong** when the outer terminal reports no pixels | Inverts caps.rs's preference order inside tmux |
@@ -67,7 +67,7 @@ tmux unwraps it, halves the doubled ESCs, and writes the result straight to the 
 
 So:
 
-| tmux version | `allow-passthrough` | Consequence for BlackGlass |
+| tmux version | `allow-passthrough` | Consequence for Terminal-Fenster |
 |--------------|--------------------|-----------------------------|
 | < 3.3 | does not exist | Graphics impossible. Unicode fallback only. |
 | 3.3 | `off` \| `on`, default `off` | Works once enabled; `on` drops output from invisible panes |
@@ -113,7 +113,7 @@ ESC _Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA ESC \
 
 Two conclusions:
 
-1. **`wrap_tmux` at `crates/bg-term/src/kitty.rs:241` is correct.** C01 §"tmux passthrough
+1. **`wrap_tmux` at `crates/tf-term/src/kitty.rs:241` is correct.** C01 §"tmux passthrough
    end-to-end" flagged it as uncalled and therefore unverified. It is now verified against real
    tmux. The function is still uncalled — wiring it up is the work, not fixing it.
 2. **With passthrough off there is no error signal whatsoever.** tmux does not warn, does not log,
@@ -144,7 +144,7 @@ tmux show-options -wv allow-passthrough        → all   (whatever the CURRENT w
 tmux show-options -wv -t %0 allow-passthrough  → on    (ours)
 ```
 
-BlackGlass may be running in a pane whose window is not the active one. Untargeted queries answer a
+Terminal-Fenster may be running in a pane whose window is not the active one. Untargeted queries answer a
 question about someone else's window.
 
 **Lie 3 — the fatal one — `show-options` does not resolve inheritance.** This is the worst because
@@ -255,7 +255,7 @@ Wrapped to 79 columns. No colour when `NO_COLOR` is set or stderr is not a tty.
 ### 4.1 Passthrough is `off` — the message the mission asks for
 
 ```
-blackglass: tmux is discarding the graphics escape sequences, so the page
+terminal-fenster: tmux is discarding the graphics escape sequences, so the page
             cannot be rendered.
 
   cause   The tmux window option `allow-passthrough` is off. This is tmux's
@@ -275,12 +275,12 @@ blackglass: tmux is discarding the graphics escape sequences, so the page
 
               tmux source-file ~/.tmux.conf
 
-  note    BlackGlass does not modify your tmux configuration.
+  note    Terminal-Fenster does not modify your tmux configuration.
 
   meanwhile
           Falling back to the Unicode half-block renderer. It works through
           tmux unmodified, at roughly one quarter of the vertical detail.
-          Run `blackglass doctor` to re-check after changing the setting.
+          Run `terminal-fenster doctor` to re-check after changing the setting.
 ```
 
 Design notes, each load-bearing:
@@ -308,13 +308,13 @@ Design notes, each load-bearing:
 ### 4.2 tmux older than 3.3
 
 ```
-blackglass: this tmux is too old to pass graphics through.
+terminal-fenster: this tmux is too old to pass graphics through.
 
   cause   tmux <version> has no `allow-passthrough` option; it was added in
           tmux 3.3. Without it there is no supported way to send image data
           from a pane to the terminal underneath.
 
-  fix     Upgrade tmux to 3.3 or newer, or run BlackGlass outside tmux.
+  fix     Upgrade tmux to 3.3 or newer, or run Terminal-Fenster outside tmux.
 
   meanwhile
           Falling back to the Unicode half-block renderer.
@@ -326,13 +326,13 @@ so the parser must handle `<major>.<minor><suffix>` and must not choke on a miss
 ### 4.3 Passthrough is on but the terminal has no graphics
 
 ```
-blackglass: tmux passthrough is enabled, but the terminal underneath did not
+terminal-fenster: tmux passthrough is enabled, but the terminal underneath did not
             answer the Kitty graphics query.
 
   This is not a tmux problem. The outer terminal appears not to support the
   Kitty graphics protocol. Using the Unicode half-block renderer.
 
-  `blackglass doctor` outside tmux will confirm what the terminal supports.
+  `terminal-fenster doctor` outside tmux will confirm what the terminal supports.
 ```
 
 Worth separating from §4.1: it stops the user editing tmux config that is already correct. The
@@ -341,7 +341,7 @@ Worth separating from §4.1: it stops the user editing tmux config that is alrea
 ### 4.4 `TmuxState::Unknown`
 
 ```
-blackglass: $TMUX is set but the tmux client could not be queried, so the
+terminal-fenster: $TMUX is set but the tmux client could not be queried, so the
             state of `allow-passthrough` is unknown.
 
   The graphics probe found no terminal response. That means either passthrough
@@ -358,7 +358,7 @@ that they are observationally identical.
 
 ### 4.5 Suppression
 
-The message prints **once per process**, not per frame or per tab. `BLACKGLASS_QUIET_TMUX=1`
+The message prints **once per process**, not per frame or per tab. `TERMINAL_FENSTER_QUIET_TMUX=1`
 suppresses §4.1–§4.4 for users who have decided to live with the Unicode backend. `doctor` always
 prints them regardless, since diagnosis is its entire job.
 
@@ -382,7 +382,7 @@ fewer bytes on the outer pty. A single DCS carrying 160 KB survived tmux 3.7b in
 
 **UNVERIFIED:** whether tmux 3.3–3.6 accept a DCS this large, and whether any intermediate ssh/pty
 layer imposes a lower bound. The per-chunk strategy is the safe fallback and is measured to work, so
-keep it behind a flag (`BLACKGLASS_TMUX_WRAP=per-chunk`) rather than deleting the code path.
+keep it behind a flag (`TERMINAL_FENSTER_TMUX_WRAP=per-chunk`) rather than deleting the code path.
 
 ### 5.2 Escape doubling cost is negligible
 
@@ -473,7 +473,7 @@ Report the flag in `doctor` output so the user can see which value is in play.
 
 ### 7.1 tmux tells us nothing
 
-If BlackGlass is in window 0 and the user presses `prefix 1`, our frames stop reaching the terminal
+If Terminal-Fenster is in window 0 and the user presses `prefix 1`, our frames stop reaching the terminal
 (with `allow-passthrough on`, §1.1). Worse, tmux **cannot restore the image** when the user returns:
 tmux redraws a pane from its own screen model, and passthrough bytes were never in that model — they
 went straight to the terminal. The image is simply gone.
@@ -493,7 +493,7 @@ actually need: a tmux **window switch** produces no focus event.)*
 ### 7.2 Why not just recommend `all`
 
 `all` forwards passthrough from invisible panes (*Measured*, §1.1) and looks like a one-line fix.
-It is a trap: with `all`, a background BlackGlass paints its frames onto the terminal **while the
+It is a trap: with `all`, a background Terminal-Fenster paints its frames onto the terminal **while the
 user is looking at a different tmux window**. Graphics land over unrelated content. `all` exists for
 programs that emit one image and stop, not for something repainting at 60 fps.
 
@@ -521,7 +521,7 @@ much to pay continuously for a condition that is rare.
    `false → true` transition in `#{window_active}` and force a full repaint. Covers "user switched
    back and is just reading".
 4. **Never poll when not in tmux.** Zero cost outside a multiplexer.
-5. Make it tunable: `BLACKGLASS_TMUX_POLL_HZ` (`0` disables, default `1`).
+5. Make it tunable: `TERMINAL_FENSTER_TMUX_POLL_HZ` (`0` disables, default `1`).
 
 **UNVERIFIED alternative worth investigating:** tmux ≥ 3.2 supports format subscriptions via
 `refresh-client -B` in control mode, which would replace polling with a push notification and
@@ -630,7 +630,7 @@ Conflating them is how you end up with a `GhosttyInTmux` adapter and then a
 decides encoding.
 
 ```rust
-// DESCRIBED, NOT IMPLEMENTED — crates/bg-term is the commander's file (see §13).
+// DESCRIBED, NOT IMPLEMENTED — crates/tf-term is the commander's file (see §13).
 trait Transport {
     /// Wrap one complete, contiguous batch for the wire.
     fn frame(&self, payload: &[u8], out: &mut Vec<u8>);
@@ -692,7 +692,7 @@ graphics-protocol support.
 `$STY`. When set, go straight to Unicode with:
 
 ```
-blackglass: running under GNU screen, which cannot pass graphics protocols
+terminal-fenster: running under GNU screen, which cannot pass graphics protocols
             through to the terminal. Using the Unicode half-block renderer.
             tmux 3.3+ supports graphics; screen does not.
 ```
@@ -714,7 +714,7 @@ lock screen. Everything in §1–§8 was produced this way.
 
 ### 11.1 Unit tests (no tmux binary needed)
 
-`crates/bg-term` already has `tmux_wrapper_doubles_escapes` (`kitty.rs:371`). Add:
+`crates/tf-term` already has `tmux_wrapper_doubles_escapes` (`kitty.rs:371`). Add:
 
 1. Round-trip: `unwrap(wrap_tmux(x)) == x` for payloads containing 0, 1, and many `ESC`.
 2. Whole-batch wrap of a multi-chunk frame contains exactly one `ESC Ptmux;` and one terminating
@@ -758,7 +758,7 @@ installed and **no display server**.
 
 Per the file-ownership rule I have written nothing outside this document. These are descriptions.
 
-**`crates/bg-term/src/caps.rs`**
+**`crates/tf-term/src/caps.rs`**
 1. Add `tmux: TmuxState` to `Capabilities`; populate via §3.4. One `display-message` call, ~21 ms,
    at startup only.
 2. Gate `best_backend()` (`:56`): when `in_tmux` and passthrough is not enabled, return
@@ -770,7 +770,7 @@ Per the file-ownership rule I have written nothing outside this document. These 
    answers those itself and the wrapper would send them to the wrong parser.
 6. `raw_replies` should record the tmux state so `doctor` can show it.
 
-**`crates/bg-term/src/kitty.rs`**
+**`crates/tf-term/src/kitty.rs`**
 7. `wrap_tmux` (`:241`) is correct — **call it**. Whole-batch, per §5.1.
 8. `delete_all` (`:219`) and `delete_image` (`:211`) also need wrapping inside tmux, or teardown
    leaves the image on screen. `RESTORE_SEQ` (`tty.rs:27`) embeds `ESC_Ga=d,d=A ESC\` as a literal

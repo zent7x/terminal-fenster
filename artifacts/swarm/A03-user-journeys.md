@@ -1,7 +1,7 @@
 # A03 — User Journeys & Product Requirements
 
 **Mission:** A03 (recon) — concrete, testable user journeys + ruthless MVP prioritization
-**Target:** BlackGlass — Chromium-class browser rendering as pixels inside terminal emulators
+**Target:** Terminal-Fenster — Chromium-class browser rendering as pixels inside terminal emulators
 **Host under test:** macOS 26.1, Apple M4 (10c/24GB), arm64. Ghostty 1.3.1 (verified via `Info.plist` + `ghostty +version`: Zig 0.15.2, ReleaseFast, Metal renderer, CoreText). Chrome 150.0.7871.187 present. Node 24.11.1 at `/usr/local/bin/node`.
 **Status of this doc:** implementation spec. Every escape sequence below is cited to a primary source or explicitly marked UNVERIFIED.
 
@@ -76,7 +76,7 @@ Real headless-Chrome captures at 1920×1080 (`--headless --screenshot --window-s
 
 Before the journeys, the conclusion they collectively produce, because it changes what P0 means:
 
-**BlackGlass must maintain two synchronized output planes from day one:**
+**Terminal-Fenster must maintain two synchronized output planes from day one:**
 
 - **Pixel plane** — kitty graphics (P1–P6), damage-rect diffed, the "real browser" view.
 - **Text plane** — a semantic model of the page derived from the CDP AXTree (P18), written to the terminal as *actual terminal text* in the normal grid.
@@ -108,23 +108,23 @@ Because the placement cells are ordinary text with ordinary SGR attributes, tmux
 
 ## 2. Journey (a) — Developer reading docs in a tmux split while coding
 
-**Persona:** backend dev, Ghostty 1.3.1, tmux, nvim in pane 0 (70 cols), BlackGlass in pane 1 (110 cols × 50 rows). Wants MDN/`docs.rs` open while writing code. Never leaves the keyboard.
+**Persona:** backend dev, Ghostty 1.3.1, tmux, nvim in pane 0 (70 cols), Terminal-Fenster in pane 1 (110 cols × 50 rows). Wants MDN/`docs.rs` open while writing code. Never leaves the keyboard.
 
 ### Flow
 
 1. `tmux new -s dev`, split `Ctrl-b %`. Pane 1 is 110×50 cells.
 2. `bg https://developer.mozilla.org/en-US/docs/Web/API/fetch`
-3. BlackGlass startup handshake, in this order, all within 150 ms:
+3. Terminal-Fenster startup handshake, in this order, all within 150 ms:
    a. Read `$TMUX`, `$TMUX_PANE` → tmux detected. Read `$TERM_PROGRAM`/`$TERM`.
    b. Query tmux: `tmux show -gv allow-passthrough` and `tmux show -gv set-clipboard`. If passthrough is `off` → **print an actionable one-liner and continue in text mode**, do not emit garbage.
    c. Probe graphics with P5, wrapped in P8 passthrough. Race the `_G…OK` reply against the DA1 reply.
    d. Query cell pixel geometry: `CSI 16 t` (cell size in px) and `CSI 14 t` (window size in px). Compute device pixel viewport = `cols × cellW × dpr`.
 4. Chromium launches headless with viewport set from step 3d. `Page.startScreencast{format:"png", maxWidth, maxHeight, everyNthFrame:1}` (P16).
-5. First paint arrives → BlackGlass transmits the image **once** (`a=T,f=100,t=d,q=2`, chunked per P2, each chunk individually wrapped in P8) then places it via **unicode placeholders** (P6). Subsequent frames update pixels but reuse the same placeholder grid.
+5. First paint arrives → Terminal-Fenster transmits the image **once** (`a=T,f=100,t=d,q=2`, chunked per P2, each chunk individually wrapped in P8) then places it via **unicode placeholders** (P6). Subsequent frames update pixels but reuse the same placeholder grid.
 6. Dev scrolls with mouse wheel or `Ctrl-d`/`Ctrl-u`. Mouse via P12 (`ESC[?1002;1006h`); tmux must be in a mouse mode that forwards to the pane.
 7. Dev drags a code sample and hits `y` (or `Cmd-C`) → OSC 52 (P15) puts real text on the macOS clipboard.
 8. Dev switches to pane 0, pastes into nvim. Returns to pane 1 later — page state and scroll position are unchanged.
-9. `tmux detach`, later `tmux attach` from a different window size → pane 1 is now 90×40; BlackGlass reflows.
+9. `tmux detach`, later `tmux attach` from a different window size → pane 1 is now 90×40; Terminal-Fenster reflows.
 
 ### What must work
 
@@ -201,14 +201,14 @@ echo "JOURNEY A: PASS"
 
 **Persona:** SRE at 23:00 on hotel wifi. Needs to reach a Grafana/Kibana/router admin panel that is **only reachable from inside the remote network**. No VPN, no SOCKS proxy set up, no GUI on the box.
 
-This is BlackGlass's single strongest wedge. It is the journey with no incumbent: `w3m`/`lynx` cannot render a React admin UI, and `ssh -D` + local browser requires setup the SRE does not have at 23:00.
+This is Terminal-Fenster's single strongest wedge. It is the journey with no incumbent: `w3m`/`lynx` cannot render a React admin UI, and `ssh -D` + local browser requires setup the SRE does not have at 23:00.
 
 ### Flow
 
 1. `ssh sre@bastion` → `ssh sre@internal-box`. Terminal is Ghostty locally; two SSH hops.
 2. `bg https://10.0.4.19:3000/` (an internal-only address).
 3. Handshake: no `$TMUX`. P5 probe travels back over both hops. RTT is now ~180 ms, not ~0.
-4. BlackGlass measures the link: sends a 64 KiB calibration payload, times the terminal's DA1 ack, derives effective bandwidth. **Selects a transport tier automatically.**
+4. Terminal-Fenster measures the link: sends a 64 KiB calibration payload, times the terminal's DA1 ack, derives effective bandwidth. **Selects a transport tier automatically.**
 5. Renders login page. SRE types credentials (must not echo the password into scrollback).
 6. Clicks through: nav → dashboard → a `<select>` → a modal confirm → a form submit.
 7. Session ends; cookies persist to the remote box so the next `bg` invocation is still logged in.
@@ -275,7 +275,7 @@ echo "JOURNEY B: PASS"
 
 ## 4. Journey (c) — AI coding agent drives the browser; human watches and takes over
 
-**Persona:** Claude Code (or similar) in one tmux pane running an E2E task ("log into the staging dashboard and verify the billing page renders"). Human watches BlackGlass in an adjacent pane. When the agent gets stuck on a CAPTCHA or an SSO prompt, the human grabs the mouse.
+**Persona:** Claude Code (or similar) in one tmux pane running an E2E task ("log into the staging dashboard and verify the billing page renders"). Human watches Terminal-Fenster in an adjacent pane. When the agent gets stuck on a CAPTCHA or an SSO prompt, the human grabs the mouse.
 
 ### Flow
 
@@ -435,7 +435,7 @@ echo "JOURNEY D: PASS"
 
 ### The hard truth
 
-**A kitty-graphics image is opaque to every screen reader that exists.** VoiceOver reads the terminal emulator's AX tree, which exposes the *character grid*. Ghostty added a read-only accessibility API in **1.2.0** so screen readers can read its contents ([Ghostty 1.2.0 release notes](https://ghostty.org/docs/install/release-notes/1-2-0)) — but what it exposes is text cells. A U+10EEEE placeholder cell is, to VoiceOver, an unknown private-use glyph. **A pixel-only BlackGlass is a screen-reader dead zone.**
+**A kitty-graphics image is opaque to every screen reader that exists.** VoiceOver reads the terminal emulator's AX tree, which exposes the *character grid*. Ghostty added a read-only accessibility API in **1.2.0** so screen readers can read its contents ([Ghostty 1.2.0 release notes](https://ghostty.org/docs/install/release-notes/1-2-0)) — but what it exposes is text cells. A U+10EEEE placeholder cell is, to VoiceOver, an unknown private-use glyph. **A pixel-only Terminal-Fenster is a screen-reader dead zone.**
 
 Therefore journey (e) is not "add ARIA support." It is: **the text plane must be a real, first-class rendering mode that writes ordinary terminal text.**
 
@@ -444,7 +444,7 @@ Therefore journey (e) is not "add ARIA support." It is: **the text plane must be
 1. `bg --mode=text https://github.com/rust-lang/rust/issues/12345` (or auto-selected when `bg` detects an active AT — on macOS, poll `AXAPIEnabled`/`VoiceOverEnabled`; **UNVERIFIED** whether a non-privileged process can reliably detect VoiceOver on macOS 26 — needs a spike).
 2. Chromium launches with `--force-renderer-accessibility=complete` (P19).
 3. `Accessibility.enable` + `Accessibility.getFullAXTree` (P18).
-4. BlackGlass **linearizes** the AXTree into terminal text with structural markers:
+4. Terminal-Fenster **linearizes** the AXTree into terminal text with structural markers:
    - `role=heading` + `level` → a line prefixed `## `
    - `role=link` → OSC 8 hyperlink (`ESC]8;;<url>ESC\<text>ESC]8;;ESC\`) so it is both readable text and clickable
    - `role=button` → `[ Sign in ]`
@@ -452,14 +452,14 @@ Therefore journey (e) is not "add ARIA support." It is: **the text plane must be
    - landmarks (`banner`, `navigation`, `main`, `contentinfo`) → `--- main ---` separators
    - `role=img` → the AX `name` (the alt text), which is exactly what a screen reader wants
 5. VoiceOver reads the terminal buffer. Navigation is normal terminal navigation.
-6. `Accessibility.nodesUpdated` (P18) → BlackGlass re-emits only the changed region. Live regions (`aria-live`) map to an explicit, announced append.
-7. Interaction: user tabs between focusables; BlackGlass maps this to `Input.dispatchKeyEvent{key:"Tab"}` and re-renders focus.
+6. `Accessibility.nodesUpdated` (P18) → Terminal-Fenster re-emits only the changed region. Live regions (`aria-live`) map to an explicit, announced append.
+7. Interaction: user tabs between focusables; Terminal-Fenster maps this to `Input.dispatchKeyEvent{key:"Tab"}` and re-renders focus.
 
 ### What must work
 
 | Requirement | Detail |
 |---|---|
-| **Text plane is not a downgrade** | It must handle SPAs. `w3m` fails on React because it has no JS engine; BlackGlass has a full Chromium, so its text mode is strictly more capable than any existing TUI browser. **This is the differentiator, not a fallback.** |
+| **Text plane is not a downgrade** | It must handle SPAs. `w3m` fails on React because it has no JS engine; Terminal-Fenster has a full Chromium, so its text mode is strictly more capable than any existing TUI browser. **This is the differentiator, not a fallback.** |
 | **Reading order = AX order** | Not DOM order, not visual order. The AXTree already encodes the correct order; do not re-sort. |
 | **Focus is announced** | On focus change, move the terminal cursor to the focused element's line. Screen readers follow the cursor. |
 | **Live regions** | `aria-live=polite`/`assertive` → append to a dedicated announcement line; do not silently repaint. |
@@ -522,7 +522,7 @@ echo "JOURNEY E: PASS (automated portion)"
 
 ## 7. Journey (f) — Everyday browsing (Gmail, GitHub, YouTube)
 
-**Persona:** someone who wants BlackGlass to be their actual browser, not a novelty. This journey is the honesty check: it is where the gap between "impressive demo" and "product" is widest.
+**Persona:** someone who wants Terminal-Fenster to be their actual browser, not a novelty. This journey is the honesty check: it is where the gap between "impressive demo" and "product" is widest.
 
 ### Flow
 
@@ -543,7 +543,7 @@ echo "JOURNEY E: PASS (automated portion)"
 | **GitHub diff review** | Text-heavy, needs crisp rendering and **copyable code**. | Pixel plane for layout + text plane for selection. Selecting from a JPEG is impossible — this is where the dual plane pays off in everyday use. |
 | **Typing a comment** | Latency must feel native. | Measured typing damage rect = 400×36 = 0.6 KiB, 0.03 ms encode. Trivially achievable **if** damage rects exist. |
 | **YouTube video** | 1280×720 region at 30 fps = 32.7 KiB × 30 = **~1 MB/s = 8 Mbit/s sustained**, plus 1.28 ms encode × 30 = 38 ms/s CPU. Locally fine; over SSH impossible. | Local: yes. Remote: cap at 5–10 fps or refuse and say so. |
-| **Audio** | There is no audio channel in a terminal. | Audio must play out of the **local machine's** audio device. Trivial when BlackGlass is local. **Structurally impossible over plain SSH** — would need a separate audio transport. Scope this out loudly. |
+| **Audio** | There is no audio channel in a terminal. | Audio must play out of the **local machine's** audio device. Trivial when Terminal-Fenster is local. **Structurally impossible over plain SSH** — would need a separate audio transport. Scope this out loudly. |
 | **File upload / download** | Attaching a file to an email. | Map to a local file picker (a TUI file browser) → `DOM.setFileInputFiles`. Downloads go to a configured dir with a printed path. |
 
 ### Failure modes
@@ -624,7 +624,7 @@ These emerged from more than one journey and are therefore non-negotiable.
 
 ## 9. MVP feature list — P0 / P1 / P2
 
-**The P0 bar:** *a competent developer would choose BlackGlass over `ssh -D 8080` + a local browser, at least once, for a real task.* Not "would screenshot it for Twitter." Everything that does not clear that bar is P1 or lower.
+**The P0 bar:** *a competent developer would choose Terminal-Fenster over `ssh -D 8080` + a local browser, at least once, for a real task.* Not "would screenshot it for Twitter." Everything that does not clear that bar is P1 or lower.
 
 ### P0 — without ALL of these, it is a demo
 
@@ -674,7 +674,7 @@ These emerged from more than one journey and are therefore non-negotiable.
 | P2-3 | Extensions / uBlock | Big quality-of-life win, big surface area. |
 | P2-4 | DevTools bridge | Nice for the dev audience; not load-bearing. |
 | P2-5 | Bookmarks, history UI, session restore | Conveniences. |
-| P2-6 | Split-pane / multi-page tiling inside one BlackGlass | tmux already does this. |
+| P2-6 | Split-pane / multi-page tiling inside one Terminal-Fenster | tmux already does this. |
 | P2-7 | WebRTC / camera / mic | Structurally hard over a terminal; niche. |
 | P2-8 | Windows / ConPTY support | Different terminal ecosystem entirely. |
 | P2-9 | Themes, custom CSS injection, reader mode | Polish. |
@@ -707,7 +707,7 @@ Each of these can invalidate a journey. Listed in descending risk order.
 
 | Thing referenced | License | Constraint on us |
 |---|---|---|
-| Kitty graphics protocol **spec** | Documentation; kitty itself is **GPL-3.0** | The protocol is a public wire format — implementing it from the spec is fine. **Do not copy kitty source into a non-GPL BlackGlass.** Learn from documented behaviour only. |
+| Kitty graphics protocol **spec** | Documentation; kitty itself is **GPL-3.0** | The protocol is a public wire format — implementing it from the spec is fine. **Do not copy kitty source into a non-GPL Terminal-Fenster.** Learn from documented behaviour only. |
 | Kitty keyboard protocol spec | same as above | same |
 | tmux (source, FAQ) | **ISC** | Permissive; source could be referenced or vendored. |
 | Chromium / CDP | **BSD-3-Clause** (Chromium), plus LGPL/MPL components | Embedding Chromium is fine; obey the per-component notices and ship the license file. CDP as a wire protocol is unencumbered. |
@@ -716,7 +716,7 @@ Each of these can invalidate a journey. Listed in descending risk order.
 | xterm `ctlseqs` | MIT-style (X Consortium) | Safe reference. |
 | `sw.kovidgoyal.net` docs | Docs accompanying GPL software | Reading and implementing the described protocol is fine; reproducing large doc verbatim is not. |
 
-**Practical rule:** BlackGlass may implement any of these protocols from their specifications, but must not vendor GPL source (kitty, iTerm2) unless BlackGlass itself is GPL. Ghostty (MIT) and tmux (ISC) are the safe places to read real implementations.
+**Practical rule:** Terminal-Fenster may implement any of these protocols from their specifications, but must not vendor GPL source (kitty, iTerm2) unless Terminal-Fenster itself is GPL. Ghostty (MIT) and tmux (ISC) are the safe places to read real implementations.
 
 ---
 

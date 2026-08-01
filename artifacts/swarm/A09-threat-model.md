@@ -1,4 +1,4 @@
-# A09 — BlackGlass Threat & Privacy Model
+# A09 — Terminal-Fenster Threat & Privacy Model
 
 **Status:** recon complete, implementation spec
 **Target:** macOS 26.1 (build 25B78), Apple M4 arm64, Ghostty 1.3.1 / iTerm2 3.6.9 / Apple Terminal 465
@@ -9,18 +9,18 @@
 
 ## 0. Trust boundaries
 
-BlackGlass is unusual: it is a Chromium-class browser whose **output device is the user's shell session**. That inverts a normal browser's threat model. A normal browser renders untrusted content into a framebuffer that has no command semantics. BlackGlass renders untrusted content into a byte stream that a terminal emulator **interprets as commands** — and that terminal is a sibling of the user's shell, sharing its clipboard, its window, and in some configurations its input queue.
+Terminal-Fenster is unusual: it is a Chromium-class browser whose **output device is the user's shell session**. That inverts a normal browser's threat model. A normal browser renders untrusted content into a framebuffer that has no command semantics. Terminal-Fenster renders untrusted content into a byte stream that a terminal emulator **interprets as commands** — and that terminal is a sibling of the user's shell, sharing its clipboard, its window, and in some configurations its input queue.
 
 | ID | Boundary | Enforced by |
 |----|----------|-------------|
 | **TB1** | Web content → renderer process | Chromium multi-process + macOS Seatbelt sandbox |
 | **TB2** | Renderer → main/browser process | Mojo IPC, `contextIsolation`, preload `contextBridge` |
 | **TB3** | **Main process → user's TTY byte stream** | *(nothing off the shelf — we must build it)* |
-| **TB4** | Any local process → BlackGlass control plane | UNIX socket mode + peer audit-token + capability token |
+| **TB4** | Any local process → Terminal-Fenster control plane | UNIX socket mode + peer audit-token + capability token |
 | **TB5** | Web content → agent reasoning context | Architectural (allowlists, origin scoping, HITL) |
 | **TB6** | Build inputs → shipped binary | Lockfiles, SHA256 pinning, notarization, fuses |
 
-**TB3 is the boundary that does not exist in any prior art.** It is the single highest-value item in this document. Everything else in this report is standard-issue browser/Electron hardening that has known good answers; TB3 is where BlackGlass invents its own attack surface, and where a mistake is a one-line-of-HTML → shell-command chain.
+**TB3 is the boundary that does not exist in any prior art.** It is the single highest-value item in this document. Everything else in this report is standard-issue browser/Electron hardening that has known good answers; TB3 is where Terminal-Fenster invents its own attack surface, and where a mistake is a one-line-of-HTML → shell-command chain.
 
 ---
 
@@ -31,7 +31,7 @@ BlackGlass is unusual: it is a Chromium-class browser whose **output device is t
 ```
 attacker page
   → document.title = "]52;c;<b64>"      (or a URL, filename, cert CN, console msg, JS alert text…)
-  → BlackGlass chrome renders "tab title" into the TTY
+  → Terminal-Fenster chrome renders "tab title" into the TTY
   → terminal emulator parses the escape sequence
   → clipboard poisoned / title reported back to shell / DoS / focus stolen
   → user hits ⌘V in their shell → arbitrary command execution
@@ -350,7 +350,7 @@ The general design doc states the threat model plainly: the sandbox assumes "san
 
 Standard cost: a renderer RCE (V8/Blink UAF, several per year in Chrome, routinely exploited in the wild) becomes full user-account compromise — the renderer inherits the app's TCC grants (Downloads/Desktop/Documents, camera/mic if requested), Keychain items the app created, network access, and read of the entire home directory.
 
-**BlackGlass-specific cost, and it is worse:** our process holds a **writable file descriptor to the user's TTY**. An unsandboxed renderer can `write(1, "\x1b]52;c;...", n)` *directly*, bypassing every sanitizer in §1. The sanitizer only defends the path through our formatter; the sandbox is what guarantees that path is the only path.
+**Terminal-Fenster-specific cost, and it is worse:** our process holds a **writable file descriptor to the user's TTY**. An unsandboxed renderer can `write(1, "\x1b]52;c;...", n)` *directly*, bypassing every sanitizer in §1. The sanitizer only defends the path through our formatter; the sandbox is what guarantees that path is the only path.
 
 **Therefore, two non-negotiable controls:**
 
@@ -367,7 +367,7 @@ const FORBIDDEN = [
 const bad = process.argv.slice(1).filter(a =>
   FORBIDDEN.some(f => a === f || a.startsWith(f + '=')));
 if (bad.length) {
-  console.error(`BlackGlass refuses to start with: ${bad.join(' ')}`);
+  console.error(`Terminal-Fenster refuses to start with: ${bad.join(' ')}`);
   process.exit(70);
 }
 app.enableSandbox();   // force sandbox:true for every renderer
@@ -419,7 +419,7 @@ const chrome = new BrowserWindow({
     v8CacheOptions: 'none',
   },
 });
-chrome.loadURL('app://blackglass/chrome/index.html');  // custom scheme, not file://
+chrome.loadURL('app://terminal-fenster/chrome/index.html');  // custom scheme, not file://
 ```
 
 Web content lives in a **separate** `WebContentsView`, never in the chrome window.
@@ -428,7 +428,7 @@ Web content lives in a **separate** `WebContentsView`, never in the chrome windo
 
 ```js
 app.on('web-contents-created', (_e, contents) => {
-  const isChrome = contents.getURL().startsWith('app://blackglass/');
+  const isChrome = contents.getURL().startsWith('app://terminal-fenster/');
 
   // 1. No new windows, ever. Route to our own tab model or the system browser.
   contents.setWindowOpenHandler(({ url }) => {
@@ -490,7 +490,7 @@ session.defaultSession.setBluetoothPairingHandler((_d, cb) => cb({ cancelled: tr
 
 Deny by default: `media` (camera/mic), `geolocation`, `notifications`, `midi`, `midiSysex`, `hid`, `serial`, `usb`, `clipboard-read`, `display-capture`, `idle-detection`, `pointerLock`, `openExternal`.
 
-`clipboard-read` deserves special note: BlackGlass reads the terminal's clipboard for paste. A page granted `clipboard-read` gets the user's clipboard *and* we might have just written a page-controlled value into it via OSC 52. Deny unconditionally in v1.
+`clipboard-read` deserves special note: Terminal-Fenster reads the terminal's clipboard for paste. A page granted `clipboard-read` gets the user's clipboard *and* we might have just written a page-controlled value into it via OSC 52. Deny unconditionally in v1.
 
 ### 3.5 `shell.openExternal` — scheme allowlist
 
@@ -510,7 +510,7 @@ function openExternalSafe(raw) {
 
 ```js
 session.defaultSession.webRequest.onHeadersReceived((d, cb) => {
-  if (!d.url.startsWith('app://blackglass/')) return cb({});
+  if (!d.url.startsWith('app://terminal-fenster/')) return cb({});
   cb({ responseHeaders: { ...d.responseHeaders,
     'Content-Security-Policy': [
       "default-src 'none'; script-src 'self'; style-src 'self'; " +
@@ -527,7 +527,7 @@ Note `connect-src 'none'` — the chrome UI has no business making network reque
 ```js
 // preload.js
 const { contextBridge, ipcRenderer } = require('electron');
-contextBridge.exposeInMainWorld('blackglass', {
+contextBridge.exposeInMainWorld('terminal-fenster', {
   onTabState: (fn) => ipcRenderer.on('tab:state', (_e, s) => fn(s)),
   navigate:   (url) => ipcRenderer.invoke('tab:navigate', String(url)),
   // NO generic ipcRenderer.send / invoke passthrough.
@@ -595,14 +595,14 @@ struct sockaddr_un {
 };
 ```
 
-**104 bytes including the NUL.** A long username under `~/Library/Application Support/BlackGlass/run/control.sock` gets close. `$TMPDIR` on this host is `/var/folders/qn/qt5tx7_x27v3l44yls7zgvm80000gn/T/` (49 chars) — verified `drwx------ 501`, i.e. **already per-user 0700 by the OS**. Prefer `$TMPDIR/blackglass-<uid>/control.sock` and assert `path.len() < 104` at startup.
+**104 bytes including the NUL.** A long username under `~/Library/Application Support/Terminal-Fenster/run/control.sock` gets close. `$TMPDIR` on this host is `/var/folders/qn/qt5tx7_x27v3l44yls7zgvm80000gn/T/` (49 chars) — verified `drwx------ 501`, i.e. **already per-user 0700 by the OS**. Prefer `$TMPDIR/terminal-fenster-<uid>/control.sock` and assert `path.len() < 104` at startup.
 
 Creation sequence (order is security-relevant — `bind()` honors umask, and `fchmod` after bind is a race window):
 
 ```rust
 use std::os::unix::{fs::PermissionsExt, net::UnixListener};
 
-let dir = tmpdir.join(format!("blackglass-{}", unsafe { libc::getuid() }));
+let dir = tmpdir.join(format!("terminal-fenster-{}", unsafe { libc::getuid() }));
 // 1. Create dir 0700, fail if it exists and is not ours / not 0700 / is a symlink.
 std::fs::create_dir(&dir)?;                      // errors if exists -> no symlink swap
 std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700))?;
@@ -644,7 +644,7 @@ getsockopt(fd, SOL_LOCAL, LOCAL_PEERTOKEN, &audit_token, &len)
 ```
 
 with a designated requirement like
-`anchor apple generic and identifier "ai.blackglass.cli" and certificate leaf[subject.OU] = "<TEAMID>"`.
+`anchor apple generic and identifier "ai.terminal-fenster.cli" and certificate leaf[subject.OU] = "<TEAMID>"`.
 
 Use `LOCAL_PEERTOKEN` (audit token), **never** `LOCAL_PEERPID` alone — pid is subject to a reuse/exec race (the classic `SecCodeCopyGuestWithAttributes` pid-recycle bug); the audit token is not.
 
@@ -765,8 +765,8 @@ Note: agent name is a **bundle-id for Safari's XPC broker**, a plain app name fo
 
 | Key | Value |
 |---|---|
-| `kLSQuarantineAgentNameKey` | `"BlackGlass"` |
-| `kLSQuarantineAgentBundleIdentifierKey` | `"ai.blackglass.app"` |
+| `kLSQuarantineAgentNameKey` | `"Terminal-Fenster"` |
+| `kLSQuarantineAgentBundleIdentifierKey` | `"ai.terminal-fenster.app"` |
 | `kLSQuarantineTypeKey` | `kLSQuarantineTypeWebDownload` |
 | `kLSQuarantineOriginURLKey` | the **referring page** URL |
 | `kLSQuarantineDataURLKey` | the **actual download** URL |
@@ -967,7 +967,7 @@ Impact: **C** = critical (code exec / full credential theft), **H** = high, **M*
 | **T10** | Host apps | Arbitrary app launch via `shell.openExternal` | page link with `x-apple-*`/`smb:`/`ssh:` scheme | M | H | Scheme allowlist `{http,https,mailto}` | **T-ELE-2** |
 | **T11** | Chrome UI | Privileged window navigated to attacker origin | `window.open` / `location=` from a bug in chrome JS | L | **C** | `will-navigate`+`will-redirect` preventDefault on chrome; `setWindowOpenHandler` deny; CSP `default-src 'none'` | **T-ELE-3** |
 | **T12** | Cookies, sessions | **Full browser takeover via open CDP port** | any local process connects to `127.0.0.1:9222`, calls `Network.getAllCookies` | **H** | **C** | Never `--remote-debugging-port`; argv guard; `--remote-debugging-pipe` if CDP is needed; runtime `lsof` assertion | **T-CDP-1** |
-| **T13** | Control plane | Local malware drives BlackGlass via the socket | connect to a 0666 socket / uid-only auth | M | **C** | Dir 0700 + socket 0600 + `LOCAL_PEERTOKEN` code-signature check + scoped capability token | **T-SOCK-1** |
+| **T13** | Control plane | Local malware drives Terminal-Fenster via the socket | connect to a 0666 socket / uid-only auth | M | **C** | Dir 0700 + socket 0600 + `LOCAL_PEERTOKEN` code-signature check + scoped capability token | **T-SOCK-1** |
 | **T14** | Control plane | Web page reaches a loopback TCP control plane (DNS rebinding) | `fetch('http://127.0.0.1:PORT')` | M | **C** | UNIX socket only; no TCP listener by default | **T-CDP-1** (same probe) |
 | **T15** | Capability token | Token leaked via `ps`/env/logs | token passed in argv | M | H | Token only over the authenticated socket; never argv/env; redaction in logger | **T-SOCK-2** |
 | **T16** | Cookies at rest | Infostealer `tar`s `~/Library/Application Support` | flat-file theft | **H** | **C** | `EnableCookieEncryption` fuse = true; safeStorage for our own secrets; userData 0700 | **T-STO-1** |
@@ -979,7 +979,7 @@ Impact: **C** = critical (code exec / full credential theft), **H** = high, **M*
 | **T22** | User's shell | **Model output containing escape bytes** | injected page makes the model emit `]52;…` | M | **C** | Agent output goes through the identical `sanitize()` | **T-AGT-4** |
 | **T23** | Shipped binary | Malicious dependency (`postinstall`) | npm/crates hijack | M | **C** | `npm ci --ignore-scripts`; `npm audit signatures`; `cargo audit` + `cargo deny`; lockfiles | **T-SUP-1** |
 | **T24** | Shipped binary | Tampered Electron binary | registry/CDN compromise | L | **C** | SHA256 pinned in-repo + independent verification against published `SHASUMS256.txt` | **T-SUP-2** |
-| **T25** | Shipped binary | Our signed app used as a generic Node interpreter | `ELECTRON_RUN_AS_NODE=1 /Applications/BlackGlass.app/… evil.js` | M | H | `RunAsNode` fuse = false; `NODE_OPTIONS` fuse = false; `nodeCliInspect` fuse = false | **T-SUP-3** |
+| **T25** | Shipped binary | Our signed app used as a generic Node interpreter | `ELECTRON_RUN_AS_NODE=1 /Applications/Terminal-Fenster.app/… evil.js` | M | H | `RunAsNode` fuse = false; `NODE_OPTIONS` fuse = false; `nodeCliInspect` fuse = false | **T-SUP-3** |
 | **T26** | Legal | GPLv2 contamination from iTerm2 source | copying escape-code handling from iTerm2 | L | H | Docs-only reference; `cargo deny check licenses` deny-list GPL/AGPL | **T-SUP-4** |
 
 ---
@@ -994,7 +994,7 @@ Fixture `tests/fixtures/esc-osc52.html`:
 document.title = "]52;c;" + btoa("echo CANARY_PWNED") + "SAFE-TITLE";
 </script>
 ```
-Procedure: `pbcopy </dev/null`; launch BlackGlass in Ghostty on this fixture; wait 2 s; `pbpaste`.
+Procedure: `pbcopy </dev/null`; launch Terminal-Fenster in Ghostty on this fixture; wait 2 s; `pbpaste`.
 **PASS:** `pbpaste` is empty AND the rendered tab shows `<U+FFFD>]52;c;…SAFE-TITLE` (replacement chars visible, no interpretation).
 **FAIL:** `pbpaste` contains `echo CANARY_PWNED`.
 
@@ -1011,7 +1011,7 @@ Same assertion. Also run with the sanitizer's byte-level backstop enabled in deb
 **PASS:** `/tmp/T3_PWNED` does not exist; no bytes appear on the shell's input line.
 
 ### T-ESC-4 · stdin discipline
-Attach a pty harness; feed BlackGlass's stdin `]52;c;U0VDUkVU` (an unsolicited "clipboard reply").
+Attach a pty harness; feed Terminal-Fenster's stdin `]52;c;U0VDUkVU` (an unsolicited "clipboard reply").
 **PASS:** the string never appears in any log, any UI element, or any agent context; the reader discards it as an unexpected reply.
 
 ### T-ESC-5 · Bidi spoof
@@ -1022,18 +1022,18 @@ Navigate to a URL whose path contains `%E2%80%AE` (`U+202E`).
 ```html
 <script>setInterval(()=>document.title=Math.random().toString(36),0)</script>
 ```
-**PASS:** BlackGlass emits ≤ 4 title updates/sec (count with `script -q /dev/null` capture + `grep -c $'\e]0;'`); host CPU for the terminal stays < 25 %; UI stays responsive for 60 s.
+**PASS:** Terminal-Fenster emits ≤ 4 title updates/sec (count with `script -q /dev/null` capture + `grep -c $'\e]0;'`); host CPU for the terminal stays < 25 %; UI stays responsive for 60 s.
 
 ### T-SBX-1 · Sandbox on
 ```bash
-ps -Ao pid,args | grep -i blackglass | grep -c -- '--no-sandbox'   # must be 0
-./BlackGlass --no-sandbox; echo $?                                  # must be 70
+ps -Ao pid,args | grep -i terminal-fenster | grep -c -- '--no-sandbox'   # must be 0
+./Terminal-Fenster --no-sandbox; echo $?                                  # must be 70
 ```
 Plus: `sudo log stream --predicate 'senderImagePath CONTAINS "Sandbox"'` while the renderer attempts `fetch('file:///etc/passwd')` → must show a denial.
 
 ### T-SBX-2 · TTY fd not inherited
 ```bash
-RPID=$(pgrep -f 'BlackGlass.*--type=renderer' | head -1)
+RPID=$(pgrep -f 'Terminal-Fenster.*--type=renderer' | head -1)
 lsof -p "$RPID" | grep -E '/dev/ttys|/dev/pts' | wc -l   # must be 0
 ```
 
@@ -1044,14 +1044,14 @@ Use `@electron/asar` + a runtime probe page:
 window.__probe = {
   hasRequire: typeof require,          // must be "undefined"
   hasProcess: typeof process,          // must be "undefined"
-  bridgeKeys: Object.keys(window.blackglass || {}),  // must be the exact allowlist
+  bridgeKeys: Object.keys(window.terminal-fenster || {}),  // must be the exact allowlist
 };
 ```
 `shell.openExternal('x-apple-reminderkit://x')` from a test page must be refused (assert on the returned boolean and that no app launched: `pgrep Reminders` unchanged). `window.open('https://evil')` from the chrome UI must not create a window.
 
 ### T-CDP-1 · No listening socket
 ```bash
-PID=$(pgrep -f 'BlackGlass' | head -1)
+PID=$(pgrep -f 'Terminal-Fenster' | head -1)
 lsof -nP -iTCP -sTCP:LISTEN -a -p "$PID" | tail -n +2 | wc -l   # must be 0
 for p in 9222 9229 5858 8315; do nc -z -w1 127.0.0.1 $p && { echo "FAIL:$p"; exit 1; }; done
 ```
@@ -1059,28 +1059,28 @@ Also run once **with** `--remote-debugging-port=9222` to confirm the argv guard 
 
 ### T-SOCK-1/2 · Control plane
 ```bash
-S="$TMPDIR/blackglass-$(id -u)/control.sock"
+S="$TMPDIR/terminal-fenster-$(id -u)/control.sock"
 stat -f "%Sp %u" "$(dirname "$S")"   # must be  drwx------ <uid>
 stat -f "%Sp %u" "$S"                # must be  srw------- <uid>
 # unauthenticated peer must be rejected
 python3 -c "import socket,sys;s=socket.socket(socket.AF_UNIX);s.connect(sys.argv[1]);s.sendall(b'{\"m\":\"tabs.list\"}');print(s.recv(4096))" "$S"
 # -> must return an auth error, not tab data
-ps auxww | grep -i blackglass | grep -Ec 'token|secret|bearer'   # must be 0
+ps auxww | grep -i terminal-fenster | grep -Ec 'token|secret|bearer'   # must be 0
 ```
 
 ### T-STO-1 · Cookies encrypted at rest
 ```bash
-UD=~/Library/Application\ Support/BlackGlass
+UD=~/Library/Application\ Support/Terminal-Fenster
 strings "$UD/Cookies" | grep -icE 'sessionid|__Secure-|SID='   # must be 0
 ```
 (Log into a test site first so a cookie definitely exists.)
 
 ### T-QUAR-1 · Download quarantine — **gate on this before any release**
 ```bash
-# download a file through BlackGlass, then:
+# download a file through Terminal-Fenster, then:
 F=~/Downloads/testfile.dmg
 Q=$(xattr -p com.apple.quarantine "$F" 2>/dev/null) || { echo "FAIL: no quarantine"; exit 1; }
-echo "$Q"                    # expect  <flags>;<hex-time>;BlackGlass;<uuid>
+echo "$Q"                    # expect  <flags>;<hex-time>;Terminal-Fenster;<uuid>
 [ -x "$F" ] && { echo "FAIL: executable bit set"; exit 1; }
 stat -f "%Sp" "$F"           # expect -rw-r--r--
 # and the origin metadata must be present:
@@ -1111,13 +1111,13 @@ cargo audit --deny warnings
 cargo deny check advisories bans licenses sources     # licenses deny GPL-2.0/3.0/AGPL
 bash ci/verify-electron.sh                            # §8.3
 # fuses actually flipped in the packaged app:
-npx @electron/fuses read --app dist/BlackGlass.app | tee /tmp/fuses.txt
+npx @electron/fuses read --app dist/Terminal-Fenster.app | tee /tmp/fuses.txt
 grep -q 'RunAsNode.*Disabled' /tmp/fuses.txt
 grep -q 'EnableCookieEncryption.*Enabled' /tmp/fuses.txt
 grep -q 'OnlyLoadAppFromAsar.*Enabled' /tmp/fuses.txt
 # signature survived fuse-flipping:
-codesign --verify --deep --strict --verbose=2 dist/BlackGlass.app
-spctl -a -vvv -t install dist/BlackGlass.app
+codesign --verify --deep --strict --verbose=2 dist/Terminal-Fenster.app
+spctl -a -vvv -t install dist/Terminal-Fenster.app
 ```
 
 ### Property tests / fuzzing on the sanitizer

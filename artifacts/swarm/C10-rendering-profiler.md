@@ -28,7 +28,7 @@ C10 adds the three things A10 leaves open:
 
 | # | Finding | Evidence |
 |---|---|---|
-| **F1** | The number BlackGlass prints today as "encode ms" **excludes the single most expensive CPU stage.** `kitty::bgra_to_rgb` runs in `Renderer::on_frame` (`apps/cli/src/main.rs:837`); the timer starts in `Renderer::present` (`apps/cli/src/main.rs:857`). Measured 2.907 ms p50 invisible vs 0.684 ms p50 visible — the status bar under-reports frame CPU by **5.2×**. | §1.1, §1.2 |
+| **F1** | The number Terminal-Fenster prints today as "encode ms" **excludes the single most expensive CPU stage.** `kitty::bgra_to_rgb` runs in `Renderer::on_frame` (`apps/cli/src/main.rs:837`); the timer starts in `Renderer::present` (`apps/cli/src/main.rs:857`). Measured 2.907 ms p50 invisible vs 0.684 ms p50 visible — the status bar under-reports frame CPU by **5.2×**. | §1.1, §1.2 |
 | **F2** | The e2e-verified "0.74 ms encode" is **real but is not the frame cost.** It matches `deflate+base64+assemble` on a page-like frame (measured 0.684 ms p50). True conversion+encode is 3.569 ms p50 / 6.215 ms p99. | §1.2 |
 | **F3** | Stage costs are **content-dependent by two orders of magnitude.** Same 2482×814 geometry: page-like `deflate` @L1 = 0.654 ms; incompressible (canvas/video) = 16.067 ms — one stage alone exceeds the entire 16.67 ms frame budget. A single aggregate `encode_ms` cannot express this. | §1.2 |
 | **F4** | **Terminal ack via the kitty protocol is unsafe to enable today.** `kitty.rs:132` hardcodes `q=2`; turning it off makes the terminal reply `ESC_Gi=…;OK ESC\`, and `input::Decoder::step()` (`input.rs:176-192`) has no APC state — it decodes that reply as **12 synthetic keystrokes injected into the web page.** Empirically confirmed. | §7 |
@@ -67,7 +67,7 @@ reconcile them against a measured whole (the `residual_ns` check, §5.7).
 
 ### 1.2 Stage costs, measured
 
-Method: a release-mode Rust binary linking the shipping `bg-term` crate by path and calling
+Method: a release-mode Rust binary linking the shipping `tf-term` crate by path and calling
 the real `kitty::bgra_to_rgb`, `b64::encode_into` and `kitty::encode_rgb_frame`. `deflate` is
 private in `kitty.rs:70`, so it was reproduced byte-identically (same `ZlibEncoder`, same
 `Vec::with_capacity(len/4)`, same `Compression::new(level)`). Geometry 2482×814 — the exact
@@ -119,7 +119,7 @@ node v24.11.1, frame payload 8,081,392 B
   main.js:57  Buffer.concat([header, payload])    p50=0.157ms p99=0.429ms
   both concats per frame (excl. toBitmap)         p50=0.383ms p99=0.613ms
 
-bg_proto::MessageReader (wire message 8,081,429 B)
+tf_proto::MessageReader (wire message 8,081,429 B)
   next_message, whole message pre-fed             p50=0.195ms p99=0.420ms
   fed in 1 MiB chunks (main.rs:455 sock_buf)      p50=0.766ms p99=1.292ms
 ```
@@ -150,7 +150,7 @@ against A10 §0.1's ~10.9 ms p50 `write()`. So:
   terminal-dependent. The profiler's job is to make that trade *measurable*, not to pick.
 - **`damage_area_ratio` (A10 §4.1) is the lever these numbers point at**: every stage above
   scales with pixel count, and the engine already reports a dirty rect
-  (`main.js:91-94` → `FrameHeader::dirty_*`, `bg-proto/src/lib.rs:23-26`) that the renderer
+  (`main.js:91-94` → `FrameHeader::dirty_*`, `tf-proto/src/lib.rs:23-26`) that the renderer
   currently ignores. The profiler must record both the reported dirty area and the area
   actually processed, so the gap is visible as a number rather than an intention.
 
@@ -161,7 +161,7 @@ against A10 §0.1's ~10.9 ms p50 `write()`. So:
 ### 2.1 Canonical stages
 
 Nine stages, each owned by exactly one process, each with an unambiguous begin and end. `seq`
-(assigned at `main.js:88`, read back at `bg-proto/src/lib.rs:40`) is the join key across
+(assigned at `main.js:88`, read back at `tf-proto/src/lib.rs:40`) is the join key across
 processes — **it already exists in shipping code, so no protocol change is needed for
 correlation.**
 
@@ -276,7 +276,7 @@ Rust decoder reads both files with one struct) and flush on a `setInterval(250)`
 | 496 | `Session::run` | `InStdinRead` (A10 #2 §3.1, **t0**) | Immediately after the `libc::read` on lines 489-495 returns `r > 0`. This is the canonical t0 and must be taken **before** `decoder.decode`. |
 | 497 | `Session::run` | `InParsed` (A10 #2) | After `decoder.decode(&stdin_buf[..r as usize])` returns, once per read, `aux` = event count. |
 | 520 | `Session::run` | `FrameIpcRecv` (A10 #9) | After `self.stream.read(&mut sock_buf)` returns `Ok(n)`, `aux` = `n`. Note this fires once per **socket read**, not per frame — an 8 MB frame arrives in ~8 reads of the 1 MiB `sock_buf` (line 455). The decoder attributes the *last* `FrameIpcRecv` before a `DeframeEnd` to that frame. |
-| 532 | `Session::run` | `DeframeBegin`/`DeframeEnd` | Bracket the `while let Some(msg) = reader.next_message()` condition. Measured 0.766 ms p50 in the realistic chunked path (§1.2), driven by `to_vec()` at `bg-proto:90` and `drain()` at `bg-proto:91`. |
+| 532 | `Session::run` | `DeframeBegin`/`DeframeEnd` | Bracket the `while let Some(msg) = reader.next_message()` condition. Measured 0.766 ms p50 in the realistic chunked path (§1.2), driven by `to_vec()` at `tf-proto:90` and `drain()` at `tf-proto:91`. |
 | 535 | `Session::run` | (join key) | `render.on_frame(&msg.payload, &mut status)` — parse `FrameHeader` (already done on line 538, but only on the first frame) and hoist `h.seq` so every probe from here on carries it. Today the header is parsed twice for frame 1 and zero times afterwards. |
 | 829 | `Renderer::on_frame` | `FrameCoalesced` (A10 #16) | At function entry, **if `self.dirty` is already true** — that means the previous frame was converted but never presented, i.e. the core coalesced it. The engine's `stats.coalesced` (`main.js:96`) does not see this; it is a second, independent coalesce point and is currently invisible. |
 | 834-836 | `Renderer::on_frame` | `FrameTruncated` | At the `if pixels.len() < h.expected_payload() { return; }` early return. **This is a silent drop today** — no counter, no log. A truncated frame means a framing bug and must be loud. |
@@ -293,9 +293,9 @@ Rust decoder reads both files with one struct) and flush on a `setInterval(250)`
 | 653 | `Session::handle_event` | `TermAckRecv` (A10 #14, **t5a**) | The `Event::Unknown(_)` arm. Match `seq == b"\x1b[0n"` and stamp the ack; everything else stays ignored exactly as today. |
 | 32 | `log_line` | **do not reuse** | `log_line` opens the file with `OpenOptions::new().create(true).append(true).open(path)` on **every call** (line 38) — an `open`+`write`+`close` per line. At 60 fps × 12 stages that is 720 syscall triples per second and would dominate what it measures. The profiler needs its own long-lived fd. |
 
-### 3.3 `crates/bg-term/src/kitty.rs` (396 lines)
+### 3.3 `crates/tf-term/src/kitty.rs` (396 lines)
 
-`bg-term` is a dependency-free library crate (`crates/bg-term/Cargo.toml`: `libc`, `flate2`).
+`tf-term` is a dependency-free library crate (`crates/tf-term/Cargo.toml`: `libc`, `flate2`).
 Do **not** give it a tracing dependency or a global sink. Instead return the timings through
 the struct that already carries the byte counts.
 
@@ -313,20 +313,20 @@ The clock function itself must come from A10 §1.4 (`crates/bg-bench/src/clock.r
 `now_ns()`, measured 8.36–8.50 ns/call). Six extra calls per frame inside `encode_rgb_frame`
 is ~51 ns against a 16,670,000 ns budget: 0.0003 %.
 
-### 3.4 `crates/bg-proto/src/lib.rs` (284 lines)
+### 3.4 `crates/tf-proto/src/lib.rs` (284 lines)
 
 No probes inside this crate. `next_message` (line 81) is timed from `main.rs:532` (§3.2).
 Two observations the profiler will surface and that belong in the report rather than in a
 patch here:
 
-- `bg-proto:90` `self.buf[5..5+len].to_vec()` copies the entire 8 MB frame.
-- `bg-proto:91` `self.buf.drain(..5+len)` memmoves whatever remains.
+- `tf-proto:90` `self.buf[5..5+len].to_vec()` copies the entire 8 MB frame.
+- `tf-proto:91` `self.buf.drain(..5+len)` memmoves whatever remains.
 
 Together with the `extend_from_slice` growth in `feed` (line 73), these account for the
 0.766 ms p50 measured in §1.2. A zero-copy `next_message_ref()` returning a borrowed slice is
 the obvious fix; it is a core change and is described in §11, not made here.
 
-### 3.5 `crates/bg-term/src/caps.rs` (373 lines) — cold-start attribution
+### 3.5 `crates/tf-term/src/caps.rs` (373 lines) — cold-start attribution
 
 `detect` (line 128) issues six sequential terminal queries, each via `query` (line 116) with a
 `deadline_ms` of 300 (passed from `main.rs:241`). On a terminal that does not answer, each
@@ -351,7 +351,7 @@ distinction is what tells the commander whether shortening the deadline is safe.
 
 ### 3.6 Files with no probes
 
-`crates/bg-term/src/tty.rs`, `b64.rs`, `unicode.rs`, `input.rs` take no in-crate probes.
+`crates/tf-term/src/tty.rs`, `b64.rs`, `unicode.rs`, `input.rs` take no in-crate probes.
 `b64::encode_into` and `unicode::render_half_blocks` are timed at their call sites
 (`kitty.rs:119`, `main.rs:876`). `input::Decoder::decode` is timed at `main.rs:497`.
 `tty.rs` is lifecycle, not steady state — its `acquire` (line 84) and `Drop` (line 176) are
@@ -429,7 +429,7 @@ Design rules, and the reason for each:
 ```
 <outdir>/<run-id>/
   manifest.json          # convenience copy of the meta record
-  core.jsonl             # emitted by apps/cli   (pid of blackglass)
+  core.jsonl             # emitted by apps/cli   (pid of terminal-fenster)
   engine.jsonl           # emitted by apps/engine (pid of the Electron main process)
   merged.jsonl           # produced by `bgprof merge`, joined on seq
   report.txt             # §6 human summary
@@ -442,12 +442,12 @@ prescribes.
 ### 5.3 Record type `meta` (first line of every file, exactly one)
 
 ```json
-{"r":"meta","schema":"blackglass.prof/1","v":1,
+{"r":"meta","schema":"terminal-fenster.prof/1","v":1,
  "run_id":"1753996800123-5215e1e-pacing",
  "role":"core",
  "pid":48231,
  "git_sha":"5215e1e","dirty_tree":true,
- "argv":["blackglass","open","https://example.com"],
+ "argv":["terminal-fenster","open","https://example.com"],
  "t_anchor_ns":184523119884321,"rt_anchor_ns":1753996800123000000,
  "timebase":{"numer":125,"denom":3},
  "clock_agreement_ns":312,
@@ -502,7 +502,7 @@ Field notes:
 | `seq` | u32 | From `main.js:88` / `FrameHeader.seq`. The cross-process join key. |
 | `t_paint_ns` | u64 \| null | A10 t2. `null` if the frame's engine record is missing (merge failure). |
 | `t_flush_ns` | u64 \| null | A10 t4, taken after `stdout.flush()` returns (`main.rs:901`). |
-| `dirty` | object | Straight from `FrameHeader.dirty_*` (`bg-proto:23-26`), which the engine fills at `main.js:91-94`. |
+| `dirty` | object | Straight from `FrameHeader.dirty_*` (`tf-proto:23-26`), which the engine fills at `main.js:91-94`. |
 | `damage_area_ratio` | f64 | `dirty.w*dirty.h / (w*h)` — what Chromium says changed. |
 | `processed_area_ratio` | f64 | What we actually converted and encoded. **Today this is always `1.0`** because `main.rs:837` converts the whole buffer. The gap between these two numbers is the size of the optimisation A10 §0.1 says is load-bearing, expressed as a measurement. |
 | `bytes.out_total` | usize | `self.out.len()` at `main.rs:900` — includes the `ESC[H` on line 855 and the status bar, so it exceeds `bytes.wire`. Both are reported; conflating them hides the status bar's cost. |
@@ -618,7 +618,7 @@ generated from A10 §10 by reference, not by a copy that can drift.
 thing that pastes into a PR comment and into this repo's `artifacts/`.
 
 ```
-BlackGlass render profile   run 1753996800123-5215e1e-pacing        integrity: OK
+Terminal-Fenster render profile   run 1753996800123-5215e1e-pacing        integrity: OK
 Ghostty 1.3.1 / kitty backend / 2482x814 / zlib L1 / chunk 4096      60.0 s wall
 
 FRAMES   received 3611   presented 3402   coalesced 203 (5.6%)   truncated 0
@@ -762,7 +762,7 @@ sampler therefore refuses to issue a new DSR while one is outstanding, and count
 | Hot path | no allocation, no formatting, no locking, no syscall | A10 §2.1 |
 | Sink | preallocated ring, flushed by a dedicated 250 ms thread | A10 §2.3 |
 | Ring overflow | drop oldest, increment `prof_records_dropped`, **fail the run** (I9) | A silent drop produces a lying p99 |
-| Log file | separate fd from `BLACKGLASS_LOG`; never reuse `log_line` (`main.rs:32`) | It reopens the file per call |
+| Log file | separate fd from `TERMINAL_FENSTER_LOG`; never reuse `log_line` (`main.rs:32`) | It reopens the file per call |
 | stdout | the profiler **never** writes to stdout | stdout is the graphics channel (`main.rs:29-31`) |
 
 CI gating follows A10 §8.4: per-PR runs only the hermetic stage microbenchmarks (`convert`,
@@ -820,20 +820,20 @@ carry the result into `present`, and add it to the reported figure. Rename
 silently gets a changed number under an unchanged name. Effect on the status bar: today's
 `0.7ms` becomes `3.6ms`, which is the truth.
 
-**11.2 — `crates/bg-term/src/kitty.rs:192`: extend `EncodeStats` with three `u64` stage fields.**
-Populated at `kitty.rs:111-115`, `:118-119`, `:121-156`. Keeps `bg-term` dependency-free and
+**11.2 — `crates/tf-term/src/kitty.rs:192`: extend `EncodeStats` with three `u64` stage fields.**
+Populated at `kitty.rs:111-115`, `:118-119`, `:121-156`. Keeps `tf-term` dependency-free and
 extends its existing unit tests naturally. Nothing outside `encode_rgb_frame` changes.
 
 **11.3 — `apps/cli/src/main.rs:835`: make the truncated-frame drop loud.**
 It currently `return`s with no counter and no log. One counter and one `note` record.
 
-**11.4 — `crates/bg-term/src/input.rs:176`: add APC/DCS skip states to `step()`.**
+**11.4 — `crates/tf-term/src/input.rs:176`: add APC/DCS skip states to `step()`.**
 `ESC _ … ESC \` and `ESC P … ESC \` should be consumed and surfaced as a new
 `Event::TerminalReply(Vec<u8>)`, not decoded as Alt+char plus literal keystrokes. This is a
 **correctness** fix (§7.2), not a profiling one; it also unblocks the kitty-`q=0` ack variant.
 It needs its own tests and should not be bundled with profiler work.
 
-**11.5 — `crates/bg-proto/src/lib.rs:90-91`: add a zero-copy `next_message_ref()`.**
+**11.5 — `crates/tf-proto/src/lib.rs:90-91`: add a zero-copy `next_message_ref()`.**
 Returns a borrowed `&[u8]` and defers the `drain` to an explicit `consume()`. Saves the 8 MB
 `to_vec` per frame; measured headroom 0.766 ms p50 (§1.2). Optimisation, not a prerequisite —
 and the profiler should land *first* so the win can be demonstrated rather than asserted.
@@ -855,10 +855,10 @@ Emit `\x1b[5n` after flush on every 60th presented frame; match `b"\x1b[0n"` in 
 |---|---|---|
 | `artifacts/swarm/A10-performance-plan.md` §1.4, §2.2, §3.1-3.5, §4.1-4.2, §8, §10 | in-repo | Clock, `Ev` record, latency chain, pacing definitions, statistics policy, budgets. C10 extends, never redefines. |
 | `docs/adr/ADR-0001-browser-engine.md` | in-repo | 60 fps baseline, BGRA non-strided contract |
-| `apps/engine/src/main.js`, `apps/cli/src/main.rs`, `crates/bg-term/src/{kitty,b64,input,caps,tty,unicode}.rs`, `crates/bg-proto/src/lib.rs` | in-repo, read in full or in relevant part | Every line number in §3 |
+| `apps/engine/src/main.js`, `apps/cli/src/main.rs`, `crates/tf-term/src/{kitty,b64,input,caps,tty,unicode}.rs`, `crates/tf-proto/src/lib.rs` | in-repo, read in full or in relevant part | Every line number in §3 |
 | https://sw.kovidgoyal.net/kitty/graphics-protocol/ | spec | `q=` semantics (§7.2). Spec only — the kitty *implementation* is GPL-3.0 and must not be read or copied (A10 §11). |
 | `flate2` 1.x (MIT OR Apache-2.0), `libc` 0.2 (MIT OR Apache-2.0) | deps | Already in `Cargo.toml`; §1.2's bench added no new dependency |
-| Measurements in §1.2, §7.2, §7.3 | this document | Scratchpad crates linking the shipping `bg-term`/`bg-proto` by path; commands shown inline; no repo file created or modified |
+| Measurements in §1.2, §7.2, §7.3 | this document | Scratchpad crates linking the shipping `tf-term`/`tf-proto` by path; commands shown inline; no repo file created or modified |
 
 **License note:** every measurement here was produced with code that either lives in this
 repository already or was written for this document. No third-party source was copied. The

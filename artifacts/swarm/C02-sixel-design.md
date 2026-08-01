@@ -46,7 +46,7 @@ Written this session; it is the regression suite for every number below. Keep it
 | `…/scratchpad/pctramp.six` | The 101-column probe that established the percent→8-bit mapping (§4). |
 
 Full scratchpad path prefix:
-`/private/tmp/claude-501/-Users-adeebbashir/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/`
+`/private/tmp/claude-501/-Users-builder/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/`
 
 Modes: `example`, `encode <rgb> <w> <h> [out] [amp]`, `bench <rgb> <w> <h> <reps>`,
 `damage <rgb> <w> <h> <cellw> <cellh>`, `tiles <rgb> <w> <h> <cellw> <cellh>`,
@@ -75,12 +75,12 @@ accepts byte-exactly.
 
 | Fact | Source |
 |---|---|
-| DA1 param `4` is the Sixel capability bit; already parsed correctly | `crates/bg-term/src/caps.rs:172`, `parse_da1_has_sixel` |
+| DA1 param `4` is the Sixel capability bit; already parsed correctly | `crates/tf-term/src/caps.rs:172`, `parse_da1_has_sixel` |
 | Ghostty 1.3.1 DA1 = `?62;22;52c` → no Sixel; Apple Terminal = `?1;2c` → no Sixel | `caps.rs:281-289` (tests), A04 §3.2 |
-| `Backend::Sixel` exists and `best_backend()` can return it | `crates/bg-term/src/lib.rs:83`, `caps.rs:56-63` |
-| `BLACKGLASS_BACKEND=sixel` is accepted | `apps/cli/src/main.rs:211` |
+| `Backend::Sixel` exists and `best_backend()` can return it | `crates/tf-term/src/lib.rs:83`, `caps.rs:56-63` |
+| `TERMINAL_FENSTER_BACKEND=sixel` is accepted | `apps/cli/src/main.rs:211` |
 | **`Renderer::present` routes everything that is not Kitty to the Unicode half-block path** | `apps/cli/src/main.rs:858-859` — the `_ =>` arm. Selecting Sixel today silently renders half-blocks. Also flagged by B01 §250. |
-| Frame header already carries a dirty rect (`dirty_x/y/w/h`, u32 BE) | `crates/bg-proto/src/lib.rs:24-27,42-45` |
+| Frame header already carries a dirty rect (`dirty_x/y/w/h`, u32 BE) | `crates/tf-proto/src/lib.rs:24-27,42-45` |
 | Kitty baseline on the identical 2482×814 frame: 53,999 wire bytes | B01-architecture-rfc.md:46 |
 | Kitty encode really costs ≥11.53 ms, not 0.74 ms | B05-shared-texture-analysis.md:211 |
 | PTY write throughput, 1 KiB chunks: 400,000 B → 0.987 ms p50; 40,000 B → 0.138 ms p50 | A10-performance-plan.md §0.1 |
@@ -94,7 +94,7 @@ accepts byte-exactly.
 A04 §3.3 concluded: *do not implement Sixel*, because on the three measured terminals it
 buys nothing. That conclusion is correct **for those three terminals** and this document
 does not overturn it. Sixel earns its place only as the answer to a different question —
-what BlackGlass does on the terminals it has not yet met. Sixel is the single most widely
+what Terminal-Fenster does on the terminals it has not yet met. Sixel is the single most widely
 implemented raster protocol in that set: xterm, mlterm, Konsole, WezTerm, foot, contour,
 Windows Terminal. The alternative for those users today is the Unicode half-block
 fallback, which A04 and `unicode.rs:8-10` both describe as unable to render body text.
@@ -363,7 +363,7 @@ terminated RLE token. On a protocol whose entire compression story is `!Pn`, tha
 2–3× the bytes — and §10 shows bytes are the thing we are short of.
 
 **Decision: dithering defaults to OFF.** Keep the implementation behind
-`BLACKGLASS_SIXEL_DITHER=<amplitude>` for photo-viewing, and if it is ever enabled by
+`TERMINAL_FENSTER_SIXEL_DITHER=<amplitude>` for photo-viewing, and if it is ever enabled by
 default, only with the neutral guard (which preserves text at +20% rather than +162%).
 This inverts the usual advice, so the reason belongs in the code comment, not just here.
 
@@ -565,7 +565,7 @@ the same conclusion A10 §0.1 reached for the PTY write path, arrived at indepen
 the encoder side: **damage-driven updates are load-bearing, not an optimisation.**
 
 Note the engine already ships a dirty rect in the frame header
-(`bg-proto/src/lib.rs:24-27`) and the consumer currently ignores it
+(`tf-proto/src/lib.rs:24-27`) and the consumer currently ignores it
 (`main.rs` — `encode_rgb_frame` over the full page). B07 §5 specifies the fix on the engine
 side (union dirty rects across coalesced frames). **The Sixel backend should be built
 against B07's corrected dirty rect, not against the current always-full-frame behaviour.**
@@ -679,8 +679,8 @@ reason §14 makes tiling non-optional rather than a later optimisation.
 **Do this first, and independently of Sixel — it is a correctness bug today.**
 
 > **11.1** `apps/cli/src/main.rs:858-859` — `Renderer::present` matches `Backend::Kitty`
-> and sends everything else to the Unicode path via `_ =>`. So `blackglass doctor` can
-> report `sixel` (`caps.rs:56-63`) and `BLACKGLASS_BACKEND=sixel` is accepted
+> and sends everything else to the Unicode path via `_ =>`. So `terminal-fenster doctor` can
+> report `sixel` (`caps.rs:56-63`) and `TERMINAL_FENSTER_BACKEND=sixel` is accepted
 > (`main.rs:211`), while `open` silently renders half-blocks. B01 §250 flags the same
 > thing. Make the match **exhaustive over `Backend`** so adding a variant is a compile
 > error rather than a silent downgrade, and until a Sixel encoder exists, have the Sixel
@@ -688,18 +688,18 @@ reason §14 makes tiling non-optional rather than a later optimisation.
 
 Then, for the backend itself:
 
-> **11.2** New file `crates/bg-term/src/sixel.rs`, registered in `crates/bg-term/src/lib.rs`
+> **11.2** New file `crates/tf-term/src/sixel.rs`, registered in `crates/tf-term/src/lib.rs`
 > alongside `pub mod kitty;` (`lib.rs:12-17`). No new dependencies — Sixel has no
 > compression, so `flate2` is not needed.
 >
-> **11.3** `crates/bg-term/src/caps.rs` — add XTSMGRAPHICS negotiation (§5.4) and the
+> **11.3** `crates/tf-term/src/caps.rs` — add XTSMGRAPHICS negotiation (§5.4) and the
 > placement probe (§9.5), pushing raw replies into `raw_replies` as the existing probes do.
 > Add `sixel_registers: Option<u32>`, `sixel_max_geometry: Option<(u16,u16)>`, and
 > `sixel_draws_at_cursor: bool` to `Capabilities`. **`best_backend()` must not return
 > `Backend::Sixel` unless cell size is known** (§9.2).
 >
 > **11.4** `apps/cli/src/main.rs` — consume `FrameHeader::dirty_*`
-> (`bg-proto/src/lib.rs:24-27`), which the renderer currently ignores. Build against B07's
+> (`tf-proto/src/lib.rs:24-27`), which the renderer currently ignores. Build against B07's
 > corrected coalescing (B07 §5/§10.1) so the dirty rect is the union across dropped frames;
 > without that fix, tiles will miss updates.
 

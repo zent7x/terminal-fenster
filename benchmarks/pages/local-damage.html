@@ -1,0 +1,32 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Terminal-Fenster local-damage bench</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #111827; color: #e5e7eb; }
+  body { font: 24px system-ui, sans-serif; }
+  main { padding: 48px; max-width: 760px; }
+  h1 { color: #7dd3fc; }
+  code { color: #fbbf24; }
+  canvas { position: fixed; right: 20px; bottom: 20px; width: 80px; height: 80px; }
+</style>
+<main>
+  <h1>Localized repaint benchmark</h1>
+  <p>The page is static except for one <code>80×80</code> canvas. Chromium should report a
+  small dirty rectangle while the terminal keeps the rest of the mosaic resident.</p>
+</main>
+<canvas id="pulse" width="80" height="80"></canvas>
+<script>
+  const canvas = document.getElementById('pulse');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  let frame = 0;
+  function paint() {
+    const hue = frame++ % 360;
+    ctx.fillStyle = `hsl(${hue} 85% 52%)`;
+    ctx.fillRect(0, 0, 80, 80);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 18px monospace';
+    ctx.fillText(String(frame % 100).padStart(2, '0'), 26, 47);
+    requestAnimationFrame(paint);
+  }
+  requestAnimationFrame(paint);
+</script>

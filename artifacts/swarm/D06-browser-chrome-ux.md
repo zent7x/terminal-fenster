@@ -25,7 +25,7 @@ Everything in §2 and §8 rests on these. Commands are reproducible on this box.
 
 93 default binds. 78 use `super` (macOS Cmd) and are irrelevant to us — Cmd never reaches a TUI. The **15 that do not use `super`** are the entire terminal-level collision surface:
 
-| Ghostty default bind | Action | Consequence for BlackGlass |
+| Ghostty default bind | Action | Consequence for Terminal-Fenster |
 |---|---|---|
 | `ctrl+tab` | `next_tab` | **`Ctrl+Tab` never reaches the app.** Cannot be used for tab switching. |
 | `ctrl+shift+tab` | `previous_tab` | Same. |
@@ -53,11 +53,11 @@ bind-key -T root WheelUpPane if-shell -F "#{||:#{alternate_on},#{pane_in_mode},#
     { send-keys -M } { copy-mode -e }
 ```
 
-Because `TtyGuard::enable_input_protocols` enters the alternate screen (`\x1b[?1049h`, `crates/bg-term/src/tty.rs:150`), `alternate_on` is true, so tmux **forwards** the wheel to us via `send-keys -M` instead of hijacking it into copy-mode. **The alternate screen is load-bearing for mouse scroll under tmux.** Removing `?1049h` would silently break scrolling in every tmux pane.
+Because `TtyGuard::enable_input_protocols` enters the alternate screen (`\x1b[?1049h`, `crates/tf-term/src/tty.rs:150`), `alternate_on` is true, so tmux **forwards** the wheel to us via `send-keys -M` instead of hijacking it into copy-mode. **The alternate screen is load-bearing for mouse scroll under tmux.** Removing `?1049h` would silently break scrolling in every tmux pane.
 
 ### 1.3 Terminal state established by the existing tty guard
 
-From `crates/bg-term/src/tty.rs:103-117`:
+From `crates/tf-term/src/tty.rs:103-117`:
 
 | Flag cleared | Line | Consequence for keybinding design |
 |---|---|---|
@@ -70,7 +70,7 @@ Kitty keyboard flags pushed are `\x1b[>27u` (tty.rs:167) = 1 (disambiguate) + 2 
 
 ### 1.4 Geometry measured on this box
 
-`crates/bg-term/src/tty.rs:239` encodes the measured Ghostty full-screen geometry: `rows: 23, cols: 146, xpixel: 2488, ypixel: 858` -> cell `17x37 px`. The end-to-end run in the mission brief produced a `2482x814` frame, and `814 = 22 x 37` — exactly 23 rows minus the one row the status bar already occupies. The row-cost arithmetic in §3.2 is derived from these numbers, not estimated.
+`crates/tf-term/src/tty.rs:239` encodes the measured Ghostty full-screen geometry: `rows: 23, cols: 146, xpixel: 2488, ypixel: 858` -> cell `17x37 px`. The end-to-end run in the mission brief produced a `2482x814` frame, and `814 = 22 x 37` — exactly 23 rows minus the one row the status bar already occupies. The row-cost arithmetic in §3.2 is derived from these numbers, not estimated.
 
 ### 1.5 Electron 43.2.0 API surface (vendored typings, `apps/engine/node_modules/electron/electron.d.ts`)
 
@@ -99,7 +99,7 @@ Ranked by severity. Each is a concrete, located defect or gap that this design d
 
 ### F1 — HIGH — `Alt+Left`/`Alt+Right` back/forward is dead in Ghostty with default config
 
-`apps/cli/src/main.rs:580-592` intercepts `mods.alt` + `KeyCode::Left`/`Right` for back/forward. Ghostty 1.3.1's **default** binds are `alt+arrow_left=esc:b` and `alt+arrow_right=esc:f` (§1.1). Ghostty therefore transmits the two bytes `ESC 'b'`, which `Decoder::step` (`crates/bg-term/src/input.rs:179-192`) decodes via its `ESC <char> = Alt+char` branch into `KeyCode::Char('b')` with `alt: true`. The match arm tests `KeyCode::Left`, so **it never fires**; instead an `Alt+b` keystroke is forwarded to the page.
+`apps/cli/src/main.rs:580-592` intercepts `mods.alt` + `KeyCode::Left`/`Right` for back/forward. Ghostty 1.3.1's **default** binds are `alt+arrow_left=esc:b` and `alt+arrow_right=esc:f` (§1.1). Ghostty therefore transmits the two bytes `ESC 'b'`, which `Decoder::step` (`crates/tf-term/src/input.rs:179-192`) decodes via its `ESC <char> = Alt+char` branch into `KeyCode::Char('b')` with `alt: true`. The match arm tests `KeyCode::Left`, so **it never fires**; instead an `Alt+b` keystroke is forwarded to the page.
 
 This is worse on macOS generally: `macos-option-as-alt` is unset by default (`ghostty +show-config --default`), so Option-plus-letter composes a Unicode character rather than producing an Alt-modified key. **Alt is not a dependable modifier for this product.**
 
@@ -119,7 +119,7 @@ The measured Ghostty full-screen width on this box is **146 cols** (§1.4). So t
 
 ### F3 — HIGH — truncation counts characters, not display columns
 
-`sanitize_for_terminal` (`crates/bg-term/src/unicode.rs:60-75`) truncates on `out.chars().count() >= max_len`, and the test at `unicode.rs:158-163` locks that behaviour in. A 40-character CJK title occupies **80 columns**. An emoji title occupies 2 columns per char; a title with combining marks occupies fewer. Any of these desynchronizes the chrome row's column arithmetic and, combined with F2, wraps the last row.
+`sanitize_for_terminal` (`crates/tf-term/src/unicode.rs:60-75`) truncates on `out.chars().count() >= max_len`, and the test at `unicode.rs:158-163` locks that behaviour in. A 40-character CJK title occupies **80 columns**. An emoji title occupies 2 columns per char; a title with combining marks occupies fewer. Any of these desynchronizes the chrome row's column arithmetic and, combined with F2, wraps the last row.
 
 *Fix:* add a display-width-aware `truncate_to_columns(s, cols)` using a `wcwidth`/East-Asian-Width table, and have the chrome measure every untrusted string with it. Note this is a **new function**, not a change to `sanitize_for_terminal`'s contract — the existing tests should keep passing.
 
@@ -752,7 +752,7 @@ Ordering within a frame write matters and is already right in `present`: image f
 The generator lives outside the repo, per file-ownership rules:
 
 ```
-/private/tmp/claude-501/-Users-adeebbashir/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/mock.py
+/private/tmp/claude-501/-Users-builder/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/mock.py
 python3 mock.py    # asserts every line is width-exact and printable-ASCII; 20 blocks pass
 ```
 

@@ -1,10 +1,17 @@
 {
-  "name": "@blackglass/engine",
+  "name": "@terminal-fenster/engine",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "main": "src/main.js",
-  "description": "Chromium offscreen rendering engine host for BlackGlass",
+  "description": "Chromium offscreen rendering engine host for Terminal-Fenster",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "dependencies": {
-    "electron": "^43.2.0"
+    "electron": "43.2.0"
   }
 }

@@ -1,8 +1,8 @@
-# E10 — Integrating Coding Agents with BlackGlass
+# E10 — Integrating Coding Agents with Terminal-Fenster
 
 **Mission:** concise integration docs for coding agents (Claude Code, Cursor, generic MCP
 clients) — setup, tools, permission boundaries, examples.
-**Audience:** a developer wiring BlackGlass into an AI coding agent.
+**Audience:** a developer wiring Terminal-Fenster into an AI coding agent.
 **Author:** swarm agent E10. **Date:** 2026-07-31.
 **Files written:** this file only. No repo source was modified.
 **Ground truth:** everything below is read from `packages/mcp/` and verified on this machine
@@ -12,7 +12,7 @@ clients) — setup, tools, permission boundaries, examples.
 
 ## 0. What an agent gets
 
-BlackGlass ships an **MCP server** (`packages/mcp/index.js`, package `@blackglass/mcp`) that
+Terminal-Fenster ships an **MCP server** (`packages/mcp/index.js`, package `@terminal-fenster/mcp`) that
 lets an AI agent drive the same terminal browser a human is watching. It speaks
 Model Context Protocol over **stdio** (newline-delimited JSON-RPC), has **zero npm
 dependencies**, and exposes **16 tools** (`browser_navigate`, `browser_snapshot`,
@@ -36,13 +36,13 @@ Two design facts shape every integration:
 |---|---|---|
 | Node.js ≥ 22 | `packages/mcp/package.json` `engines`. Verified on `v24.11.1`. | `node --version` |
 | Engine deps (once) | Electron 43.2.0 must be installed under `apps/engine/`. This is a one-time ~200 MB download. | `ls apps/engine/node_modules/.bin/electron` |
-| A graphics-capable terminal (for the human view) | Kitty-graphics (Ghostty) or Unicode fallback. Not needed for headless agent use. | `blackglass doctor` |
+| A graphics-capable terminal (for the human view) | Kitty-graphics (Ghostty) or Unicode fallback. Not needed for headless agent use. | `terminal-fenster doctor` |
 
 Install the engine dependencies once, with your explicit action — nothing is installed
 behind your back:
 
 ```bash
-cd /Users/adeebbashir/projects/blackglass/apps/engine
+cd $REPO/apps/engine
 npm install          # pulls Electron 43.2.0 (~200 MB) into ./node_modules
 ```
 
@@ -58,7 +58,7 @@ The MCP server itself needs no install step — it is a single dependency-free N
 Two checks, both runnable from `packages/mcp/`:
 
 ```bash
-cd /Users/adeebbashir/projects/blackglass/packages/mcp
+cd $REPO/packages/mcp
 
 npm test          # protocol conformance: starts NO browser, runs anywhere (CI-safe)
 npm run test:live # end-to-end: spawns the real Electron engine and drives a page
@@ -78,13 +78,13 @@ Expected tail: `25/25 checks passed`, and a printed tool roster of all 16 tool n
 The server is a stdio subprocess. The canonical launch command is:
 
 ```bash
-node /Users/adeebbashir/projects/blackglass/packages/mcp/index.js
+node $REPO/packages/mcp/index.js
 ```
 
-The package also declares a `blackglass-mcp` bin, so inside the repo you can run
-`node packages/mcp/index.js` or, after `npm link`/install, `blackglass-mcp`. Note: the Rust
-`blackglass` CLI today exposes only `doctor` and `open` (`apps/cli/src/main.rs:54-66`) —
-there is **no** `blackglass mcp` subcommand yet, so point your client at `index.js`
+The package also declares a `terminal-fenster-mcp` bin, so inside the repo you can run
+`node packages/mcp/index.js` or, after `npm link`/install, `terminal-fenster-mcp`. Note: the Rust
+`terminal-fenster` CLI today exposes only `doctor` and `open` (`apps/cli/src/main.rs:54-66`) —
+there is **no** `terminal-fenster mcp` subcommand yet, so point your client at `index.js`
 directly.
 
 An MCP client starts this command, writes JSON-RPC requests to its stdin, and reads
@@ -107,10 +107,10 @@ Two equivalent, fully reversible options. Both were checked against the installe
 **Option A — one command, project scope (recommended, shareable, consent-gated):**
 
 ```bash
-cd /Users/adeebbashir/projects/blackglass
-claude mcp add blackglass \
+cd $REPO
+claude mcp add terminal-fenster \
   --scope project \
-  -- node /Users/adeebbashir/projects/blackglass/packages/mcp/index.js
+  -- node $REPO/packages/mcp/index.js
 ```
 
 `--scope project` writes a `.mcp.json` file in the repo root (see Option B for its exact
@@ -120,18 +120,18 @@ contents). Because it lives in the project, a teammate who checks it out sees th
 (the default) keeps it private to you for this project; `--scope user` would make it global
 across all your projects — only choose that deliberately.
 
-Add environment variables with `-e`, e.g. `-e BLACKGLASS_MCP_WIDTH=1600 -e BLACKGLASS_MCP_HEIGHT=1000`.
+Add environment variables with `-e`, e.g. `-e TERMINAL_FENSTER_MCP_WIDTH=1600 -e TERMINAL_FENSTER_MCP_HEIGHT=1000`.
 
 **Option B — write the file yourself (fully inspectable):**
 
-Create `/Users/adeebbashir/projects/blackglass/.mcp.json`:
+Create `$REPO/.mcp.json`:
 
 ```json
 {
   "mcpServers": {
-    "blackglass": {
+    "terminal-fenster": {
       "command": "node",
-      "args": ["/Users/adeebbashir/projects/blackglass/packages/mcp/index.js"],
+      "args": ["$REPO/packages/mcp/index.js"],
       "env": {}
     }
   }
@@ -142,8 +142,8 @@ Create `/Users/adeebbashir/projects/blackglass/.mcp.json`:
 
 ```bash
 claude mcp list                       # shows status; .mcp.json entries read "Pending approval" until approved
-claude mcp get blackglass             # full details of the configured server
-claude mcp remove blackglass --scope project   # removes it; or just delete the .mcp.json entry
+claude mcp get terminal-fenster             # full details of the configured server
+claude mcp remove terminal-fenster --scope project   # removes it; or just delete the .mcp.json entry
 ```
 
 Nothing is written to your global `~/.claude.json` unless you pass `--scope user`
@@ -155,14 +155,14 @@ Cursor reads MCP servers from a JSON file. Use the **project-local** path so the
 lives in the repo and is trivially removable — do not edit the global `~/.cursor/mcp.json`
 unless you intend a machine-wide server.
 
-Create `/Users/adeebbashir/projects/blackglass/.cursor/mcp.json`:
+Create `$REPO/.cursor/mcp.json`:
 
 ```json
 {
   "mcpServers": {
-    "blackglass": {
+    "terminal-fenster": {
       "command": "node",
-      "args": ["/Users/adeebbashir/projects/blackglass/packages/mcp/index.js"],
+      "args": ["$REPO/packages/mcp/index.js"],
       "env": {}
     }
   }
@@ -282,18 +282,18 @@ loopback-only (not reachable off-host) but **unauthenticated**: any process runn
 same local user can attach and drive the browser (`packages/mcp/lib/engine.js:14-22`).
 Controls:
 
-- `BLACKGLASS_MCP_CDP=0` disables CDP entirely. Semantic tools then degrade to
+- `TERMINAL_FENSTER_MCP_CDP=0` disables CDP entirely. Semantic tools then degrade to
   coordinate-only — `browser_snapshot`/`browser_find`/`browser_click` by ref stop working;
   `browser_click_xy` and `browser_screenshot` still do.
 - The DevTools profile is a **throwaway `--user-data-dir`** unless you set
-  `BLACKGLASS_MCP_PROFILE`, so by default there are no persistent cookies or credentials in
+  `TERMINAL_FENSTER_MCP_PROFILE`, so by default there are no persistent cookies or credentials in
   the automated browser.
 
 **Every action is audited.** All tool calls that touch the page are appended as JSONL to the
 audit log — actor, method, params, target role/name, navigation epoch, timestamp — so an
 agent run is replayable and any disputed click is attributable
-(`packages/mcp/index.js:37-45`). Default path: `${TMPDIR}/blackglass-mcp-audit.jsonl`;
-override with `BLACKGLASS_MCP_AUDIT`. `browser_status` prints the active path.
+(`packages/mcp/index.js:37-45`). Default path: `${TMPDIR}/terminal-fenster-mcp-audit.jsonl`;
+override with `TERMINAL_FENSTER_MCP_AUDIT`. `browser_status` prints the active path.
 
 **Page text is untrusted input, not instructions.** Snapshot and find output is wrapped in
 an `<untrusted-page-content>` … fence that explicitly labels it as data and tells the model
@@ -316,22 +316,22 @@ All optional. Read at server start (`packages/mcp/index.js`, `lib/engine.js`).
 
 | Variable | Default | Effect |
 |---|---|---|
-| `BLACKGLASS_MCP_WIDTH` | `1280` | Initial viewport width (px). |
-| `BLACKGLASS_MCP_HEIGHT` | `800` | Initial viewport height (px). |
-| `BLACKGLASS_MCP_CDP` | enabled | Set to `0` to disable CDP → coordinate-only mode. |
-| `BLACKGLASS_MCP_PROFILE` | throwaway dir | Persistent Chromium profile dir (persists cookies/creds — use deliberately). |
-| `BLACKGLASS_MCP_AUDIT` | `${TMPDIR}/blackglass-mcp-audit.jsonl` | Action audit log path. |
-| `BLACKGLASS_MCP_LOG` | none | Extra log file (stderr always gets logs regardless). |
-| `BLACKGLASS_ENGINE` | `../../../apps/engine` | Engine directory (must contain `node_modules/.bin/electron` and `src/main.js`). |
+| `TERMINAL_FENSTER_MCP_WIDTH` | `1280` | Initial viewport width (px). |
+| `TERMINAL_FENSTER_MCP_HEIGHT` | `800` | Initial viewport height (px). |
+| `TERMINAL_FENSTER_MCP_CDP` | enabled | Set to `0` to disable CDP → coordinate-only mode. |
+| `TERMINAL_FENSTER_MCP_PROFILE` | throwaway dir | Persistent Chromium profile dir (persists cookies/creds — use deliberately). |
+| `TERMINAL_FENSTER_MCP_AUDIT` | `${TMPDIR}/terminal-fenster-mcp-audit.jsonl` | Action audit log path. |
+| `TERMINAL_FENSTER_MCP_LOG` | none | Extra log file (stderr always gets logs regardless). |
+| `TERMINAL_FENSTER_ENGINE` | `../../../apps/engine` | Engine directory (must contain `node_modules/.bin/electron` and `src/main.js`). |
 
 ---
 
 ## 9. Troubleshooting
 
-- **"Could not find the BlackGlass engine."** The server looked in `apps/engine` relative to
+- **"Could not find the Terminal-Fenster engine."** The server looked in `apps/engine` relative to
   itself and found no `node_modules/.bin/electron`. Run `npm install` in `apps/engine`, or
-  point `BLACKGLASS_ENGINE` at the engine directory.
-- **"Page semantics unavailable (no CDP)."** CDP is off (`BLACKGLASS_MCP_CDP=0`) or failed to
+  point `TERMINAL_FENSTER_ENGINE` at the engine directory.
+- **"Page semantics unavailable (no CDP)."** CDP is off (`TERMINAL_FENSTER_MCP_CDP=0`) or failed to
   attach. Ref-based tools won't work; use `browser_click_xy`/`browser_screenshot`, or
   re-enable CDP. `browser_status` shows the CDP state and any attach error.
 - **`bootstrap_look_up … Permission denied` when a frame should appear.** Chromium child
@@ -347,12 +347,12 @@ All optional. Read at server start (`packages/mcp/index.js`, `lib/engine.js`).
 ## 10. Copy-paste quickstart (Claude Code, project scope)
 
 ```bash
-cd /Users/adeebbashir/projects/blackglass
+cd $REPO
 [ -x apps/engine/node_modules/.bin/electron ] || (cd apps/engine && npm install)
 node packages/mcp/index.js < /dev/null   # smoke-check it starts (Ctrl-C to exit)
-claude mcp add blackglass --scope project -- node "$PWD/packages/mcp/index.js"
-claude mcp get blackglass                # confirm; approve via /mcp inside Claude Code
-# undo any time:  claude mcp remove blackglass --scope project
+claude mcp add terminal-fenster --scope project -- node "$PWD/packages/mcp/index.js"
+claude mcp get terminal-fenster                # confirm; approve via /mcp inside Claude Code
+# undo any time:  claude mcp remove terminal-fenster --scope project
 ```
 
 ---
@@ -383,9 +383,9 @@ claude mcp get blackglass                # confirm; approve via /mcp inside Clau
 
 ## 12. One recommendation for the commander
 
-Ship a thin `blackglass mcp` subcommand in `apps/cli` that just `exec`s
+Ship a thin `terminal-fenster mcp` subcommand in `apps/cli` that just `exec`s
 `node packages/mcp/index.js` (resolving the path relative to the installed binary). Today
 every client config must hard-code an absolute path to `index.js`, which is brittle across
-machines and checkouts; a stable `blackglass mcp` entry point makes all three integrations
-in §4 a single portable line (`claude mcp add blackglass -- blackglass mcp`) and removes the
+machines and checkouts; a stable `terminal-fenster mcp` entry point makes all three integrations
+in §4 a single portable line (`claude mcp add terminal-fenster -- terminal-fenster mcp`) and removes the
 only machine-specific detail from these docs.

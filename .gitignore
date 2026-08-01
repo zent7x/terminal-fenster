@@ -1,6 +1,20 @@
 /target/
+/dist/
+/.release-cache/
 node_modules/
 *.log
+*.log.engine.stderr
 apps/engine/spike/out/
 tests/e2e/input-injection-results.json
 .DS_Store
+
+# Secrets and local audit material — never commit
+.env
+.env.*
+*.pem
+id_rsa
+id_rsa.*
+**/audit.jsonl
+
+# Local agent/session transcripts
+agent-transcripts/

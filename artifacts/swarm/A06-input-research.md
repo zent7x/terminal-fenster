@@ -1,6 +1,6 @@
 # A06 — Terminal Input Protocols: Implementation Spec
 
-**Mission:** exact, implementable decoding spec for BlackGlass terminal input.
+**Mission:** exact, implementable decoding spec for Terminal-Fenster terminal input.
 **Date:** 2026-07-31 · **Host:** macOS 26.1, Apple M4 arm64
 **Terminals under test:** Ghostty 1.3.1, iTerm2 3.6.9, Apple Terminal 465
 
@@ -28,7 +28,7 @@ Byte notation throughout: `ESC` = `0x1B`, `CSI` = `ESC [` = `0x1B 0x5B`, `SS3` =
 
 **The single most important finding: pixel-accurate mouse is NOT portable.** iTerm2 3.6.9 explicitly
 reports mode 1016 as *permanently reset* (value 4) — it will never enable. Apple Terminal has no mode
-1016 at all. BlackGlass must implement a **sub-cell coordinate synthesis fallback** (§3.6).
+1016 at all. Terminal-Fenster must implement a **sub-cell coordinate synthesis fallback** (§3.6).
 
 ---
 
@@ -37,7 +37,7 @@ reports mode 1016 as *permanently reset* (value 4) — it will never enable. App
 Primary source: <https://sw.kovidgoyal.net/kitty/keyboard-protocol/> ·
 repo doc: <https://github.com/kovidgoyal/kitty/blob/master/docs/keyboard-protocol.rst>
 **License of kitty: GPL-3.0.** The *protocol* is a published spec and free to implement; **do not copy
-kitty C source into BlackGlass.** Ghostty is **MIT** — its Zig source is safe to learn from and, with
+kitty C source into Terminal-Fenster.** Ghostty is **MIT** — its Zig source is safe to learn from and, with
 attribution, to adapt.
 
 ### 1.1 Control sequences
@@ -75,7 +75,7 @@ never nest more than 2–3 frames.
 `31` = all five. Verified end-to-end on iTerm2 3.6.9: `CSI > 31 u` then `CSI ? u` → `CSI ? 31 u`;
 `CSI < 1 u` then `CSI ? u` → `CSI ? 0 u`.
 
-**BlackGlass should request `1|2|4|8|16 = 31`.** A browser needs keydown/keyup separation (bit 2 + 8),
+**Terminal-Fenster should request `1|2|4|8|16 = 31`.** A browser needs keydown/keyup separation (bit 2 + 8),
 layout-independent shortcuts (bit 4), and `KeyboardEvent.key` text (bit 16).
 
 ### 1.3 Key event wire format
@@ -325,7 +325,7 @@ DECBKM (`CSI ? 67 h`) swaps `0x7F`↔`0x08`; Ghostty has a `backarrow_key_mode` 
 `CSI Z` = `1B 5B 5A` = back-tab (shift+tab). Ghostty terminfo: `kcbt=\E[Z`, `cbt=\E[Z`.
 
 **Legacy cannot express** shift+Enter, ctrl+Enter, shift+Escape, ctrl+Tab, or *any* key release.
-This is exactly why BlackGlass must prefer the kitty protocol.
+This is exactly why Terminal-Fenster must prefer the kitty protocol.
 
 ### 2.6 Ctrl+letter → C0
 
@@ -363,7 +363,7 @@ xterm supports two encodings, controlled by `metaSendsEscape` / `altSendsEscape`
   the same keystroke is `\x1b[119;3u`.
 * Apple Terminal: "Use Option as Meta key" is off by default → Option composes; no ESC prefix.
 
-**Consequence for BlackGlass:** you cannot reliably observe the Alt/Option modifier on macOS unless the
+**Consequence for Terminal-Fenster:** you cannot reliably observe the Alt/Option modifier on macOS unless the
 user opts in at the terminal. Do not bind anything critical to Alt. Surface a first-run hint telling the
 user to set `macos-option-as-alt = true` if they want Alt shortcuts.
 
@@ -446,7 +446,7 @@ disable:  ESC [ ? 1016 l   ESC [ ? 1006 l   ESC [ ? 1003 l
 
 Order matters on the enable path: set the **protocol** (1003) first, then 1006, then attempt 1016.
 Because 1016 is a *superset encoding* of 1006, if 1016 is unsupported you are still left in valid SGR
-mode. This is the safe degradation path and is what BlackGlass must do.
+mode. This is the safe degradation path and is what Terminal-Fenster must do.
 
 `1000` = press+release only. `1002` = adds motion **while a button is held** (drag). `1003` = **all
 motion**, button or not. A browser needs `1003` (hover, `:hover`, `mousemove`, tooltips).
@@ -576,7 +576,7 @@ depend on it. (This makes `Cb` a value that can exceed 255 — size your parser 
 
 ### 3.6 REQUIRED fallback: sub-cell coordinate synthesis
 
-Because 1016 is unavailable on 2 of your 3 target terminals, BlackGlass needs pixel coordinates
+Because 1016 is unavailable on 2 of your 3 target terminals, Terminal-Fenster needs pixel coordinates
 derived from cell coordinates. Two inputs are needed: cell size in pixels, and a sub-cell estimate.
 
 **Getting cell pixel size, in order of preference:**
@@ -608,7 +608,7 @@ derived from cell coordinates. Two inputs are needed: cell size in pixels, and a
   CSS pixel ratio so that no interactive target is smaller than one cell. Expose it as
   `--min-hit-target-cells=1`.
 * **Do not fake precision in the DOM.** Set `event.movementX/Y` from the cell delta, and expose a
-  `BlackGlass.pointerPrecision` value of `"pixel" | "cell"` so page-side shims can adapt.
+  `Terminal-Fenster.pointerPrecision` value of `"pixel" | "cell"` so page-side shims can adapt.
 
 ### 3.7 Runtime detection of 1016
 
@@ -667,7 +667,7 @@ paste:    ESC [ 200 ~  <payload bytes>  ESC [ 201 ~
 Ghostty terminfo: `BE=\E[?2004h`, `BD=\E[?2004l`, `PS=\E[200~`, `PE=\E[201~`.
 **iTerm2 3.6.9: VERIFIED supported** (`CSI ?2004 $p` → `CSI ?2004;2$y`).
 
-Implementation rules for BlackGlass:
+Implementation rules for Terminal-Fenster:
 * The payload is **arbitrary bytes**, including `ESC`. **Suspend all escape-sequence parsing between
   `CSI 200~` and `CSI 201~`** and scan only for the literal terminator. This is a security boundary:
   a paste containing `\x1b]52;c;...\x07` must never be executed.
@@ -734,7 +734,7 @@ Ghostty raises a **modal confirmation dialog that blocks the entire application*
 AppleScript interface and new-window creation. An automated harness that fires a clipboard read will
 appear to hang. **Never issue an OSC 52 read speculatively, never at startup, and never on a timer.**
 
-**Recommended BlackGlass clipboard design:**
+**Recommended Terminal-Fenster clipboard design:**
 * `navigator.clipboard.writeText()` → OSC 52 write with `Pc = c`. Works on Ghostty and iTerm2.
   Fail closed on Apple Terminal and surface a `NotAllowedError` to the page.
 * `navigator.clipboard.readText()` → **do not** map to OSC 52 read. Map it to a
@@ -764,7 +764,7 @@ What actually happens on macOS:
 * **Only the committed text reaches the pty**, as UTF-8. The application sees a burst of printable
   bytes with no warning that composition occurred.
 
-Consequences for BlackGlass:
+Consequences for Terminal-Fenster:
 1. **You cannot implement `compositionstart` / `compositionupdate` / `compositionend` with real preedit
    text.** The best you can do is synthesise `compositionstart` + `compositionend` around a committed
    burst — which breaks any page that renders its own IME-aware editor.
@@ -787,7 +787,7 @@ Consequences for BlackGlass:
    one committed codepoint.
 
 **Recommendation:** ship `pointerPrecision`-style capability reporting for IME too —
-`BlackGlass.imeSupport = "committed-only"` — and make the DOM shim synthesise a single
+`Terminal-Fenster.imeSupport = "committed-only"` — and make the DOM shim synthesise a single
 `compositionstart`/`compositionend` pair around bursts that arrive with `key == 0`. Document the
 limitation rather than pretending to support it.
 
@@ -796,7 +796,7 @@ limitation rather than pretending to support it.
 ## 8. Reference: unified enable/disable preamble
 
 ```
-# ---- enter BlackGlass input mode ----
+# ---- enter Terminal-Fenster input mode ----
 ESC [ ? 1049 h              alt screen           1B 5B 3F 31 30 34 39 68
 ESC [ ? 2004 h              bracketed paste      1B 5B 3F 32 30 30 34 68
 ESC [ ? 1004 h              focus events         1B 5B 3F 31 30 30 34 68
@@ -818,7 +818,7 @@ ESC [ ? 1049 l
 ```
 
 Install an `atexit` + `SIGINT`/`SIGTERM`/`SIGSEGV` handler that writes the leave block. A crashed
-BlackGlass that leaves 1003+1016 on renders the user's shell unusable — every mouse move floods stdin.
+Terminal-Fenster that leaves 1003+1016 on renders the user's shell unusable — every mouse move floods stdin.
 
 ---
 
@@ -826,7 +826,7 @@ BlackGlass that leaves 1003+1016 on renders the user's shell unusable — every 
 
 Method: Python probe with `tty.setraw()`, per-query drain, 350 ms adaptive read window, driven into each
 terminal via AppleScript. Full script and logs in
-`/private/tmp/claude-501/-Users-adeebbashir/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/`
+`/private/tmp/claude-501/-Users-builder/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/`
 (`probe.py`, `term-out.txt`, `iterm-out.txt`, `wsz.py`).
 
 ### iTerm2 3.6.9 — 2026-07-31
@@ -913,7 +913,7 @@ u6=\E[%i%d;%dR  u7=\E[6n  u8=\E[?%[;0123456789]c  u9=\E[c
 | Source | License | Use permitted |
 |---|---|---|
 | kitty keyboard protocol **spec** (`docs/keyboard-protocol.rst`) | GPL-3.0 (repo) — but a **published interoperability spec** | Implement from the spec. **Do not copy prose verbatim into product docs.** |
-| kitty **source** (`kitty/mouse.c`, `kitty/options/definition.py`) | **GPL-3.0** | **Read for behavior only. Do not copy any code into BlackGlass.** |
+| kitty **source** (`kitty/mouse.c`, `kitty/options/definition.py`) | **GPL-3.0** | **Read for behavior only. Do not copy any code into Terminal-Fenster.** |
 | Ghostty source (`ghostty-org/ghostty`) | **MIT** | Safe to adapt with attribution + license notice. |
 | xterm `ctlseqs` (Thomas Dickey / invisible-island.net) | MIT-style (xterm license) | Safe to reference and adapt. |
 | ncurses terminfo databases | MIT-style (X11) | Safe. |
@@ -941,7 +941,7 @@ or black-box runtime observation of installed binaries. **No GPL code has been o
 5. **Apple Terminal focus (1004) and bracketed paste (2004) support** — cannot be probed (no DECRQM).
    Determine behaviourally: enable 1004 and Cmd-Tab away/back; enable 2004 and paste.
 6. **Terminal multiplexer passthrough.** tmux and screen rewrite or drop 1016, kitty-keyboard, and
-   OSC 52. Untested. `tmux` needs `allow-passthrough` and `terminal-features` configured. If BlackGlass
+   OSC 52. Untested. `tmux` needs `allow-passthrough` and `terminal-features` configured. If Terminal-Fenster
    is expected to run under tmux this is a whole separate mission.
 7. **`ws_xpixel` units and DPR.** Apple Terminal reports logical points (7×15) while the M4 display is
    2× — confirm the scale factor at runtime (via `CSI 14 t` ÷ `TIOCGWINSZ`, or by coordinating with the

@@ -1,4 +1,4 @@
-<!-- BlackGlass fixture: text-input
+<!-- Terminal-Fenster fixture: text-input
      Proves: synthetic key events reach a focused control and actually insert text;
      focus moves between controls; a password field masks its value.
      Doubles as the redaction target for A09 T-AGT-2 (a page whose DOM must never be
@@ -39,7 +39,7 @@ textarea{padding:6px 8px;resize:none}
 <h1>fixture: text-input</h1>
 <pre id="bg-readout"></pre>
 
-<label style="left:40px;top:98px">username (type: blackglass)</label>
+<label style="left:40px;top:98px">username (type: terminal-fenster)</label>
 <input id="username" name="username" type="text" autocomplete="off" spellcheck="false"
        style="left:40px;top:120px;width:320px;height:40px">
 
@@ -120,7 +120,7 @@ window.__bg = {
                  colours: { none: '#333333', username: '#0080ff', password: '#ffff00',
                             other: '#ffffff' } },
     lenBar: { origin: [600, 220], heightPx: 24, pxPerChar: 20, colour: '#00ff00' },
-    passWhen: "username === 'blackglass' AND password.length === 6",
+    passWhen: "username === 'terminal-fenster' AND password.length === 6",
     secretsPolicy: 'password + cardnumber values must never appear in any log, frame ' +
                    'OCR, or agent context; assert on len/sum instead'
   };
@@ -132,7 +132,7 @@ window.__bg = {
   function sum(s) { var t = 0; for (var i = 0; i < s.length; i++) t += s.charCodeAt(i); return t; }
 
   function evaluate() {
-    var ok = $('username').value === 'blackglass' && $('password').value.length === 6;
+    var ok = $('username').value === 'terminal-fenster' && $('password').value.length === 6;
     bg._status(ok);
     var w = Math.min($('username').value.length * bg.expect.lenBar.pxPerChar, 600);
     $('lenbar').style.width = w + 'px';

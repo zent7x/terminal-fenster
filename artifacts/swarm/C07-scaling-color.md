@@ -286,7 +286,7 @@ page, its history, its scroll position and any typed form state. And it decouple
 bitmap size, reintroducing exactly the two-unit-systems hazard that A04 warns about, into the
 frame header, the resize command and the damage path simultaneously.
 
-Keep it in reserve for a future non-interactive `blackglass shot --dpr=2` mode, where page state
+Keep it in reserve for a future non-interactive `terminal-fenster shot --dpr=2` mode, where page state
 does not need to survive and true DPR semantics are worth having.
 
 ### 5.4 The zoom persistence trap — must be handled
@@ -302,7 +302,7 @@ And in probe 4, a brand-new `BrowserWindow` created in the same session inherite
 Our `S` is a function of terminal geometry, not a user preference about a website, so it must
 never be persisted per-origin. Two requirements follow.
 
-**BlackGlass owns the zoom map.** Model the effective value as
+**Terminal-Fenster owns the zoom map.** Model the effective value as
 `zoom_total = S × user_site_zoom`, keep `user_site_zoom` in our own profile store (B09 owns
 profile data), and treat Chromium's zoom store as scratch that we overwrite.
 
@@ -324,7 +324,7 @@ sendInputEvent(mouseDown, x=320, y=220)   ->  hit #decoy    (the 2x-offset failu
 
 **`sendInputEvent` takes device pixels — the same units as the OSR bitmap and the terminal's own
 pixel grid — and Chromium divides by the zoom factor itself.** `PointerMap`
-(`/Users/adeebbashir/projects/blackglass/apps/cli/src/main.rs:701`) is therefore already correct
+(`$REPO/apps/cli/src/main.rs:701`) is therefore already correct
 and must **not** be given an `S` divisor. Adding one would reintroduce precisely the bug the
 second line above demonstrates.
 
@@ -354,7 +354,7 @@ is roughly half a gigabyte per second of work the user will never see. Coalesce 
 
 **Drop stale frames by header, not by expectation.** After `setSize`, frames already in flight
 still carry the *old* dimensions in the frame header
-(`/Users/adeebbashir/projects/blackglass/apps/engine/src/main.js:89-90`). The core must read the
+(`$REPO/apps/engine/src/main.js:89-90`). The core must read the
 width and height out of the header and discard any frame whose dimensions do not match the
 currently requested geometry, rather than assuming or — worse — rescaling. This needs no wire
 change: the fields are already there. Holding the last good frame until a correctly-sized one
@@ -437,13 +437,13 @@ dithering must run in linear light (see below).
 
 **Unicode half-block** emits two truecolor SGR values per cell. Truecolor support is currently
 inferred from `COLORTERM`
-(`/Users/adeebbashir/projects/blackglass/crates/bg-term/src/caps.rs:137`), which is a heuristic
+(`$REPO/crates/tf-term/src/caps.rs:137`), which is a heuristic
 rather than a handshake — consistent with how that module honestly labels its one other heuristic.
 Without truecolor, output must be quantised to the 256-colour cube.
 
 ### 7.5 The gamma trap in the half-block downsampler
 
-`render_half_blocks` (`/Users/adeebbashir/projects/blackglass/crates/bg-term/src/unicode.rs:22-27`)
+`render_half_blocks` (`$REPO/crates/tf-term/src/unicode.rs:22-27`)
 currently **point-samples** — nearest neighbour, one source pixel per output sample. There is no
 gamma bug today because there is no averaging.
 
@@ -503,7 +503,7 @@ with the cell-aligned budget of §4.2, add the `R` and `S` computation of §4.1/
 override, and drop frames whose header dimensions do not match the current geometry (§6). Show `R`,
 `S` and the resulting CSS viewport in `doctor` output. **Do not** apply `S` to `PointerMap` (§5.5).
 
-**`crates/bg-term/src/caps.rs`** — expose the derived `R`, and optionally the OSC 11 background
+**`crates/tf-term/src/caps.rs`** — expose the derived `R`, and optionally the OSC 11 background
 query of §7.6.
 
 **No wire-protocol change is required** for any of this.

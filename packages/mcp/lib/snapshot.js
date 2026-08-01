@@ -36,6 +36,7 @@ const SKIP_ROLES = new Set([
 ]);
 
 const STATE_PROPS = ['checked', 'disabled', 'expanded', 'selected', 'pressed', 'required', 'invalid', 'level', 'focused', 'multiselectable', 'readonly'];
+const EDITABLE_ROLES = new Set(['textbox', 'searchbox', 'textarea', 'searchBox']);
 
 function propValue(node, name) {
   if (!node.properties) return undefined;
@@ -59,6 +60,17 @@ function isActionable(node) {
   // widgets with role="none" but tabindex, for instance).
   if (propValue(node, 'focusable') === true && nameOf(node) && !SKIP_ROLES.has(role)) return true;
   return false;
+}
+
+function valueState(node) {
+  const value = node.value && node.value.value;
+  if (value === undefined || value === '' || value === null) return null;
+  const text = String(value);
+  const editable = EDITABLE_ROLES.has(roleOf(node)) || propValue(node, 'editable') === 'plaintext' ||
+    propValue(node, 'editable') === true;
+  // Chromium's AX tree does not reliably identify password inputs. Redact every editable value
+  // so a password cannot be handed to the model merely because it asked for a snapshot.
+  return editable ? `value=<redacted:${Array.from(text).length} chars>` : `value=${quote(text)}`;
 }
 
 function quote(s) {
@@ -118,8 +130,8 @@ async function capture(session, opts = {}) {
         if (v === undefined || v === false || v === 'false') continue;
         states.push(v === true ? p : `${p}=${v}`);
       }
-      const value = node.value && node.value.value;
-      if (value !== undefined && value !== '' && value !== null) states.push(`value=${quote(String(value))}`);
+      const value = valueState(node);
+      if (value) states.push(value);
       if (ref) states.push(`ref=${ref}`);
 
       let line = parts.join(' ');
@@ -203,4 +215,4 @@ function describeMismatch(entry, description) {
   return `description ${JSON.stringify(description)} shares no words with the element's accessible name ${JSON.stringify(entry.name)} (role ${entry.role})`;
 }
 
-module.exports = { capture, resolveRef, describeMismatch, ACTIONABLE_ROLES };
+module.exports = { capture, resolveRef, describeMismatch, valueState, ACTIONABLE_ROLES };

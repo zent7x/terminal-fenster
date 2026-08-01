@@ -3,18 +3,18 @@
 **Status:** review complete, implementation spec
 **Date:** 2026-07-31
 **Host:** macOS 26.1, Apple M4 arm64. rustc 1.93.0, Node v24.11.1, Electron 43.2.0 / Chromium 150.
-**Scope:** `crates/bg-proto/src/lib.rs`, `apps/engine/src/main.js`. `apps/cli/src/main.rs` is read-only context (it is the only consumer of `bg-proto` and half of every finding lands there).
+**Scope:** `crates/tf-proto/src/lib.rs`, `apps/engine/src/main.js`. `apps/cli/src/main.rs` is read-only context (it is the only consumer of `tf-proto` and half of every finding lands there).
 
 **Reviewed file state** — these files are under concurrent edit by other agents, so all line numbers below are pinned to these exact revisions:
 
 | File | lines | md5 |
 |---|---:|---|
-| `crates/bg-proto/src/lib.rs` | 284 | `edbb4c0b2e74e960857f2fc687210fe4` |
+| `crates/tf-proto/src/lib.rs` | 284 | `edbb4c0b2e74e960857f2fc687210fe4` |
 | `apps/engine/src/main.js` | 309 | `1520d7ab86e4c69e76508bd6d6bab2ce` |
 | `apps/cli/src/main.rs` | 1039 | `bceb2a511097d93ea17ac90b94fcb077` |
 
 **I wrote no code into the repo.** Every snippet here is a proposal for the commander. Where a snippet is marked VERIFIED it was compiled and executed standalone in
-`/private/tmp/claude-501/-Users-adeebbashir/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/b06/`
+`/private/tmp/claude-501/-Users-builder/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/b06/`
 (`proposed.rs`, `outq.rs`, `desync2.rs`, `readerbench.rs`, `overflow.rs`, `thru.rs`, `fdpass.rs`, `proposed-framer.js`, `framer.test.js`, `concat.js`). Those files are outside the repo; copy them in if you want them as tests.
 
 ---
@@ -97,7 +97,7 @@ PASS: 200 KB paste no longer desynchronises the stream; quit still executes
 There is nothing on the wire that identifies the protocol. The first byte the core ever sees is a message type, and the first byte the engine ever sees is a message type. Concretely:
 
 - **No magic.** Any process that connects and writes anything is treated as the engine (see F4). A wrong-version engine, a stale binary from a half-finished `cargo install`, or an unrelated program that happened to open the socket all produce *mis-framing*, not an error.
-- **No version integer.** `T_FRAME=1`, `T_EVENT=2`, `T_COMMAND=10` are hardcoded in `bg-proto/src/lib.rs:11-13` and again in `apps/engine/src/main.js:30-32`. Nothing checks they agree.
+- **No version integer.** `T_FRAME=1`, `T_EVENT=2`, `T_COMMAND=10` are hardcoded in `tf-proto/src/lib.rs:11-13` and again in `apps/engine/src/main.js:30-32`. Nothing checks they agree.
 - **`FRAME_HEADER_LEN = 32`** (`lib.rs:16`) is duplicated as a bare `Buffer.allocUnsafe(32)` at `main.js:87` with eight hand-written `writeUInt32BE` offsets. Add one field to that header on the JS side and the Rust side silently reads `width` out of `seq`'s old slot. The failure is not a parse error; it is a plausible-looking geometry that drives `expected_payload()` (see F5).
 - **The one signal that exists is thrown away.** The engine sends `{"t":"ready","electron":...,"chrome":...}` at `main.js:292-298`. `Status::apply_event` has arms for `title`/`url`/`loading`/`crash` and nothing else — `ready` falls into `_ => {}`. It is written to the log file and never inspected. `Session::start` returns as soon as `accept()` succeeds; it never waits for `ready`, so there is also no point at which a version *could* currently be checked.
 - **20 of the 32 header bytes are write-only.** `grep` for `dirty_x`, `dirty_w`, `.format`, `h.seq` across the core returns **zero** usages. `seq`, the full dirty rect, and `format` are serialised every frame and read by nobody. That is 20 bytes × 60 fps of dead weight, and — worse — it means `format` provides no protection: if the engine ever emits format 1, the core still calls `bgra_to_rgb` unconditionally (`main.rs:837`).
@@ -242,7 +242,7 @@ This does not contradict A10 §0.1 (the PTY write is still the bottleneck). It i
 
 ### 2.11 F11 (Low) — `json_get_str` edge cases
 
-Three results, all measured by compiling `bg-proto` verbatim and feeding it real serialiser output.
+Three results, all measured by compiling `tf-proto` verbatim and feeding it real serialiser output.
 
 **Not injectable via page titles — confirmed safe.** I tested hostile titles (`x","v":"HIJACKED`, `x"},{"t":"crash","reason":"pwned`) through `JSON.stringify` exactly as `sendEvent` does. The needle `"t"` requires an *unescaped* quote-t-quote, and escaped values render as `\"t\"`, so the substring search cannot be walked onto attacker text:
 
@@ -329,10 +329,10 @@ The existing three IDs keep their values, so this is additive. The must-understa
 ```json
 {
   "t": "hello",
-  "magic": "blackglass",
+  "magic": "terminal-fenster",
   "proto": 1,
   "proto_min": 1,
-  "impl": "blackglass-engine/0.1.0",
+  "impl": "terminal-fenster-engine/0.1.0",
   "electron": "43.2.0",
   "chrome": "150.0.0.0",
   "pid": 41231,
@@ -349,9 +349,9 @@ The existing three IDs keep their values, so this is additive. The must-understa
 ```json
 {
   "t": "welcome",
-  "magic": "blackglass",
+  "magic": "terminal-fenster",
   "proto": 1,
-  "impl": "blackglass/0.1.0",
+  "impl": "terminal-fenster/0.1.0",
   "features": ["frame.bgra8888", "frame.dirty", "ping", "ack"],
   "limits": {
     "max_msg": 33554464, "max_json": 65536, "max_paste": 65536,
@@ -374,7 +374,7 @@ Codes: `ok`, `bad_magic`, `proto_mismatch`, `header_mismatch`, `oversize`, `back
 ### 3.5 Normative rules
 
 1. The connecting peer sends `HELLO` first; the accepting peer sends `WELCOME` first. Neither may send anything else before its opener. Both openers may be in flight simultaneously — this is not a request/response.
-2. `magic` MUST be exactly `"blackglass"`. Absent or wrong ⇒ `GOODBYE{bad_magic}` and close.
+2. `magic` MUST be exactly `"terminal-fenster"`. Absent or wrong ⇒ `GOODBYE{bad_magic}` and close.
 3. Compatibility: the core accepts the engine iff `hello.proto_min ≤ CORE_PROTO ≤ hello.proto`. `proto` increments **only** for a change no feature flag can express — framing, header layout, or the meaning of an existing type ID. Everything additive rides on `features`.
 4. `hello.frame_header_len` MUST equal the receiver's `FRAME_HEADER_LEN`, else `GOODBYE{header_mismatch}`.
 5. Effective limits per direction are `min(sender_advertised, receiver_advertised)`. A receiver always enforces its own, on the length prefix, before buffering payload.
@@ -418,7 +418,7 @@ The important property: **limits start tight and are only raised after a success
 ```rust
 pub const PROTO_VERSION: u32 = 1;
 pub const PROTO_MIN_VERSION: u32 = 1;
-pub const PROTO_MAGIC: &str = "blackglass";
+pub const PROTO_MAGIC: &str = "terminal-fenster";
 
 pub const T_HELLO: u8 = 0x00;
 pub const T_FRAME: u8 = 0x01;
@@ -941,7 +941,7 @@ socket.on('data', (chunk) => {
 // Send our opener immediately; both openers may be in flight at once.
 writer.sendJson(T_HELLO, {
   t: 'hello', magic: PROTO_MAGIC, proto: PROTO_VERSION, proto_min: PROTO_VERSION,
-  impl: 'blackglass-engine/0.1.0',
+  impl: 'terminal-fenster-engine/0.1.0',
   electron: process.versions.electron, chrome: process.versions.chrome,
   pid: process.pid, frame_header_len: 32,
   features: ['frame.bgra8888', 'frame.dirty', 'event.json', 'cmd.input', 'cmd.nav', 'ping', 'ack'],
@@ -970,7 +970,7 @@ function safeDim(v) {
 }
 ```
 
-`file:` is deliberately absent. `blackglass open /tmp/x.html` currently normalises to `file://…` in the core (`normalize_url`), so if local files are a supported product feature the core must pass an explicit `"allow_file": true` in `WELCOME` and the engine must additionally confirm the path lies under a directory the user named on the command line. Until that exists, local-file browsing should be treated as unsupported rather than accidentally supported.
+`file:` is deliberately absent. `terminal-fenster open /tmp/x.html` currently normalises to `file://…` in the core (`normalize_url`), so if local files are a supported product feature the core must pass an explicit `"allow_file": true` in `WELCOME` and the engine must additionally confirm the path lies under a directory the user named on the command line. Until that exists, local-file browsing should be treated as unsupported rather than accidentally supported.
 
 ---
 
@@ -1093,10 +1093,10 @@ All of these run without Electron, without a tty, and without a display, so they
 | **P-FLOW-2** | Fill the outbox past `MAX_OUTBOUND` | whole messages dropped, `dropped` counter increments, stream still aligned |
 | **P-FLOW-3** | Destroy the socket mid-flush | `writeInFlight === false`; no pending `drain` listener |
 | **P-INTEROP-1** | Rust framer ⇄ JS framer over a real socketpair, 1000 random messages | byte-identical round trip both directions |
-| **P-CONST-1** | Parse the type-ID and `FRAME_HEADER_LEN` constants out of `main.js` and compare with `bg-proto` | constants agree (catches drift until `frame_header_len` in `HELLO` is live) |
+| **P-CONST-1** | Parse the type-ID and `FRAME_HEADER_LEN` constants out of `main.js` and compare with `tf-proto` | constants agree (catches drift until `frame_header_len` in `HELLO` is live) |
 | **P-FUZZ-1** | 10⁶ random byte streams into both framers | never panics, never throws a non-`ProtocolError`, never allocates past the cap |
 
-P-CAP-1/2/3/4, P-EXT-1/2, P-GEO-1/2, P-FLOW-1/3 and split-reassembly are **already implemented and passing** in the scratchpad harnesses — `proposed.rs` (9 assertions) and `framer.test.js` (9 `node --test` cases). Lifting them into `crates/bg-proto/src/lib.rs` tests and a new `apps/engine/test/framer.test.js` is mostly a copy.
+P-CAP-1/2/3/4, P-EXT-1/2, P-GEO-1/2, P-FLOW-1/3 and split-reassembly are **already implemented and passing** in the scratchpad harnesses — `proposed.rs` (9 assertions) and `framer.test.js` (9 `node --test` cases). Lifting them into `crates/tf-proto/src/lib.rs` tests and a new `apps/engine/test/framer.test.js` is mostly a copy.
 
 P-CONST-1 is worth calling out: until `frame_header_len` negotiation lands, a ten-line test that greps the JS constants and asserts they match the Rust ones is the only thing standing between you and a silent header-offset bug.
 
@@ -1107,8 +1107,8 @@ P-CONST-1 is worth calling out: until `frame_header_len` negotiation lands, a te
 Ordered by risk-reduction per line changed. Each step is independently shippable.
 
 1. **F1 outbound queue** (`apps/cli`). Fixes a user-triggerable session kill. No protocol change, no engine change. ~60 lines.
-2. **F3 caps + F5 checked geometry** (`bg-proto`, `apps/engine`). Fatal-error plumbing on both sides, still no handshake. Tests in §9 come with it.
-3. **F10 zero-copy** (`bg-proto` reader, `apps/engine` `cork`/`writev`). ~2 ms/frame back. Naturally follows step 2 since the reader is already being touched.
+2. **F3 caps + F5 checked geometry** (`tf-proto`, `apps/engine`). Fatal-error plumbing on both sides, still no handshake. Tests in §9 come with it.
+3. **F10 zero-copy** (`tf-proto` reader, `apps/engine` `cork`/`writev`). ~2 ms/frame back. Naturally follows step 2 since the reader is already being touched.
 4. **F2 handshake** (`HELLO`/`WELCOME`/`GOODBYE`, `frame_header_len`, limits negotiation). Now the caps from step 2 become *negotiated* rather than hardcoded.
 5. **F4 socketpair transport.** Deletes the listener, the path, the argv disclosure, and the race. Gate on the Electron smoke test in §11.
 6. **F8 ping/pong + F7 restart policy + surfacing `Status::crashed`.**

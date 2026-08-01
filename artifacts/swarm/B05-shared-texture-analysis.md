@@ -4,7 +4,7 @@
 - **Date:** 2026-07-31
 - **Machine:** macOS 26.1, Apple M4, arm64, Electron 43.2.0 / Chromium 150.0.7871.129
 - **Status:** Complete. All claims below are measured on this machine unless marked UNVERIFIED.
-- **Scope note:** This report writes only to itself. Two proposed changes to `crates/bg-term/src/kitty.rs` are described in §7 rather than made, per file-ownership rules.
+- **Scope note:** This report writes only to itself. Two proposed changes to `crates/tf-term/src/kitty.rs` are described in §7 rather than made, per file-ownership rules.
 
 ---
 
@@ -16,7 +16,7 @@ The performance advantage recorded in ADR-0001 does not reproduce. That ADR comp
 
 Zero-copy to a terminal is structurally impossible, not merely hard. The kitty graphics protocol transports base64 of deflated pixel bytes over a pty. Every pixel must be read by the CPU to be compressed. The best case is not "no copy", it is "one copy instead of two", and the copy is nowhere near the dominant cost.
 
-The real bottleneck is a scalar loop in our own code. `kitty::bgra_to_rgb` (`crates/bg-term/src/kitty.rs:40`) runs at **0.94 GiB/s** and costs 7.98 ms per frame at the real Ghostty resolution. A byte-identical replacement runs at 23.87 GiB/s and costs 0.32 ms. **Fixing that one loop saves 7.66 ms per frame — roughly five times more than the entire zero-copy project could ever save — and it is a contained change to a single function that already has a scalar reference to test against.**
+The real bottleneck is a scalar loop in our own code. `kitty::bgra_to_rgb` (`crates/tf-term/src/kitty.rs:40`) runs at **0.94 GiB/s** and costs 7.98 ms per frame at the real Ghostty resolution. A byte-identical replacement runs at 23.87 GiB/s and costs 0.32 ms. **Fixing that one loop saves 7.66 ms per frame — roughly five times more than the entire zero-copy project could ever save — and it is a contained change to a single function that already has a scalar reference to test against.**
 
 ---
 
@@ -75,7 +75,7 @@ The `never` result reproduced exactly three times: **11 frames, every run** (las
 
 The failure is completely silent. Across all three runs: **zero bytes written to stderr**, no `render-process-gone`, no `unresponsive`, no thrown exception, no Chromium warning. The browser simply stops painting forever, and nothing anywhere in the system says why.
 
-This is the single worst property of the API for our use case. Our paint handler will eventually do real work — BGRA conversion, deflate, socket write — and any one of those can throw. One uncaught exception on the path before `release()` and BlackGlass freezes with no diagnostic, eleven frames later. Surviving this requires `try { … } finally { texture.release(); }` with absolutely no exceptions, forever, on every path. The good news from the `double` experiment is that over-releasing is safe, so a defensive `finally` cannot itself cause harm.
+This is the single worst property of the API for our use case. Our paint handler will eventually do real work — BGRA conversion, deflate, socket write — and any one of those can throw. One uncaught exception on the path before `release()` and Terminal-Fenster freezes with no diagnostic, eleven frames later. Surviving this requires `try { … } finally { texture.release(); }` with absolutely no exceptions, forever, on every path. The good news from the `double` experiment is that over-releasing is safe, so a defensive `finally` cannot itself cause harm.
 
 ### Reading the handle after release is a use-after-free
 
@@ -126,7 +126,7 @@ Probe: `iosurface-probe.c`, linked against `IOSurface` and `CoreFoundation`, cre
 
 IOSurface aligns rows to 64 bytes. Whether that produces padding depends entirely on the width.
 
-This is a nasty trap because of *which* resolutions are clean. The bitmap path is verifiably non-strided — Probe 3 measured `image.getBitmap().length === 8081392 === 2482*814*4` exactly, and `kitty::bgra_rect_to_rgb` at `crates/bg-term/src/kitty.rs:57` hard-codes `let stride = img_w as usize * 4` on that basis. Every round-number test resolution (1440×900, 800×600, 1920×1080) is also non-strided under IOSurface, so that assumption would pass the entire existing test suite. It breaks at **2482×814 — the actual measured Ghostty 1.3.1 window on this machine**, producing a progressively sheared image.
+This is a nasty trap because of *which* resolutions are clean. The bitmap path is verifiably non-strided — Probe 3 measured `image.getBitmap().length === 8081392 === 2482*814*4` exactly, and `kitty::bgra_rect_to_rgb` at `crates/tf-term/src/kitty.rs:57` hard-codes `let stride = img_w as usize * 4` on that basis. Every round-number test resolution (1440×900, 800×600, 1920×1080) is also non-strided under IOSurface, so that assumption would pass the entire existing test suite. It breaks at **2482×814 — the actual measured Ghostty 1.3.1 window on this machine**, producing a progressively sheared image.
 
 Caveat, stated plainly: this probe measures `IOSurfaceCreate`'s alignment policy on this machine, which is strong evidence for how the allocator behaves, but it is **not** a direct read of `IOSurfaceGetBytesPerRow` on Chromium's own surface — that read requires the native addon this report recommends against building. Treat the specific padding values as UNVERIFIED for Chromium's surfaces; treat "you must read the stride, never assume `w*4`" as established.
 
@@ -150,7 +150,7 @@ Measured costs at 2482×814, 8,081,392 bytes per frame:
 
 The theoretical ceiling on what zero-copy can save is therefore `2.206 − 0.726 ≈ 1.48 ms` at p50, and that assumes `IOSurfaceLock` overhead is zero, which it is not (UNVERIFIED, not measured). Call it **~1.5 ms per frame, best case.**
 
-Now weigh that against what it is a share of. Probe 4b, running the actual `bg-term` functions across realistic page content:
+Now weigh that against what it is a share of. Probe 4b, running the actual `tf-term` functions across realistic page content:
 
 | Content | zlib | `bgra_to_rgb` | deflate + base64 + chunk | Total | Wire bytes | Ceiling |
 |---|---|---|---|---|---|---|
@@ -196,7 +196,7 @@ Putting the whole pipeline together at 2482×814, text-page content, zlib L3, ag
 
 The conversion fix alone moves the pipeline from failing the frame budget to clearing it with headroom. The native addon then adds 1.48 ms of headroom we do not need, at the cost of a native toolchain, a second unsafe language on the hot path, the silent-freeze hazard from §3, and the stride hazard from §5.
 
-Two changes to `crates/bg-term/src/kitty.rs` are therefore proposed for the commander, **described rather than made** per file ownership:
+Two changes to `crates/tf-term/src/kitty.rs` are therefore proposed for the commander, **described rather than made** per file ownership:
 
 The first is to rewrite the body of `bgra_to_rgb` (`kitty.rs:40`) to reserve once and write through an unchecked pointer, keeping the existing signature. The existing scalar implementation should be retained as a `#[cfg(test)]` reference so the byte-identical property is asserted by a test rather than by this report. `bgra_rect_to_rgb` (`kitty.rs:54`) has the same per-byte push pattern and the same fix applies.
 
@@ -212,14 +212,14 @@ The wire size reconciles well — my L3 run on synthetic example.com-like conten
 
 The most likely explanation is that the 0.74 ms timed only part of the path — plausibly the escape-sequence assembly and chunking after compression, or `encode_rgb_frame` on a pre-converted buffer with an unrepresentative frame. It is also within noise of the 0.726 ms pure `memcpy` measured here, which is suggestive.
 
-This matters beyond bookkeeping. If 0.74 ms stands, the pipeline has enormous headroom and none of §7 is urgent. If ~12–22 ms stands, **BlackGlass is already encode-bound below 60 fps** and the conversion fix is the top-priority performance work in the project. I recommend the commander re-time the end-to-end path with the stage boundaries made explicit before any further performance planning depends on that number.
+This matters beyond bookkeeping. If 0.74 ms stands, the pipeline has enormous headroom and none of §7 is urgent. If ~12–22 ms stands, **Terminal-Fenster is already encode-bound below 60 fps** and the conversion fix is the top-priority performance work in the project. I recommend the commander re-time the end-to-end path with the stage boundaries made explicit before any further performance planning depends on that number.
 
 ---
 
 ## 9. Reproduction
 
 All probe sources are in the session scratchpad at
-`/private/tmp/claude-501/-Users-adeebbashir/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/b05/`.
+`/private/tmp/claude-501/-Users-builder/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/b05/`.
 Nothing was written into the repository except this file.
 
 Electron probes require the harness sandbox disabled, for the Mach-port rendezvous reason already documented in ADR-0001. Run from `apps/engine`:
@@ -231,7 +231,7 @@ Electron probes require the harness sandbox disabled, for the Mach-port rendezvo
 ./node_modules/.bin/electron <scratchpad>/b05/copy-cost.js texhold 10
 ```
 
-Rust benches (`cargo build --release --offline`, path-dependency on `crates/bg-term`, no repo files modified):
+Rust benches (`cargo build --release --offline`, path-dependency on `crates/tf-term`, no repo files modified):
 
 ```
 <scratchpad>/b05/encbench/target/release/encbench 80   # pipeline cost by zlib level

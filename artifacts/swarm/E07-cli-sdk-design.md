@@ -8,7 +8,7 @@ audit of what `apps/cli/src/main.rs` has today.
 `apps/cli/src/main.rs`, `apps/engine/src/main.js` and `crates/` are untouched.
 
 **Evidence base.** Everything under §1 was measured on this machine against the committed
-release binary `target/release/blackglass` (619,424 bytes, built from the current tree).
+release binary `target/release/terminal-fenster` (619,424 bytes, built from the current tree).
 Commands and outputs are reproduced verbatim. Anything I could not measure is marked
 UNVERIFIED and is never presented as fact.
 
@@ -18,37 +18,37 @@ UNVERIFIED and is never presented as fact.
 
 1. **The CLI has four commands, three exit codes, and no machine-readable output at all.**
    `grep` for `--json` in `apps/cli/src/main.rs` returns zero hits outside the
-   engine-wire helpers. BlackGlass currently cannot be driven, asserted on, or smoke-tested
+   engine-wire helpers. Terminal-Fenster currently cannot be driven, asserted on, or smoke-tested
    by anything that is not a human sitting in Ghostty.
 
 2. **Unknown flags are silently swallowed, not rejected.** `cmd_doctor` takes `_args: &[String]`
-   and never reads it (`apps/cli/src/main.rs:97`). `blackglass doctor --json` runs the plain
+   and never reads it (`apps/cli/src/main.rs:97`). `terminal-fenster doctor --json` runs the plain
    human path and exits as if the flag were honoured. D07 §15 already specifies
-   `blackglass doctor --keys`; today that flag is accepted and ignored. Silent acceptance is
+   `terminal-fenster doctor --keys`; today that flag is accepted and ignored. Silent acceptance is
    worse than rejection — it teaches users the flag works.
 
-3. **`blackglass open --help` performs a DuckDuckGo search for the string `--help`.**
+3. **`terminal-fenster open --help` performs a DuckDuckGo search for the string `--help`.**
    `normalize_url` (`main.rs:293-304`) has no flag awareness, so any argument that is not
    obviously a URL becomes a search query. Verified: the call reached the tty check, meaning
    help was never printed.
 
 4. **Usage-on-error goes to stdout.** `main.rs:65-69` calls `print_help()`, which is
-   `println!`, on the unknown-command path. Measured: `blackglass bogus 2>/dev/null` prints
+   `println!`, on the unknown-command path. Measured: `terminal-fenster bogus 2>/dev/null` prints
    the full usage block. GNU/POSIX convention puts diagnostics and usage-after-error on
    stderr. Same class of bug in `cmd_doctor`'s not-a-tty branch (`main.rs:100-108`), where a
    *failure* message is printed to stdout and the process exits 1 — so
-   `blackglass doctor > report.txt` captures the error into the report and leaves stderr empty.
+   `terminal-fenster doctor > report.txt` captures the error into the report and leaves stderr empty.
 
 5. **The single highest-value missing command is a non-interactive one.** There is no way to
    run the engine, take one frame, and exit without owning a tty. That is why this project is
-   currently only verifiable by hand. A `blackglass capture` command plus `--output json`
+   currently only verifiable by hand. A `terminal-fenster capture` command plus `--output json`
    turns the entire pipeline — engine spawn, handshake, first paint, BGRA decode — into
    something CI can assert on, which is exactly the log/protocol-based evidence this
    environment forces us toward anyway.
 
 6. **The design that makes all of the above cheap is one static command table** consumed by
    four things: the argument parser, `help`, the completion generator, and
-   `blackglass api schema`. Written any other way, those four drift, and the drift is
+   `terminal-fenster api schema`. Written any other way, those four drift, and the drift is
    invisible until a user hits it.
 
 ---
@@ -63,7 +63,7 @@ Derived from `apps/cli/src/main.rs:52-93`.
 |---|---|---|---|
 | `open <url>` | `cmd_open` | 218 | Interactive browse. Consumes argv[1] only. |
 | `doctor` | `cmd_doctor` | 97 | Capability report, human text only. |
-| `version` / `--version` / `-V` | inline | 57 | `blackglass 0.1.0` |
+| `version` / `--version` / `-V` | inline | 57 | `terminal-fenster 0.1.0` |
 | `help` / `--help` / `-h` / (no args) | `print_help` | 61 | Usage block on stdout. |
 | anything else | inline | 65 | Error on stderr, usage on **stdout**, exit 2. |
 
@@ -75,15 +75,15 @@ Environment variables read by the CLI:
 
 | Variable | Read at | Effect |
 |---|---|---|
-| `BLACKGLASS_LOG` | `main.rs:33` | Append diagnostics to a file. Never stdout — stdout is the graphics channel. |
-| `BLACKGLASS_ENGINE` | `main.rs:320` | Engine directory containing `node_modules/.bin/electron`. |
-| `BLACKGLASS_BACKEND` | `main.rs:208` | Force `kitty` \| `unicode` \| `sixel`. |
-| `BLACKGLASS_EXIT_AFTER_MS` | `main.rs:49` | Test hook: bounded run, then clean shutdown. |
+| `TERMINAL_FENSTER_LOG` | `main.rs:33` | Append diagnostics to a file. Never stdout — stdout is the graphics channel. |
+| `TERMINAL_FENSTER_ENGINE` | `main.rs:320` | Engine directory containing `node_modules/.bin/electron`. |
+| `TERMINAL_FENSTER_BACKEND` | `main.rs:208` | Force `kitty` \| `unicode` \| `sixel`. |
+| `TERMINAL_FENSTER_EXIT_AFTER_MS` | `main.rs:49` | Test hook: bounded run, then clean shutdown. |
 
 ### 1.2 Measured behaviour
 
 ```
-$ B=./target/release/blackglass
+$ B=./target/release/terminal-fenster
 $ for a in version --version -V help --help -h bogus open doctor; do
     $B "$a" >/dev/null 2>&1; printf "argv=%-11s rc=%s\n" "$a" "$?"; done
 argv=version     rc=0
@@ -104,19 +104,19 @@ Only `{0, 1, 2}` are ever produced. `doctor` returns 1 in a pipe because stdin i
 
 ```
 $ $B doctor 2>/dev/null            # note: the FAILURE text is on stdout
-blackglass doctor 0.1.0
+terminal-fenster doctor 0.1.0
   status: NOT A TTY -- run this from an interactive terminal.
   ...
 $ $B bogus 2>/dev/null             # note: usage-on-error is on stdout
-blackglass 0.1.0 -- a real browser in your terminal
+terminal-fenster 0.1.0 -- a real browser in your terminal
 USAGE: ...
 $ $B doctor --json 2>&1 | head -1  # note: flag silently ignored
-blackglass doctor 0.1.0
+terminal-fenster doctor 0.1.0
 $ $B open --help 2>&1              # note: "--help" became a search query
-blackglass: stdin is not a tty. Interactive browsing needs a terminal.
+terminal-fenster: stdin is not a tty. Interactive browsing needs a terminal.
 ```
 
-Dependency surface (`apps/cli/Cargo.toml`): `bg-term`, `bg-proto`, `libc`. No `clap`, no
+Dependency surface (`apps/cli/Cargo.toml`): `tf-term`, `tf-proto`, `libc`. No `clap`, no
 `serde`. Any parser, formatter, or completion generator has to be written or a dependency
 has to be added — §7.1 and §11.3 take a position on that.
 
@@ -132,14 +132,14 @@ Severity is about user-visible consequence, not effort.
 | G4 | High | Exit codes collapse every failure into 1. Engine-missing, tty-missing, geometry-unknown and engine-crash are indistinguishable. | `main.rs:230, 237, 249, 265, 281` all `return 1` |
 | G5 | Med | `open --help` becomes a search. No flag parsing, no `--` separator, so a URL beginning with `-` is unreachable. | `main.rs:219-225`, `293-304` |
 | G6 | Med | Usage-on-error and failure diagnostics printed to stdout. | `main.rs:67`, `100-108` |
-| G7 | Med | `BLACKGLASS_BACKEND=iterm2` is silently ignored — `Backend::Iterm2` exists but has no match arm; an unrecognised value silently falls through to auto-detect instead of erroring. | `main.rs:208-213` vs `bg-term/src/lib.rs:68-77` |
+| G7 | Med | `TERMINAL_FENSTER_BACKEND=iterm2` is silently ignored — `Backend::Iterm2` exists but has no match arm; an unrecognised value silently falls through to auto-detect instead of erroring. | `main.rs:208-213` vs `tf-term/src/lib.rs:68-77` |
 | G8 | Med | Help documents `kitty \| unicode`; code also accepts `sixel`. Docs and code already disagree. | `main.rs:90` vs `main.rs:211` |
 | G9 | Med | No shell completions of any kind. | absent |
 | G10 | Med | No `--version --output json`; version is an unparsed string. Downstream tooling has to regex it. | `main.rs:57-60` |
 | G11 | Med | Extra positional args after the URL are silently discarded. | `args.first()`, `main.rs:219` |
 | G12 | Low | No `--timeout`, `--width`, `--height`, `--profile`, `--devtools`, `--no-color`, `--log-level`. B09/E03/D07 all assume some of these exist. | absent |
 | G13 | Low | The 30 s engine-connect budget is a hard-coded literal with no override. | `main.rs:415` |
-| G14 | Low | Socket path headroom is 7 bytes. Worst case measured: `/var/folders/…/T/blackglass-99998-<19-digit-nanos>/engine.sock` = **97 bytes** against a `sun_path` of **104** (confirmed by compiling `sizeof(((struct sockaddr_un*)0)->sun_path)` on this machine). A longer `$TMPDIR` overflows. A09 §598 reaches the same conclusion independently. | `main.rs:394` |
+| G14 | Low | Socket path headroom is 7 bytes. Worst case measured: `/var/folders/…/T/terminal-fenster-99998-<19-digit-nanos>/engine.sock` = **97 bytes** against a `sun_path` of **104** (confirmed by compiling `sizeof(((struct sockaddr_un*)0)->sun_path)` on this machine). A longer `$TMPDIR` overflows. A09 §598 reaches the same conclusion independently. | `main.rs:394` |
 
 G14 detail, since it is the kind of thing that fails only on someone else's machine:
 
@@ -194,7 +194,7 @@ Three rules follow, and they are testable:
 `T2` = follows the sibling designs (B04 tabs, B09 profiles/data, D05 downloads, D07 keymaps).
 
 ```
-blackglass [GLOBAL FLAGS] <command> [ARGS]
+terminal-fenster [GLOBAL FLAGS] <command> [ARGS]
 
   open <url>                              A  T0  interactive browse
   doctor [--keys] [--engine] [--strict]   A  T0* human/JSON capability report   (--keys per D07 §15)
@@ -259,9 +259,9 @@ blackglass [GLOBAL FLAGS] <command> [ARGS]
 
 ### 3.2 Naming rules
 
-* Two levels maximum: `<noun> <verb>`. No `blackglass page dom query selector`.
+* Two levels maximum: `<noun> <verb>`. No `terminal-fenster page dom query selector`.
 * The noun is always singular (`tab list`, never `tabs list`) and matches the API namespace
-  exactly, so `blackglass page text` is `page.text` on the wire with no translation layer.
+  exactly, so `terminal-fenster page text` is `page.text` on the wire with no translation layer.
 * Verbs are drawn from a closed set: `list, show, get, set, add, remove, create, delete,
   start, stop, new, close, select, check, clear, search`. A new verb requires a decision, not
   a commit.
@@ -279,17 +279,17 @@ Accepted before or after the subcommand; `--` terminates flag parsing (fixes G5)
 | `--output human\|json\|jsonl` | `human` if stdout is a tty, else `json` | `-o` alias |
 | `--output-fd <n>` | `1` | Mandatory escape hatch for plane A (§2 rule 2) |
 | `--output-file <path>` | — | Mutually exclusive with `--output-fd` |
-| `--session <id>` | `$BLACKGLASS_SESSION`, else the only running session | Ambiguity is an error (21), never a guess |
+| `--session <id>` | `$TERMINAL_FENSTER_SESSION`, else the only running session | Ambiguity is an error (21), never a guess |
 | `--timeout <ms>` | per-command | Replaces the literal at `main.rs:415` |
 | `--color auto\|always\|never` | `auto` | Honours `NO_COLOR` and `CLICOLOR_FORCE` |
 | `--quiet` / `-q` | off | Suppresses human chatter; no effect on json/jsonl |
 | `--verbose` / `-v` | off | Repeatable; routes to `--log-file`, never stdout |
-| `--log-file <path>` | `$BLACKGLASS_LOG` | |
+| `--log-file <path>` | `$TERMINAL_FENSTER_LOG` | |
 | `--version` | | Position-independent, unlike today (G10) |
 | `--help` / `-h` | | Position-independent and subcommand-aware, unlike today (G5) |
 
 Auto-detection of `--output` from `isatty(1)` is the single most useful default here: it
-makes `blackglass page text` readable in a terminal and parseable in a pipe with no flag,
+makes `terminal-fenster page text` readable in a terminal and parseable in a pipe with no flag,
 which is the behaviour people already expect from `gh`, `docker` and `kubectl`.
 
 ---
@@ -329,11 +329,11 @@ Failure:
   "error": {
     "code": "engine_not_found",
     "exit": 10,
-    "msg": "electron not found; set BLACKGLASS_ENGINE to the engine directory",
-    "hint": "run `blackglass setup`",
+    "msg": "electron not found; set TERMINAL_FENSTER_ENGINE to the engine directory",
+    "hint": "run `terminal-fenster setup`",
     "detail": {
       "searched": [
-        "$BLACKGLASS_ENGINE/node_modules/.bin/electron",
+        "$TERMINAL_FENSTER_ENGINE/node_modules/.bin/electron",
         "<workspace>/apps/engine/node_modules/.bin/electron"
       ]
     }
@@ -361,7 +361,7 @@ These exist so that two commands written six months apart still look like the sa
    `UNKNOWN`, `main.rs:184` prints `(no reply)`. In JSON all three are `null`, and the
    distinction between "not supported" (`false`) and "not determined" (`null`) is preserved,
    because for capability detection those are genuinely different states —
-   `crates/bg-term/src/caps.rs:9-10` notes that absence of a reply is the negative result but
+   `crates/tf-term/src/caps.rs:9-10` notes that absence of a reply is the negative result but
    a slow terminal can look like an unsupporting one.
 3. **Units are in the name.** `_ms`, `_bytes`, `_px`, `_hz`. Never a bare `size` or `time`.
    Byte counts are integers, never pre-divided into KB the way the status bar does at
@@ -372,8 +372,8 @@ These exist so that two commands written six months apart still look like the sa
    `t_ms`, a monotonic offset from process start, because wall-clock can step and a frame
    timeline that goes backwards is unusable.
 6. **Enums are lowercase snake_case strings** drawn from a closed set published by
-   `blackglass api schema`. `"backend": "kitty"` matches `Backend::as_str`
-   (`bg-term/src/lib.rs:80-87`) exactly, so there is one spelling in the codebase.
+   `terminal-fenster api schema`. `"backend": "kitty"` matches `Backend::as_str`
+   (`tf-term/src/lib.rs:80-87`) exactly, so there is one spelling in the codebase.
 7. **Keys are `snake_case`.** The engine wire protocol uses terse keys (`t`, `v`) because it
    is a hot path; the CLI's public JSON does not, because it is read by humans debugging
    scripts.
@@ -382,7 +382,7 @@ These exist so that two commands written six months apart still look like the sa
 9. **Page-controlled strings are escaped, not sanitised.** The status bar correctly strips
    control characters with `unicode::sanitize_for_terminal` (`main.rs:887-888`) because it
    writes to a terminal. JSON output must instead *escape* them as `\u001b`-style sequences
-   (`bg_proto::json_escape`, `crates/bg-proto/src/lib.rs:106-118`) and preserve the
+   (`tf_proto::json_escape`, `crates/tf-proto/src/lib.rs:106-118`) and preserve the
    true value — a consumer asserting on a page title needs the real title, and its own
    renderer is responsible for its own terminal safety. Getting this backwards in either
    direction is a bug: stripping in JSON loses data, escaping-only in the status bar is an
@@ -410,7 +410,7 @@ Used by `watch`, `page links`, `capture --frames N`, and any command with progre
 The numbers in that example are the ones already measured end-to-end in Ghostty 1.3.1 and
 recorded in the mission brief (engine ready 212 ms, first frame 366 ms, 8,081,424 BGRA bytes
 → 53,999 wire bytes, 0.74 ms encode). The stream format is designed to carry exactly the
-evidence this project already collects by hand, which is the point: `blackglass watch` should
+evidence this project already collects by hand, which is the point: `terminal-fenster watch` should
 make the performance claims reproducible by a script rather than by a person reading a log.
 
 Backpressure: the engine already coalesces frames and keeps at most one in flight
@@ -466,7 +466,7 @@ more widely-observed convention that argument errors are 2, which this CLI alrea
 | 51 | `INTEGRITY` | Checksum/signature mismatch during `setup`. B10 §3.5 requires fail-closed. |
 | 70 | `INTERNAL` | Bug. Panic handler exits 70 after the tty is restored. |
 | 75 | `TEMPORARY` | Explicitly retryable; a wrapper may back off and retry |
-| 77 | `DENIED_BY_POLICY` | Feature disabled by config or env (e.g. CDP off, `BLACKGLASS_MCP_CDP=0`) |
+| 77 | `DENIED_BY_POLICY` | Feature disabled by config or env (e.g. CDP off, `TERMINAL_FENSTER_MCP_CDP=0`) |
 
 Signals are not remapped. If the process dies of `SIGINT` the shell reports 130; if the CLI
 catches `SIGINT` and shuts down cleanly it exits 0 for `watch` (a clean stop of a stream is a
@@ -488,7 +488,7 @@ success) and 75 for a command that was interrupted mid-work.
 ### 5.3 Machine-readable
 
 ```
-$ blackglass api exit-codes --output json
+$ terminal-fenster api exit-codes --output json
 {"bg":1,"ok":true,"cmd":"api.exit-codes","data":{"codes":[
   {"code":0,"symbol":"OK","retryable":false,"msg":"success"},
   {"code":10,"symbol":"ENGINE_NOT_FOUND","retryable":false,"msg":"electron not located"},
@@ -515,11 +515,11 @@ Conflating these is the classic mistake, and this project already has all three 
 
 A new page-reading method bumps none of them (it is a `feature` string). Changing the frame
 header bumps `proto`. Removing a method bumps `api`. Renaming `data` to `result` bumps `bg`.
-`blackglass api version` reports all three plus the implementation version:
+`terminal-fenster api version` reports all three plus the implementation version:
 
 ```json
 {"bg":1,"ok":true,"cmd":"api.version","data":{
-  "impl":"blackglass/0.1.0","bg":1,"api":1,"api_min":1,"proto":1,"proto_min":1,
+  "impl":"terminal-fenster/0.1.0","bg":1,"api":1,"api_min":1,"proto":1,"proto_min":1,
   "engine":{"electron":"43.2.0","chrome":"150.0.0.0"},
   "features":["nav","page.text","page.screenshot","input","watch","capture"]
 }}
@@ -534,7 +534,7 @@ distinction, not an omission.
 A **second** Unix socket, distinct from the engine socket, owned by the core:
 
 ```
-$TMPDIR/blackglass-<uid>/<session>/control.sock      dir 0700, socket 0600
+$TMPDIR/terminal-fenster-<uid>/<session>/control.sock      dir 0700, socket 0600
 ```
 
 Rationale, and each point is load-bearing:
@@ -552,7 +552,7 @@ Rationale, and each point is load-bearing:
 
 ```
 /var/folders/qn/qt5tx7_x27v3l44yls7zgvm80000gn/T/   49
-blackglass-501/                                     15
+terminal-fenster-501/                                     15
 a1b2c3d4/                                            9
 control.sock                                        12
                                                   ----
@@ -565,8 +565,8 @@ of the 19 the current nanosecond scheme spends (G14).
 
 ### 6.3 Framing and type IDs
 
-Reuse `bg_proto`'s `[u8 type][u32 BE len][payload]` framer verbatim — one framer, one set of
-bugs, and `MessageReader` (`crates/bg-proto/src/lib.rs:57-94`) is already tested against
+Reuse `tf_proto`'s `[u8 type][u32 BE len][payload]` framer verbatim — one framer, one set of
+bugs, and `MessageReader` (`crates/tf-proto/src/lib.rs:57-94`) is already tested against
 split reads and binary payloads containing newlines. Control types are drawn from B06 §3.1's
 **must-understand** reserved range `0x10–0x7F`, so an old peer fails loudly rather than
 skipping a message it needed:
@@ -583,7 +583,7 @@ skipping a message it needed:
 | `0x27` | `C_CANCEL` | client → core | JSON `{"id":N}` |
 
 `C_BLOB` exists so a 3 MB PNG never has to be base64'd into JSON. It is the same asymmetry
-`bg-proto` already documents at lines 7-9: JSON where readability pays, binary where volume
+`tf-proto` already documents at lines 7-9: JSON where readability pays, binary where volume
 does.
 
 ### 6.4 Handshake
@@ -594,9 +594,9 @@ in one codebase is how you get a bug nobody can reason about:
 > the server accepts the client iff `hello.api_min ≤ SERVER_API ≤ hello.api`
 
 ```json
-→ 0x20 {"t":"hello","magic":"blackglass-ctl","api":1,"api_min":1,
+→ 0x20 {"t":"hello","magic":"terminal-fenster-ctl","api":1,"api_min":1,
         "impl":"bg-client-ts/0.1.0","pid":8891,"features":["stream","blob"]}
-← 0x21 {"t":"welcome","magic":"blackglass-ctl","api":1,"impl":"blackglass/0.1.0",
+← 0x21 {"t":"welcome","magic":"terminal-fenster-ctl","api":1,"impl":"terminal-fenster/0.1.0",
         "session":"a1b2c3d4","epoch":1,
         "features":["nav","page.text","page.screenshot","input","watch"],
         "limits":{"max_req_bytes":65536,"max_blob_bytes":33554432,"max_inflight":64}}
@@ -617,7 +617,7 @@ Darwin's `sys/un.h` but I am not asserting behaviour I did not run.
 
 ### 6.5 Method catalogue
 
-Each maps 1:1 to a CLI path. `blackglass page text --session X` ⇒ `page.text`.
+Each maps 1:1 to a CLI path. `terminal-fenster page text --session X` ⇒ `page.text`.
 
 | Method | Params | Result | Errors |
 |---|---|---|---|
@@ -650,7 +650,7 @@ person.
   at least two minor releases.
 * Behaviour changes to an existing method are forbidden. Add `page.text_v2` or a param;
   never silently change what `page.text` returns.
-* `blackglass api capabilities --output json` is the machine-readable statement of all of the
+* `terminal-fenster api capabilities --output json` is the machine-readable statement of all of the
   above, so a client can decide at runtime rather than parsing a version string.
 
 ---
@@ -690,13 +690,13 @@ which backends exist) stop being possible.
 
 ### 7.2 Static script plus dynamic candidates
 
-`blackglass completions zsh` emits a small static script covering the fixed tree. Anything
+`terminal-fenster completions zsh` emits a small static script covering the fixed tree. Anything
 whose values are only known at runtime — session ids, tab ids, profile names, config keys,
 history URLs — is resolved by a hidden call, the pattern Cobra popularised and which keeps
 the shipped script tiny:
 
 ```
-$ blackglass __complete page --session ''
+$ terminal-fenster __complete page --session ''
 {"bg":1,"type":"candidate","value":"a1b2c3d4","desc":"example.com (2 tabs)"}
 {"bg":1,"type":"candidate","value":"9f2c1e7a","desc":"news.ycombinator.com"}
 {"bg":1,"type":"directive","space":true,"files":false}
@@ -708,14 +708,14 @@ JSONL, so the same parser handles it as every other stream.
 
 `caps::detect(fd, 300)` is called with a 300 ms deadline (`main.rs:118`), and detection works
 by writing query sequences to the terminal and waiting for replies
-(`crates/bg-term/src/caps.rs:113-119`). A completion handler that touched that path would
+(`crates/tf-term/src/caps.rs:113-119`). A completion handler that touched that path would
 add up to 300 ms to every `<TAB>` **and would write escape sequences to the user's terminal
 mid-typing.** Therefore, normatively:
 
 * `__complete` and `completions` MUST NOT acquire the tty, MUST NOT call `caps::detect`, and
   MUST NOT start an engine.
 * Budget: p99 < 50 ms. Enforce it with a test that runs `__complete` under
-  `BLACKGLASS_NO_TTY=1` and asserts wall time.
+  `TERMINAL_FENSTER_NO_TTY=1` and asserts wall time.
 * `__complete` reads session ids from the control-socket **directory listing**, not by
   connecting to each socket. Listing a directory is microseconds; a handshake is not.
 
@@ -723,9 +723,9 @@ mid-typing.** Therefore, normatively:
 
 | Shell | Mechanism | Note |
 |---|---|---|
-| bash | `complete -F _blackglass` | Needs `bash-completion` ≥ 2 for `_init_completion`; degrade gracefully without it |
-| zsh | `#compdef blackglass`, `_arguments` | Richest: descriptions on candidates. Install to `$fpath` |
-| fish | `complete -c blackglass -f -a '(blackglass __complete …)'` | `-f` matters: without it fish offers files everywhere |
+| bash | `complete -F _terminal-fenster` | Needs `bash-completion` ≥ 2 for `_init_completion`; degrade gracefully without it |
+| zsh | `#compdef terminal-fenster`, `_arguments` | Richest: descriptions on candidates. Install to `$fpath` |
+| fish | `complete -c terminal-fenster -f -a '(terminal-fenster __complete …)'` | `-f` matters: without it fish offers files everywhere |
 | nushell | `extern` with a custom completer | Typed; the spec table maps cleanly |
 | powershell | `Register-ArgumentCompleter` | For WSL/cross-platform users |
 | elvish | `edit:completion:arg-completer` | Cheap once the JSONL contract exists |
@@ -751,9 +751,9 @@ import { once } from 'node:events';
 const C_HELLO = 0x20, C_WELCOME = 0x21, C_REQ = 0x22,
       C_RES = 0x23, C_ITEM = 0x24, C_END = 0x25, C_BLOB = 0x26, C_CANCEL = 0x27;
 
-export class BlackGlassError extends Error {
+export class Terminal-FensterError extends Error {
   constructor(readonly code: string, readonly exit: number, msg: string,
-              readonly detail?: unknown) { super(msg); this.name = 'BlackGlassError'; }
+              readonly detail?: unknown) { super(msg); this.name = 'Terminal-FensterError'; }
 }
 
 type Pending = {
@@ -764,25 +764,25 @@ type Pending = {
   blob?: Buffer;
 };
 
-export class BlackGlass {
+export class Terminal-Fenster {
   private sock!: Socket;
   private buf = Buffer.alloc(0);
   private nextId = 1;
   private pending = new Map<number, Pending>();
   private welcome: any = null;
 
-  static async connect(socketPath: string, timeoutMs = 5000): Promise<BlackGlass> {
-    const c = new BlackGlass();
+  static async connect(socketPath: string, timeoutMs = 5000): Promise<Terminal-Fenster> {
+    const c = new Terminal-Fenster();
     c.sock = connect(socketPath);
     c.sock.on('data', (chunk) => c.onData(chunk));
-    c.sock.on('close', () => c.failAll(new BlackGlassError(
+    c.sock.on('close', () => c.failAll(new Terminal-FensterError(
       'engine_crashed', 13, 'control socket closed')));
     await once(c.sock, 'connect');
 
     // Both openers may be in flight at once; this is not request/response.
     // (B06 §3.5 rule 1 — the same rule the engine handshake follows.)
     c.send(C_HELLO, Buffer.from(JSON.stringify({
-      t: 'hello', magic: 'blackglass-ctl', api: 1, api_min: 1,
+      t: 'hello', magic: 'terminal-fenster-ctl', api: 1, api_min: 1,
       impl: 'bg-client-ts/0.1.0', pid: process.pid, features: ['stream', 'blob'],
     })));
 
@@ -790,7 +790,7 @@ export class BlackGlass {
     while (!c.welcome) {
       if (Date.now() > deadline) {
         c.sock.destroy();
-        throw new BlackGlassError('engine_handshake', 12, 'no welcome within timeout');
+        throw new Terminal-FensterError('engine_handshake', 12, 'no welcome within timeout');
       }
       await new Promise((r) => setTimeout(r, 5));
     }
@@ -816,7 +816,7 @@ export class BlackGlass {
       // Enforce our own advertised limit on the LENGTH PREFIX, before buffering the
       // payload. B06 F3: a peer that claims 4 GiB must not be allowed to allocate it.
       if (len > 33_554_432) {
-        this.failAll(new BlackGlassError('engine_handshake', 12, `oversize message ${len}`));
+        this.failAll(new Terminal-FensterError('engine_handshake', 12, `oversize message ${len}`));
         this.sock.destroy();
         return;
       }
@@ -849,7 +849,7 @@ export class BlackGlass {
       case C_RES:
         this.pending.delete(msg.id);
         if (msg.ok) p.resolve(p.blob ? { ...msg.data, blob: p.blob } : msg.data);
-        else p.reject(new BlackGlassError(
+        else p.reject(new Terminal-FensterError(
           msg.error.code, msg.error.exit, msg.error.msg, msg.error.detail));
         break;
     }
@@ -883,10 +883,10 @@ export class BlackGlass {
 Usage — and note that the error handling is the point, not an afterthought:
 
 ```ts
-import { BlackGlass, BlackGlassError } from '@blackglass/client';
+import { Terminal-Fenster, Terminal-FensterError } from '@terminal-fenster/client';
 import { writeFile } from 'node:fs/promises';
 
-const bg = await BlackGlass.connect(process.env.BLACKGLASS_SOCKET!);
+const bg = await Terminal-Fenster.connect(process.env.TERMINAL_FENSTER_SOCKET!);
 
 try {
   await bg.call('nav.goto', { url: 'https://example.com', wait: 'load', timeout_ms: 15_000 });
@@ -901,7 +901,7 @@ try {
   const stop = bg.watch((e) => console.log(JSON.stringify(e)), ['title', 'url', 'loading']);
   setTimeout(stop, 5_000);
 } catch (e) {
-  if (e instanceof BlackGlassError) {
+  if (e instanceof Terminal-FensterError) {
     // The exit code travels with the error, so a wrapper script can propagate it.
     console.error(`${e.code}: ${e.message}`);
     process.exit(e.exit);          // e.g. 30 NAV_FAILED, 13 ENGINE_CRASHED
@@ -918,13 +918,13 @@ try {
 
 `crates/bg-client`. Blocking, `std` + `libc` only — the workspace has no async runtime today
 (`Cargo.toml` workspace deps are `libc` and `flate2`) and a control client is not a reason to
-acquire one. It reuses `bg_proto`'s framer, so there is exactly one framing implementation in
+acquire one. It reuses `tf_proto`'s framer, so there is exactly one framing implementation in
 Rust.
 
 ```rust
-//! crates/bg-client/src/lib.rs — blocking client for the BlackGlass control API.
+//! crates/bg-client/src/lib.rs — blocking client for the Terminal-Fenster control API.
 
-use bg_proto::{frame_message, MessageReader};
+use tf_proto::{frame_message, MessageReader};
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
 use std::path::Path;
@@ -982,7 +982,7 @@ impl Client {
             features: Vec::new(),
         };
         let hello = format!(
-            r#"{{"t":"hello","magic":"blackglass-ctl","api":{API},"api_min":{API},"impl":"bg-client-rs/{}","pid":{}}}"#,
+            r#"{{"t":"hello","magic":"terminal-fenster-ctl","api":{API},"api_min":{API},"impl":"bg-client-rs/{}","pid":{}}}"#,
             env!("CARGO_PKG_VERSION"),
             std::process::id()
         );
@@ -996,10 +996,10 @@ impl Client {
             let (t, payload) = c.read_message()?;
             if t == C_WELCOME {
                 let w = String::from_utf8_lossy(&payload);
-                if bg_proto::json_get_str(&w, "magic").as_deref() != Some("blackglass-ctl") {
+                if tf_proto::json_get_str(&w, "magic").as_deref() != Some("terminal-fenster-ctl") {
                     return Err(Error::Handshake("bad magic".into()));
                 }
-                c.session = bg_proto::json_get_str(&w, "session").unwrap_or_default();
+                c.session = tf_proto::json_get_str(&w, "session").unwrap_or_default();
                 return Ok(c);
             }
         }
@@ -1037,13 +1037,13 @@ impl Client {
                 continue; // items/blobs for other ids
             }
             let s = String::from_utf8_lossy(&payload).into_owned();
-            if bg_proto::json_get_bool(&s, "ok") == Some(true) {
+            if tf_proto::json_get_bool(&s, "ok") == Some(true) {
                 return Ok(s);
             }
             return Err(Error::Api(ApiError {
-                code: bg_proto::json_get_str(&s, "code").unwrap_or_else(|| "fail".into()),
+                code: tf_proto::json_get_str(&s, "code").unwrap_or_else(|| "fail".into()),
                 exit: 1, // real impl parses "exit"; json_get_int is the missing helper (§11.3)
-                msg: bg_proto::json_get_str(&s, "msg").unwrap_or_default(),
+                msg: tf_proto::json_get_str(&s, "msg").unwrap_or_default(),
             }));
         }
     }
@@ -1072,7 +1072,7 @@ Caller, showing the exit-code propagation that makes the taxonomy worth having:
 
 ```rust
 fn main() {
-    let path = std::env::var("BLACKGLASS_SOCKET").expect("BLACKGLASS_SOCKET");
+    let path = std::env::var("TERMINAL_FENSTER_SOCKET").expect("TERMINAL_FENSTER_SOCKET");
     let mut c = match bg_client::Client::connect(
         std::path::Path::new(&path), std::time::Duration::from_secs(5)) {
         Ok(c) => c,
@@ -1087,7 +1087,7 @@ fn main() {
 }
 ```
 
-Note what the Rust example exposes: `bg_proto` has `json_get_str` and `json_get_bool` but no
+Note what the Rust example exposes: `tf_proto` has `json_get_str` and `json_get_bool` but no
 integer accessor, so `error.exit` cannot be read without adding one. That is a concrete,
 one-function gap I am reporting rather than patching (§11.3).
 
@@ -1100,22 +1100,22 @@ is the only way `doctor` can report on all of them.
 
 | Variable | Status | Owner | Meaning |
 |---|---|---|---|
-| `BLACKGLASS_LOG` | exists | CLI `main.rs:33` | Diagnostic log file. Never stdout. |
-| `BLACKGLASS_ENGINE` | exists | CLI `main.rs:320` | Engine directory |
-| `BLACKGLASS_BACKEND` | exists | CLI `main.rs:208` | Force backend; **must** also accept `iterm2` and **must** error on unknown values (G7) |
-| `BLACKGLASS_EXIT_AFTER_MS` | exists | CLI `main.rs:49` | Test hook, bounded run |
-| `BLACKGLASS_HOME` | proposed | B09 §3.4 | Data root |
-| `BLACKGLASS_CONFIG` | proposed | D07 §13.2 | Explicit config file |
-| `BLACKGLASS_CONFIG_DIR` | proposed | D07 | Config directory |
-| `BLACKGLASS_CDP` | proposed | E03 §9.2 | Opt-in DevTools port |
-| `BLACKGLASS_SESSION` | **new here** | E07 §3.3 | Default `--session` |
-| `BLACKGLASS_SOCKET` | **new here** | E07 §6.2 | Explicit control-socket path |
-| `BLACKGLASS_OUTPUT` | **new here** | E07 §4 | Default `--output` |
+| `TERMINAL_FENSTER_LOG` | exists | CLI `main.rs:33` | Diagnostic log file. Never stdout. |
+| `TERMINAL_FENSTER_ENGINE` | exists | CLI `main.rs:320` | Engine directory |
+| `TERMINAL_FENSTER_BACKEND` | exists | CLI `main.rs:208` | Force backend; **must** also accept `iterm2` and **must** error on unknown values (G7) |
+| `TERMINAL_FENSTER_EXIT_AFTER_MS` | exists | CLI `main.rs:49` | Test hook, bounded run |
+| `TERMINAL_FENSTER_HOME` | proposed | B09 §3.4 | Data root |
+| `TERMINAL_FENSTER_CONFIG` | proposed | D07 §13.2 | Explicit config file |
+| `TERMINAL_FENSTER_CONFIG_DIR` | proposed | D07 | Config directory |
+| `TERMINAL_FENSTER_CDP` | proposed | E03 §9.2 | Opt-in DevTools port |
+| `TERMINAL_FENSTER_SESSION` | **new here** | E07 §3.3 | Default `--session` |
+| `TERMINAL_FENSTER_SOCKET` | **new here** | E07 §6.2 | Explicit control-socket path |
+| `TERMINAL_FENSTER_OUTPUT` | **new here** | E07 §4 | Default `--output` |
 | `NO_COLOR` / `CLICOLOR_FORCE` | **new here** | E07 §3.3 | Standard, third-party |
 
 Rule: a flag always beats an environment variable, which always beats config, which beats the
 built-in default. Stated once, applied everywhere, and reported by
-`blackglass config show --output json` with a `source` field per key so "why is this value
+`terminal-fenster config show --output json` with a `source` field per key so "why is this value
 set?" is answerable without guessing.
 
 ---
@@ -1129,7 +1129,7 @@ set?" is answerable without guessing.
   the exact commands.
 * `sizeof(sun_path) == 104` on Darwin, by compiling and running a probe.
 * `$TMPDIR` is 49 characters; worst-case current socket path is 97 bytes (7 bytes headroom).
-* `apps/cli/Cargo.toml` depends only on `bg-term`, `bg-proto`, `libc` — no `clap`, no `serde`.
+* `apps/cli/Cargo.toml` depends only on `tf-term`, `tf-proto`, `libc` — no `clap`, no `serde`.
 * Release binary size 619,424 bytes.
 
 ### 11.2 UNVERIFIED
@@ -1143,14 +1143,14 @@ set?" is answerable without guessing.
 
 ### 11.3 Decisions for the commander
 
-1. **JSON encoding dependency.** Emitting JSON can be hand-rolled — `bg_proto::json_escape`
+1. **JSON encoding dependency.** Emitting JSON can be hand-rolled — `tf_proto::json_escape`
    already exists and the frame path must stay dependency-free. *Parsing* client requests is
    different: the control server accepts arbitrary local input, and `json_get_str` is a
    deliberately minimal scanner whose edge cases B06 F11 already flags. My recommendation is
    `serde_json` for the control server only, accepted as roughly +300 KB of binary and a few
    seconds of build time against 619 KB today. Hand-rolling a parser to save that is a poor
    trade for something on a trust boundary.
-2. **`bg_proto` needs `json_get_i64`** (§9). One function. Without it no client can read
+2. **`tf_proto` needs `json_get_i64`** (§9). One function. Without it no client can read
    `error.exit`.
 3. **`clap` or the hand-written spec table?** The table in §7.1 gives completions, help, and
    `api schema` from one source and adds no dependency, at the cost of writing a parser. `clap`
@@ -1166,7 +1166,7 @@ set?" is answerable without guessing.
 ## 12. Recommendation
 
 Land the spec table (§7.1) first, then use it to ship `--output json|jsonl` (§4) and
-`blackglass capture` (§3.1) before any other command. Those three together convert BlackGlass
+`terminal-fenster capture` (§3.1) before any other command. Those three together convert Terminal-Fenster
 from a program only a human in Ghostty can verify into one a CI job can assert on — which is
 precisely the protocol-and-log-based evidence this environment already forces us toward, and
 it makes every subsequent E-series and D-series feature testable the day it lands instead of

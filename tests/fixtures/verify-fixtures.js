@@ -175,7 +175,7 @@ const PROBES = {
   },
   'text-input': async (wc) => {
     await wc.executeJavaScript('window.__bg.focusField("username")');
-    await typeText(wc, 'blackglass');
+    await typeText(wc, 'terminal-fenster');
     await wc.executeJavaScript('window.__bg.focusField("password")');
     await typeText(wc, 'hunter');
     const s = await getState(wc);
@@ -354,7 +354,7 @@ async function runOne(entry) {
 /* Use a throwaway profile. Without this the probe shares the default Electron userData
    directory with any other Electron on the machine, which can block startup entirely --
    observed on this host while a sibling probe held the default profile. */
-app.setPath('userData', path.join(app.getPath('temp'), 'blackglass-fixture-verify'));
+app.setPath('userData', path.join(app.getPath('temp'), 'terminal-fenster-fixture-verify'));
 
 app.on('window-all-closed', () => {});
 

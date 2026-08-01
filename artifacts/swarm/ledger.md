@@ -31,7 +31,7 @@ agents shared a file, so there were no write conflicts to resolve.
 | B01 | Resize is dead code: no SIGWINCH, CLI never sends `resize` | Added SIGWINCH handler + resize path (`tty.rs`, `main.rs`) |
 | B01 | `best_backend` can return Sixel/iTerm2 which `present()` silently draws as half-blocks | `resolve_backend` now degrades explicitly and `doctor` says so |
 | B01 / B08 | `MessageReader` trusts a u32 length before validating | Added `MAX_MESSAGE_LEN` cap + `ProtocolError` |
-| B01 | Engine stderr discarded, startup failures undiagnosable | stderr now captured next to `BLACKGLASS_LOG` |
+| B01 | Engine stderr discarded, startup failures undiagnosable | stderr now captured next to `TERMINAL_FENSTER_LOG` |
 | F10 | `expected_payload()` overflows; `parse_two_param_t` cannot tell a `CSI 14t` reply from `CSI 16t` | Added `checked_payload()`; `parse_typed_t` validates the report type |
 | F10 | `license` declared with no LICENSE file; stray `package.json` from another project; no `.gitignore`/commits | Added `LICENSE-MIT`, `NOTICE.md`, `.gitignore`; quarantined the stray file; committed |
 
@@ -102,7 +102,7 @@ ADR-0001 was amended rather than silently edited.
 | C07 | Scaling and colour | delivered | Not implemented — **open risk**: at 2482 px wide with a 17 px cell, default scale makes text tiny |
 | C08 | Damage encoder | consume-side implemented 2026-08-01 | Engine crops onPaint + core composites partial rects into a persistent framebuffer (tested + e2e 9/9). Terminal-transmission tile mosaic still full-frame — designed, needs interactive Ghostty verification |
 | C09 | SSH adaptive transport | delivered | Not implemented |
-| C10 | Rendering profiler | delivered | Partially present via `BLACKGLASS_LOG` |
+| C10 | Rendering profiler | delivered | Partially present via `TERMINAL_FENSTER_LOG` |
 
 ## Squad D — input, chrome, human UX
 
@@ -139,7 +139,7 @@ ADR-0001 was amended rather than silently edited.
 | ID | Mission | Status | Disposition |
 |---|---|---|---|
 | F01 | Security review | delivered | Reviewed sanitisation coverage and Electron hardening |
-| F02 | Secrets/permissions | delivered | Flagged that `BLACKGLASS_LOG` records URLs and titles — a real privacy consideration, not yet redacted |
+| F02 | Secrets/permissions | delivered | Flagged that `TERMINAL_FENSTER_LOG` records URLs and titles — a real privacy consideration, not yet redacted |
 | F03 | Supply chain + SBOM | delivered | `F03-sbom.json`; informs `NOTICE.md` |
 | F04 | Fuzz plan | delivered | Harness specified, not run |
 | F05 | **Test fixtures** | **delivered as code** | `tests/fixtures/` — 15+ self-contained pages incl. an escape-injection corpus |

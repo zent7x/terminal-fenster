@@ -157,7 +157,7 @@ or release on the receiving thread before doing work. This is the same class of 
 
 ### 2.4 The decode tax (this is the real cost)
 
-`crates/bg-term/src/kitty.rs` sends `f=24` (raw RGB) + zlib and takes **BGRA** input — the
+`crates/tf-term/src/kitty.rs` sends `f=24` (raw RGB) + zlib and takes **BGRA** input — the
 file's own comment explains PNG (`f=100`) was rejected because it moves a full encode onto our
 hot path. So a CDP frame *must* be decoded back to raw pixels before it can enter the existing
 encoder. Measured with Pillow/libjpeg-turbo:
@@ -196,8 +196,8 @@ anyway — so `format: "png"` makes CDP's transport cost honest rather than chea
 ### 2.6 Input works — CDP is a complete engine substitute, not just a frame source
 
 A fallback is worthless if it can only render. Verified end-to-end: dispatched ten
-`Input.dispatchKeyEvent` pairs spelling `blackglass` into a focused `<input>`; the DOM observed
-all ten keys and `input.value === "blackglass"`.
+`Input.dispatchKeyEvent` pairs spelling `terminal-fenster` into a focused `<input>`; the DOM observed
+all ten keys and `input.value === "terminal-fenster"`.
 
 | Metric | p50 | p95 |
 |---|---|---|
@@ -242,7 +242,7 @@ over SSH (A07) lives or dies on sending *small deltas*; CDP structurally cannot,
 protocol has nowhere to put a dirty rect.
 
 **Where CDP genuinely wins:** it needs no shipped engine. If Chrome/Edge/Brave/Chromium is
-already installed, BlackGlass costs 0 MB extra and inherits Chromium 150 for free. That is a
+already installed, Terminal-Fenster costs 0 MB extra and inherits Chromium 150 for free. That is a
 real strategic asset for a `curl | sh` install story or a locked-down machine where a 309 MB
 download is unacceptable — and it is the *only* reason to keep this path documented.
 

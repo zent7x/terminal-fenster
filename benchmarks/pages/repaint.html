@@ -1,5 +1,5 @@
 <meta charset="utf-8">
-<title>BlackGlass repaint bench</title>
+<title>Terminal-Fenster repaint bench</title>
 <style>
   html, body { margin: 0; padding: 0; height: 100%; overflow: hidden;
                background: #101014; color: #e8e8ee;
@@ -11,7 +11,7 @@
            text-shadow: 0 1px 0 #000; }
 </style>
 <div id="stage"><div id="bar"></div></div>
-<div id="hud">BlackGlass repaint bench &mdash; frame <span id="n">0</span></div>
+<div id="hud">Terminal-Fenster repaint bench &mdash; frame <span id="n">0</span></div>
 <script>
 // Deterministic, self-contained repaint load. No network, no fonts, no timers
 // other than requestAnimationFrame, so the page cannot stall the pipeline in a
@@ -20,7 +20,7 @@
 // Two independent sources of damage are used on purpose:
 //   1. The full-viewport background colour changes every frame. Chromium's
 //      compositor therefore reports the WHOLE viewport dirty, which is the
-//      case BlackGlass actually pays for -- the kitty encoder compresses a full
+//      case Terminal-Fenster actually pays for -- the kitty encoder compresses a full
 //      frame regardless of damage rectangles.
 //   2. A translated bar, so the frame is not a flat fill that would compress
 //      unrealistically well and flatter the wire-bytes number.

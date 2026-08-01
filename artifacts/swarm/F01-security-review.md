@@ -1,10 +1,18 @@
-# F01 — Security review of BlackGlass as written
+# F01 — Security review of Terminal-Fenster as written
 
-Reviewer: swarm agent F01. Date: 2026-07-31. Scope: `crates/bg-term/src/*.rs`,
-`crates/bg-proto/src/lib.rs`, `apps/cli/src/main.rs`, `apps/engine/src/main.js`.
+Reviewer: swarm agent F01. Date: 2026-07-31. Scope: `crates/tf-term/src/*.rs`,
+`crates/tf-proto/src/lib.rs`, `apps/cli/src/main.rs`, `apps/engine/src/main.js`.
 No code was edited. Every claim below is either a `file:line` citation, a primary-source
 quote, or a measured result from a command shown inline. Anything I could not verify in this
 environment is marked **UNVERIFIED**.
+
+> **2026-08-01 implementation update:** this is the historical review. Findings 1–3 are now
+> closed. Engine sessions install deny-by-default permission check/request/device handlers;
+> external-application schemes and redirects are blocked and reported. Terminal sanitization now
+> rejects bidi/invisible formatting controls, final chrome is conservatively display-column
+> clipped before the autowrap cell, and the Unicode renderer uses the detected cell width. Unit
+> and real-Chromium tests pin these policies. Current release truth is in `README.md` and
+> `RELEASE.md`.
 
 Baseline: `cargo test --workspace` — 87 passed, 0 failed (run 2026-07-31).
 
@@ -15,12 +23,12 @@ Baseline: `cargo test --workspace` — 87 passed, 0 failed (run 2026-07-31).
 | # | Severity | Area | Location |
 |---|---|---|---|
 | 1 | **High** | Electron grants every web permission by default; includes silent external-protocol app launch | `apps/engine/src/main.js:101-134` |
-| 2 | Medium | `sanitize_for_terminal` char set is incomplete — bidi/invisible formatting chars survive into the address bar | `crates/bg-term/src/unicode.rs:60-75` |
+| 2 | Medium | `sanitize_for_terminal` char set is incomplete — bidi/invisible formatting chars survive into the address bar | `crates/tf-term/src/unicode.rs:60-75` |
 | 3 | Medium | Status bar is budgeted in `char`s, not display columns, and never against terminal width — page-controllable line overflow | `apps/cli/src/main.rs:885-896` |
-| 4 | Medium | Unbounded allocation from the length prefix, in both directions, plus unbounded event backlog and unbounded title retention | `crates/bg-proto/src/lib.rs:81-93`, `apps/engine/src/main.js:266-286`, `:60-62`, `apps/cli/src/main.rs:786-790` |
+| 4 | Medium | Unbounded allocation from the length prefix, in both directions, plus unbounded event backlog and unbounded title retention | `crates/tf-proto/src/lib.rs:81-93`, `apps/engine/src/main.js:266-286`, `:60-62`, `apps/cli/src/main.rs:786-790` |
 | 5 | Medium | No session partition / userData path — browsing state persists to a default Electron profile forever, with no way to clear it | `apps/engine/src/main.js:101-114` |
-| 6 | Low | Page-derived text reaches `$BLACKGLASS_LOG` unsanitized; C1 and bidi survive `JSON.stringify` | `apps/cli/src/main.rs:549` |
-| 7 | Low | `expected_payload()` multiplies unchecked; the only downstream guard is an `assert_eq!` panic | `crates/bg-proto/src/lib.rs:51-53`, `crates/bg-term/src/kitty.rs:108` |
+| 6 | Low | Page-derived text reaches `$TERMINAL_FENSTER_LOG` unsanitized; C1 and bidi survive `JSON.stringify` | `apps/cli/src/main.rs:549` |
+| 7 | Low | `expected_payload()` multiplies unchecked; the only downstream guard is an `assert_eq!` panic | `crates/tf-proto/src/lib.rs:51-53`, `crates/tf-term/src/kitty.rs:108` |
 | 8 | Low | Socket directory/file permission race; `create_dir_all` accepts a pre-existing or symlinked path | `apps/cli/src/main.rs:393-400` |
 | 9 | Low | The first process to connect is trusted as "the engine" — no peer-credential check | `apps/cli/src/main.rs:416-430` |
 | 10 | Info | `navigate` command accepts any scheme with no allowlist | `apps/engine/src/main.js:228-230` |
@@ -56,7 +64,7 @@ Primary sources, Electron v43.2.0 (the exact version in `apps/engine/node_module
   `CheckPermissionWithDetails` returns `true` for everything except
   `DEPRECATED_SYNC_CLIPBOARD_READ`.
 
-So a page loaded in BlackGlass is silently granted `media` (camera and microphone),
+So a page loaded in Terminal-Fenster is silently granted `media` (camera and microphone),
 `geolocation`, `notifications`, `clipboard-read`, `midi`/`midiSysex`, `display-capture`,
 `pointerLock`, `fullscreen`, `idle-detection`, `window-management` and `storage-access`.
 Because the `BrowserWindow` is `show:false` and offscreen, there is no window, no prompt, and
@@ -102,7 +110,7 @@ show the user which application is about to launch.
 
 ## 2. MEDIUM — `sanitize_for_terminal`'s character set is incomplete
 
-**Location:** `crates/bg-term/src/unicode.rs:60-75`.
+**Location:** `crates/tf-term/src/unicode.rs:60-75`.
 
 Placement first, because the mission asked: sanitization *is* applied at every point where
 page-derived text reaches the terminal today.
@@ -199,7 +207,7 @@ never exceeds `cols` for a hostile title.
 Four related spots, all reachable from a page that simply sets a very large `document.title` in
 a loop.
 
-- `crates/bg-proto/src/lib.rs:81-93` — `next_message` reads a `u32` length (up to 4 GiB) and
+- `crates/tf-proto/src/lib.rs:81-93` — `next_message` reads a `u32` length (up to 4 GiB) and
   waits for `self.buf.len() >= 5 + len`. `feed` (`:72-74`) appends with no cap. The reader will
   happily accumulate gigabytes before it ever yields a message.
 - `apps/engine/src/main.js:266-286` — the JS side has the identical shape: `buf` grows via
@@ -211,11 +219,11 @@ a loop.
   even though only 40 chars are ever rendered.
 
 This is not remote code execution; it is a page-triggered OOM of the user's terminal browser,
-and `json_get_str` (`bg-proto/src/lib.rs:125-155`) does a fresh `String` allocation per event on
+and `json_get_str` (`tf-proto/src/lib.rs:125-155`) does a fresh `String` allocation per event on
 top. Severity is Medium rather than High only because the socket peer is our own child process
 behind a 0600 socket.
 
-**Concrete fix:** add `pub const MAX_MESSAGE: usize = 64 << 20;` to `bg-proto`, reject and
+**Concrete fix:** add `pub const MAX_MESSAGE: usize = 64 << 20;` to `tf-proto`, reject and
 surface an error when `len > MAX_MESSAGE` in both `MessageReader::next_message` and
 `attachReader`, and cap event payloads much lower (`MAX_EVENT: usize = 64 << 10`). Truncate the
 title at the engine (`main.js:117`: `title.slice(0, 512)`) so the large string never crosses the
@@ -238,7 +246,7 @@ The project already knows the right answer elsewhere — `packages/mcp/lib/engin
 that omits it, which is backwards: the interactive path is where real logins happen.
 
 The exact on-disk path depends on `app.getName()` resolution for the scoped package name
-`@blackglass/engine` and I could not run Electron here to confirm it (see Environment section),
+`@terminal-fenster/engine` and I could not run Electron here to confirm it (see Environment section),
 so the **path is UNVERIFIED**; the absence of any configuration is verified by the grep above.
 
 **Concrete fix:** have the CLI pass `--user-data-dir=<socket_dir>/profile` for an ephemeral
@@ -247,7 +255,7 @@ directory. Add a `t:"clear"` command that calls `session.defaultSession.clearSto
 
 ---
 
-## 6. LOW — page-derived text reaches `$BLACKGLASS_LOG` unsanitized
+## 6. LOW — page-derived text reaches `$TERMINAL_FENSTER_LOG` unsanitized
 
 **Location:** `apps/cli/src/main.rs:549` — `log_line(&format!("event {s}"))`, where `s` is the
 raw event JSON containing the attacker-controlled title and URL. Also `:257`, which logs the
@@ -266,7 +274,7 @@ bidi RLO survives      : true
 
 `c2 9b` is U+009B (C1 CSI) and `e2 80 ae` is U+202E, both written raw into the log file. The
 code's own rationale at `unicode.rs:58-59` states that a terminal decoding UTF-8 treats C1 as a
-control introducer — by the project's own threat model, `cat blackglass.log` is then an
+control introducer — by the project's own threat model, `cat terminal-fenster.log` is then an
 injection sink. Whether Ghostty 1.3.1 specifically acts on C1 from UTF-8 is **UNVERIFIED**
 (that would need a screen I cannot reach; xterm's `allowC1Printable` exists precisely because
 some terminals do).
@@ -279,7 +287,7 @@ and create the log file with mode 0600 at `main.rs:38` — right now it inherits
 
 ## 7. LOW — unchecked geometry arithmetic, guarded only by a panic
 
-**Locations:** `crates/bg-proto/src/lib.rs:51-53` and `crates/bg-term/src/kitty.rs:108`.
+**Locations:** `crates/tf-proto/src/lib.rs:51-53` and `crates/tf-term/src/kitty.rs:108`.
 
 `expected_payload()` computes `width as usize * height as usize * 4` with no overflow check. In
 release mode that wraps. Measured:
@@ -325,7 +333,7 @@ The intent stated at `:387-388` is right and the end state is right. Three gaps:
    `connect(2)` to a Unix socket requires write permission on the socket file, so that window
    is genuinely world-connectable.
 
-Exploiting any of these requires predicting `blackglass-{pid}-{nanos}` and winning a
+Exploiting any of these requires predicting `terminal-fenster-{pid}-{nanos}` and winning a
 microsecond race, and on macOS `TMPDIR` is already a per-user 0700 directory, so this is Low.
 On Linux with a shared `/tmp` it is real.
 
@@ -401,10 +409,10 @@ Stated explicitly so the commander does not re-spend effort here.
 - **Socket exposure.** No listening TCP port is opened by `apps/engine/src/main.js`; the engine
   only connects out to the path it is handed. (Note for the commander: `packages/mcp/lib/engine.js:115`
   *does* pass `--remote-debugging-port=0`, an unauthenticated loopback CDP listener. Its header
-  comment at `:14-22` documents this honestly and it is opt-out via `BLACKGLASS_MCP_CDP=0`.
+  comment at `:14-22` documents this honestly and it is opt-out via `TERMINAL_FENSTER_MCP_CDP=0`.
   Out of scope for F01, but it is the largest security delta in the tree and should get its own review.)
 - **Licensing.** No third-party code reuse is proposed by this review. `apps/engine/node_modules/electron/package.json`
-  declares MIT; `bg-term` depends only on `libc` and `flate2` (both MIT/Apache-2.0); `b64.rs` is
+  declares MIT; `tf-term` depends only on `libc` and `flate2` (both MIT/Apache-2.0); `b64.rs` is
   in-tree and hand-written. Minor: there is no `LICENSE` file at the repo root, though
   `Cargo.toml` references `license.workspace`.
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Headless memory probe for the BlackGlass Electron engine.
+// Headless memory probe for the Terminal-Fenster Electron engine.
 //
 // The engine (Chromium OSR) is the entire RAM story — the Rust core is a rounding error next
 // to it — and unlike benchmarks/bench.mjs this needs no graphics terminal, because it drives
@@ -24,6 +24,8 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { spawn, execSync } = require('child_process');
+
+const T_COMMAND = 10;
 
 // Accepts --name=value, --name value, and bare --name (-> true). The space form matters: a
 // bare --name whose parseInt would otherwise become NaN silently disables a duration/interval.
@@ -91,7 +93,7 @@ function treeRssKb(rootPid) {
     }
     for (const c of children.get(pid) || []) stack.push(c);
   }
-  return { kb: total, procs: count };
+  return { kb: total, procs: count, pids: [...seen].filter((pid) => rss.has(pid)) };
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -100,84 +102,145 @@ const mb = (kb) => +(kb / 1024).toFixed(1);
 (async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bg-rss-'));
   const sockPath = path.join(dir, 'e.sock');
-  let child;
+  let child = null;
+  let server = null;
+  let engineSocket = null;
+  let readyTimer = null;
+  const observedPids = new Set();
   const events = [];
 
-  const ready = new Promise((resolve, reject) => {
-    const server = net.createServer((sock) => {
-      let buf = Buffer.alloc(0);
-      sock.on('data', (chunk) => {
-        buf = buf.length ? Buffer.concat([buf, chunk]) : chunk;
-        for (;;) {
-          if (buf.length < 5) return;
-          const len = buf.readUInt32BE(1);
-          if (buf.length < 5 + len) return;
-          const type = buf.readUInt8(0);
-          const payload = buf.subarray(5, 5 + len);
-          buf = buf.subarray(5 + len);
-          if (type === 2) {
-            const ev = JSON.parse(payload.toString('utf8'));
-            events.push(ev);
-            if (ev.t === 'ready') resolve();
-          }
-        }
-      });
+  async function shutdown() {
+    if (readyTimer) clearTimeout(readyTimer);
+
+    // `.bin/electron` is an npm launcher on macOS. Killing that PID can orphan the actual
+    // Electron process while this server keeps its socket alive. Ask the engine to exit over
+    // its real protocol first; closing the socket is a second, independently handled exit path.
+    if (engineSocket && !engineSocket.destroyed) {
+      const payload = Buffer.from('{"t":"quit"}', 'utf8');
+      const message = Buffer.allocUnsafe(5 + payload.length);
+      message.writeUInt8(T_COMMAND, 0);
+      message.writeUInt32BE(payload.length, 1);
+      payload.copy(message, 5);
+      try { engineSocket.end(message); } catch {}
+    }
+    if (child && child.exitCode === null && child.signalCode === null) {
+      const exited = new Promise((resolve) => child.once('exit', resolve));
+      await Promise.race([exited, sleep(1500)]);
+      if (child.exitCode === null && child.signalCode === null) {
+        try { child.kill('SIGKILL'); } catch {}
+      }
+    }
+    if (engineSocket && !engineSocket.destroyed) engineSocket.destroy();
+    if (server) {
+      await Promise.race([
+        new Promise((resolve) => server.close(resolve)),
+        sleep(1000),
+      ]);
+    }
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+
+    // The npm launcher can exit before Electron, so launcher status alone is not a cleanup
+    // assertion. Every PID observed inside this probe's process tree must disappear. Kill only
+    // those exact descendants if cleanup regresses, then fail the probe instead of leaking them.
+    const alive = () => [...observedPids].filter((pid) => {
+      try { process.kill(pid, 0); return true; } catch { return false; }
     });
-    server.listen(sockPath);
-    setTimeout(() => reject(new Error('engine did not connect in 30s')), 30000);
-  });
-
-  child = spawn(
-    ELECTRON,
-    [MAIN, `--bg-socket=${sockPath}`, `--bg-width=${W}`, `--bg-height=${H}`, `--bg-url=${URL}`, `--bg-fps=${FPS}`],
-    { stdio: 'ignore' }
-  );
-
-  await ready;
-
-  const samples = [];
-  const t0 = Date.now();
-  while (Date.now() - t0 < DURATION) {
-    const s = treeRssKb(child.pid);
-    if (s) samples.push(s);
-    await sleep(INTERVAL);
+    let leaked = alive();
+    for (let attempt = 0; leaked.length && attempt < 20; attempt++) {
+      await sleep(100);
+      leaked = alive();
+    }
+    if (leaked.length) {
+      for (const pid of leaked) {
+        try { process.kill(pid, 'SIGKILL'); } catch {}
+      }
+      throw new Error(`engine cleanup leaked pid(s): ${leaked.join(', ')}`);
+    }
   }
 
-  try { child.kill('SIGKILL'); } catch {}
-  try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  try {
+    const ready = new Promise((resolve, reject) => {
+      server = net.createServer((sock) => {
+        engineSocket = sock;
+        let buf = Buffer.alloc(0);
+        sock.on('data', (chunk) => {
+          buf = buf.length ? Buffer.concat([buf, chunk]) : chunk;
+          for (;;) {
+            if (buf.length < 5) return;
+            const len = buf.readUInt32BE(1);
+            if (buf.length < 5 + len) return;
+            const type = buf.readUInt8(0);
+            const payload = buf.subarray(5, 5 + len);
+            buf = buf.subarray(5 + len);
+            if (type === 2) {
+              const ev = JSON.parse(payload.toString('utf8'));
+              events.push(ev);
+              if (ev.t === 'ready') resolve();
+            }
+          }
+        });
+      });
+      server.listen(sockPath);
+      readyTimer = setTimeout(() => reject(new Error('engine did not connect in 30s')), 30000);
+    });
 
-  if (!samples.length) {
-    console.error('no RSS samples collected (ps unavailable?)');
-    process.exit(1);
-  }
-  const kbs = samples.map((s) => s.kb).sort((a, b) => a - b);
-  const peak = kbs[kbs.length - 1];
-  // Steady state = median of the second half, after Chromium finishes spinning up its helpers.
-  const half = kbs.slice(Math.floor(kbs.length / 2));
-  const steady = half[Math.floor(half.length / 2)];
-  const procs = Math.max(...samples.map((s) => s.procs));
+    child = spawn(
+      ELECTRON,
+      [MAIN, `--tf-socket=${sockPath}`, `--tf-width=${W}`, `--tf-height=${H}`, `--tf-url=${URL}`, `--tf-fps=${FPS}`],
+      { stdio: 'ignore' }
+    );
 
-  const report = {
-    url: URL,
-    viewport: `${W}x${H}`,
-    fps: FPS,
-    samples: samples.length,
-    peak_rss_mb: mb(peak),
-    steady_rss_mb: mb(steady),
-    max_processes: procs,
-    electron: (events.find((e) => e.t === 'ready') || {}).electron || null,
-    chrome: (events.find((e) => e.t === 'ready') || {}).chrome || null,
-    note: 'macOS rss over-counts shared pages; read as an upper bound.',
-  };
+    await ready;
+    clearTimeout(readyTimer);
+    readyTimer = null;
 
-  if (JSON_ONLY) {
-    console.log(JSON.stringify(report, null, 2));
-  } else {
-    console.log(`BlackGlass engine RSS — ${URL} @ ${W}x${H}, ${FPS}fps`);
-    console.log(`  Electron ${report.electron} / Chromium ${report.chrome}`);
-    console.log(`  peak    ${report.peak_rss_mb} MB   (${procs} processes)`);
-    console.log(`  steady  ${report.steady_rss_mb} MB   (median of ${half.length} samples)`);
-    console.log(`  ${report.note}`);
+    const samples = [];
+    const t0 = Date.now();
+    while (Date.now() - t0 < DURATION) {
+      const s = treeRssKb(child.pid);
+      if (s) {
+        samples.push(s);
+        for (const pid of s.pids) observedPids.add(pid);
+      }
+      await sleep(INTERVAL);
+    }
+
+    if (!samples.length) {
+      console.error('no RSS samples collected (ps unavailable?)');
+      process.exitCode = 1;
+      return;
+    }
+    const kbs = samples.map((s) => s.kb).sort((a, b) => a - b);
+    const peak = kbs[kbs.length - 1];
+    // Steady state = median of the second half, after Chromium finishes spinning up its helpers.
+    const half = kbs.slice(Math.floor(kbs.length / 2));
+    const steady = half[Math.floor(half.length / 2)];
+    const procs = Math.max(...samples.map((s) => s.procs));
+
+    const report = {
+      url: URL,
+      viewport: `${W}x${H}`,
+      fps: FPS,
+      samples: samples.length,
+      peak_rss_mb: mb(peak),
+      steady_rss_mb: mb(steady),
+      max_processes: procs,
+      electron: (events.find((e) => e.t === 'ready') || {}).electron || null,
+      chrome: (events.find((e) => e.t === 'ready') || {}).chrome || null,
+      note: 'macOS rss over-counts shared pages; read as an upper bound.',
+    };
+
+    if (JSON_ONLY) {
+      console.log(JSON.stringify(report, null, 2));
+    } else {
+      console.log(`Terminal-Fenster engine RSS — ${URL} @ ${W}x${H}, ${FPS}fps`);
+      console.log(`  Electron ${report.electron} / Chromium ${report.chrome}`);
+      console.log(`  peak    ${report.peak_rss_mb} MB   (${procs} processes)`);
+      console.log(`  steady  ${report.steady_rss_mb} MB   (median of ${half.length} samples)`);
+      console.log(`  ${report.note}`);
+    }
+  } finally {
+    await shutdown();
   }
 })().catch((e) => {
   console.error('rss probe error:', e.message);

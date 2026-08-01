@@ -20,11 +20,11 @@ recalled.
 Electron 43.2.0's own download stack on macOS 26.1 carries **no** `com.apple.quarantine`
 attribute. Gatekeeper therefore never evaluates it, and the "downloaded from the internet"
 provenance chain is silently absent. Every other browser on this machine sets it (Safari, Chrome,
-even QuickTime). **BlackGlass must set it itself.** This is a security regression against every
+even QuickTime). **Terminal-Fenster must set it itself.** This is a security regression against every
 mainstream browser and it is invisible until someone downloads a malicious binary. §12.
 
 **0.2 — A missing `setSavePath` is a hang, not a dialog.** Electron's documented fallback when
-the app does not set a save path is to "prompt a save dialog". BlackGlass renders offscreen into
+the app does not set a save path is to "prompt a save dialog". Terminal-Fenster renders offscreen into
 a terminal; a modal `NSSavePanel` is a window the user cannot see and, at a lock screen, cannot
 dismiss. `setSavePath` is not an optimization here — it is a liveness requirement. §11.3.
 
@@ -98,7 +98,7 @@ Timestamps decode as lowercase hex seconds since the Unix epoch — verified:
 
 ---
 
-## 2. Design constraints specific to BlackGlass
+## 2. Design constraints specific to Terminal-Fenster
 
 These are the things that make a terminal browser's data layer different from a GUI browser's,
 and they drive most of the decisions below.
@@ -142,7 +142,7 @@ The `persist:` prefix is the entire mechanism. From `electron.d.ts:12305-12308`:
 starting with `persist:` is backed by disk and shared by every page using the same string; without
 the prefix the session is in-memory; an empty string returns the app's default session.
 
-**Rule: BlackGlass never uses the default session for web content.** The default session is the one
+**Rule: Terminal-Fenster never uses the default session for web content.** The default session is the one
 Chromium also uses for internal fetches, and it writes directly into the profile root rather than
 into `Partitions/`, which makes "delete this profile" a messier operation. Every window gets an
 explicit partition string. This costs nothing and buys a clean `rm -rf` story (§15.2).
@@ -157,7 +157,7 @@ outright. A profile named `../../../../etc` must not be expressible.
 ### 3.3 Process topology
 
 ```
-blackglass (Rust core, owns TTY)
+terminal-fenster (Rust core, owns TTY)
   └── engine process, --bg-profile=work      → session persist:p-work
   └── engine process, --bg-private           → session bg-private-<nonce>
 ```
@@ -175,7 +175,7 @@ lists it as a distinct path, and it is the directory Chromium hangs `Partitions/
 `Cache` off. Overriding `sessionData` alone relocates browsing data while leaving app-level state
 (crash dumps, `Local State`) where it belongs.
 
-Default root: `~/Library/Application Support/BlackGlass`. Honour `$BLACKGLASS_HOME` if set, since a
+Default root: `~/Library/Application Support/Terminal-Fenster`. Honour `$TERMINAL_FENSTER_HOME` if set, since a
 terminal-native tool should be scriptable and testable without touching the user's real profile.
 
 ---
@@ -248,10 +248,10 @@ Notes that matter:
 - The Keychain item is **also created lazily** — it did not exist after a plain download, and
   appeared only once `safeStorage.encryptString` ran.
 
-### 5.1 BlackGlass layout
+### 5.1 Terminal-Fenster layout
 
 ```
-$BLACKGLASS_HOME (default ~/Library/Application Support/BlackGlass)/
+$TERMINAL_FENSTER_HOME (default ~/Library/Application Support/Terminal-Fenster)/
 ├── profiles.json                 ← profile registry: slug, display name, created, last used
 ├── bg.sqlite                     ← OUR data: history, bookmarks, download ledger (§9, §10, §11.7)
 ├── secrets.bin                   ← safeStorage ciphertext blob (§13)
@@ -363,7 +363,7 @@ exposes no equivalent. `webContents.navigationHistory.getAllEntries()` (`electro
 returns `{url, title, pageState?}` for **one tab's back/forward list only** — it is not global
 history and it dies with the tab.
 
-So BlackGlass implements history itself, from navigation events.
+So Terminal-Fenster implements history itself, from navigation events.
 
 **Storage: `node:sqlite`.** Verified available in Electron 43 (§0.3). Zero npm dependencies, no
 native compile, transactional. Given the disk constraint and the project's minimal-dependency
@@ -420,7 +420,7 @@ CREATE TABLE IF NOT EXISTS bookmarks (
 flat, filterable list far better than a tree, and it avoids an entire class of orphaned-node bugs.
 
 **Import/export in Netscape bookmark HTML format**, because it is what every browser reads and
-writes, and it means BlackGlass is never a roach motel for a user's data. Export must
+writes, and it means Terminal-Fenster is never a roach motel for a user's data. Export must
 HTML-escape titles and URLs — a bookmark title is attacker-controlled text if it was captured from
 a page's `<title>`.
 
@@ -443,7 +443,7 @@ handler.
 
 `setSavePath` "is only available in session's `will-download` callback function"
 (`electron.d.ts:8299-8302`). There is no way to await a user's decision in the terminal and then set
-the path. Therefore: **decide the path synchronously from policy, always.** If BlackGlass wants to
+the path. Therefore: **decide the path synchronously from policy, always.** If Terminal-Fenster wants to
 prompt the user, the correct shape is to accept the download to a staging path immediately and
 prompt afterwards about whether to keep it — never to hold the callback open.
 
@@ -569,7 +569,7 @@ Corroborating static evidence from the shipped framework:
 
 The consistent reading: the quarantine *service* exists in the tree, but the code that *calls* it on
 download completion lives in `//chrome`'s download delegate, which Electron replaces with its own.
-Every mainstream browser sets this attribute. If BlackGlass does not, it is the one browser on the
+Every mainstream browser sets this attribute. If Terminal-Fenster does not, it is the one browser on the
 machine whose downloads bypass Gatekeeper.
 
 ### 12.2 The value format
@@ -589,10 +589,10 @@ Verified properties:
   (`ls -l@` and `xattr -px` both confirm; the hex dump ends at the final `C`, no trailing `00`).
   This matters for the `setxattr(2)` call: pass `strlen(value)`, not `strlen(value) + 1`.
 
-**Recommended value for BlackGlass:** flags `0083`, matching Safari on this OS build.
+**Recommended value for Terminal-Fenster:** flags `0083`, matching Safari on this OS build.
 
 ```
-0083;<hex-time>;BlackGlass;<UPPERCASE-UUID>
+0083;<hex-time>;Terminal-Fenster;<UPPERCASE-UUID>
 ```
 
 with the §1.1 caveat that flag-bit semantics are undocumented and I do not assert them. `0083` is
@@ -602,17 +602,17 @@ strongest available signal in the absence of documentation.
 ### 12.3 The exact command
 
 ```bash
-xattr -w com.apple.quarantine "0083;6a6ccc81;BlackGlass;BB987AF2-A86D-47BD-B14D-6ADE813A68FC" /path/to/file
+xattr -w com.apple.quarantine "0083;6a6ccc81;Terminal-Fenster;BB987AF2-A86D-47BD-B14D-6ADE813A68FC" /path/to/file
 ```
 
 Verified round-trip on this machine:
 
 ```
 $ xattr -p com.apple.quarantine q1.bin
-0083;6a6ccc81;BlackGlass;BB987AF2-A86D-47BD-B14D-6ADE813A68FC
+0083;6a6ccc81;Terminal-Fenster;BB987AF2-A86D-47BD-B14D-6ADE813A68FC
 ```
 
-For a directory tree (e.g. if BlackGlass ever expands an archive), add `-r`:
+For a directory tree (e.g. if Terminal-Fenster ever expands an archive), add `-r`:
 
 ```bash
 xattr -w -r com.apple.quarantine "<value>" /path/to/dir
@@ -639,7 +639,7 @@ filename never reaches a shell:
 const { execFile } = require('node:child_process');
 const crypto = require('node:crypto');
 
-function quarantineValue(agent = 'BlackGlass') {
+function quarantineValue(agent = 'Terminal-Fenster') {
   const ts = Math.floor(Date.now() / 1000).toString(16);      // lowercase hex, no 0x
   const uuid = crypto.randomUUID().toUpperCase();             // observed samples are uppercase
   return `0083;${ts};${agent};${uuid}`;
@@ -727,7 +727,7 @@ per-download `execFile` spawn measurable, which at human download rates it will 
 ### 12.6 What we must never do
 
 The Electron framework contains the string `/usr/bin/xattr -d -r com.apple.quarantine %@` — an
-attribute *removal*, used by app-update flows. **BlackGlass must never expose quarantine removal.**
+attribute *removal*, used by app-update flows. **Terminal-Fenster must never expose quarantine removal.**
 No `--no-quarantine` flag, no "trust this download" button that strips it. Stripping quarantine is
 the single action that converts a downloaded binary into an unchecked one, and a browser that offers
 it as a convenience has defeated the purpose of setting it. Removing quarantine is the user's
@@ -771,10 +771,10 @@ previously encrypted blob — including Chromium's own cookie values — becomes
 the key is looked up under a name that no longer exists. There is no migration path and no error
 that says "you renamed your app".
 
-**Instruction: fix the Electron app name to exactly `BlackGlass` now, before any release,** and
-treat it as a compatibility constant with a comment saying so. It is currently `@blackglass/engine`
+**Instruction: fix the Electron app name to exactly `Terminal-Fenster` now, before any release,** and
+treat it as a compatibility constant with a comment saying so. It is currently `@terminal-fenster/engine`
 in `apps/engine/package.json:2`, which would produce a Keychain item named
-`@blackglass/engine Safe Storage` — a name containing a `/`, which is at best untidy and at worst a
+`@terminal-fenster/engine Safe Storage` — a name containing a `/`, which is at best untidy and at worst a
 future bug. This is a one-line change that gets much more expensive after the first user stores a
 credential.
 
@@ -868,7 +868,7 @@ mixing them is a latent bug. Pick `clearData` and use it everywhere.
 
 ### 15.2 Whole-profile delete
 
-`rm -rf $BLACKGLASS_HOME/chromium/Partitions/p-<slug>` plus the profile's rows in `bg.sqlite` plus
+`rm -rf $TERMINAL_FENSTER_HOME/chromium/Partitions/p-<slug>` plus the profile's rows in `bg.sqlite` plus
 its entry in `profiles.json`. This is clean precisely because of the §3.1 rule that no web content
 ever uses the default session — with named partitions only, one directory is the whole profile.
 
@@ -887,11 +887,11 @@ relying on shutdown alone.
 
 Core files are yours. In priority order:
 
-**16.1 — `apps/engine/package.json:2`: change `"name"` to `"BlackGlass"`.** One line, and it must
+**16.1 — `apps/engine/package.json:2`: change `"name"` to `"Terminal-Fenster"`.** One line, and it must
 happen before any release. It determines the Keychain item name for every encrypted secret and for
 Chromium's own cookie encryption; changing it later orphans that data with no migration path and no
-useful error (§13.2). The current value `@blackglass/engine` would create a Keychain service named
-`@blackglass/engine Safe Storage`.
+useful error (§13.2). The current value `@terminal-fenster/engine` would create a Keychain service named
+`@terminal-fenster/engine Safe Storage`.
 
 **16.2 — `apps/engine/src/main.js`: add profile arguments and session creation** per §6. Ordering is
 load-bearing: `app.setPath('sessionData', …)` before `whenReady`, session created with options
@@ -932,7 +932,7 @@ CI-able without a display, which matters given the lock-screen constraint.
 | 7 | Download named `evil‮txt.exe` | on-disk name has no bidi override; resolved path inside download root |
 | 8 | Download named `../../etc/passwd` | rejected; nothing written outside the download root |
 | 9 | Two downloads of the same name | second is `name (1).ext`; neither is truncated |
-| 10 | `safeStorage` roundtrip | plaintext recovered; `security find-generic-password -s "BlackGlass Safe Storage"` exits 0 |
+| 10 | `safeStorage` roundtrip | plaintext recovered; `security find-generic-password -s "Terminal-Fenster Safe Storage"` exits 0 |
 | 11 | History after 3 navigations | 3 `visits` rows, titles backfilled |
 | 12 | History in private mode | 0 rows added |
 | 13 | `clearData({origins:[…]})` | that origin's cookies gone, others intact |
@@ -953,7 +953,7 @@ Marked honestly rather than guessed.
    table I cannot support. Recommendation to use `0083` rests on it being what Safari writes on this
    exact OS build.
 2. **End-to-end Gatekeeper behaviour — BLOCKED, not unverified.** Confirming that a
-   BlackGlass-quarantined app bundle produces the correct "downloaded from the internet" dialog
+   Terminal-Fenster-quarantined app bundle produces the correct "downloaded from the internet" dialog
    requires observing a GUI dialog. The machine is at a lock screen, so this is not observable in
    this session. What *is* verified is that the attribute is written, has the same shape as
    Safari's, and survives the rename. The commander should run this check manually once.
@@ -981,6 +981,6 @@ build against a 98%-full disk. Secrets go through `safeStorage`, which works, an
 item is named from the app name — making the one-line rename in §16.1 urgent rather than cosmetic.
 
 Downloads are the part that is actually broken today. Electron ships no quarantine on macOS —
-verified by downloading a file and finding the attribute absent — so BlackGlass must write
+verified by downloading a file and finding the attribute absent — so Terminal-Fenster must write
 `com.apple.quarantine` itself, via `execFile('/usr/bin/xattr', ['-w', …])`, verify the read-back,
 and only then rename the staged file into place.

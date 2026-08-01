@@ -1,6 +1,6 @@
 # E01 — The Authenticated CDP Broker
 
-**Mission:** specify how BlackGlass exposes the Chrome DevTools Protocol to automation clients
+**Mission:** specify how Terminal-Fenster exposes the Chrome DevTools Protocol to automation clients
 (Playwright, agents) without creating the total-browser-takeover hole that an open CDP port is.
 
 **Status:** design specified, and the load-bearing claims are **empirically verified end-to-end on this
@@ -15,7 +15,7 @@ described in §11 for the commander to apply.
 
 ## 1. The decision, in one paragraph
 
-BlackGlass exposes CDP by launching the Electron host with **`--remote-debugging-pipe`** (CDP over
+Terminal-Fenster exposes CDP by launching the Electron host with **`--remote-debugging-pipe`** (CDP over
 inherited file descriptors 3 and 4 — *no listening socket of any kind*), and by placing a **broker**
 in the Rust core that holds the only ends of that pipe. When — and only when — the user grants
 automation, the broker opens a **Unix-domain WebSocket endpoint** guarded by a capability token in
@@ -32,7 +32,7 @@ The reason this is not merely "an open port with a password on it" is §7: the b
 ## 2. Verified findings
 
 Every row below was produced by a command run on this machine during this mission. Prototype sources
-live in `/private/tmp/claude-501/-Users-adeebbashir/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/e01/`
+live in `/private/tmp/claude-501/-Users-builder/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/e01/`
 (`broker.js`, `client.mjs`, `pipetest.js`, `takeover.mjs`, `peercred.py`).
 
 | # | Claim | Result | Evidence |
@@ -43,11 +43,11 @@ live in `/private/tmp/claude-501/-Users-adeebbashir/a6555dd0-1471-4951-aa0d-5958
 | **V4** | `--remote-debugging-pipe` works in Electron 43.2.0: fd 3 = browser reads, fd 4 = browser writes, **NUL-delimited JSON** framing. | **CONFIRMED** | `pipetest.js`: `{"id":1,"method":"Browser.getVersion"}\0` on fd 3 → reply on fd 4. Framing matches `content/browser/devtools/devtools_pipe_handler.cc` `PipeWriterASCIIZ` (line 292). |
 | **V5** | The pipe gives **full browser-level CDP** — the thing `webContents.debugger` cannot give. | **CONFIRMED** | Over the pipe, `Browser.getVersion` **and** `Target.getTargets` both succeeded (returned `targetInfos` incl. the page target). |
 | **V6** | With `--remote-debugging-pipe`, the browser process opens **zero** listening sockets. | **CONFIRMED** | `lsof -nP -iTCP -sTCP:LISTEN -a -p <pid>` → `LISTENING_SOCKETS_ON_BROWSER_PID=0`; repeated across the whole helper tree while Playwright was attached → `0`. |
-| **V7** | **Playwright connects over a Unix socket** via the `ws+unix://` scheme. | **CONFIRMED** | `chromium.connectOverCDP('ws+unix:///…/cdp.sock:/devtools/browser/blackglass')` → `CONNECTED version= 150.0.7871.129`. |
+| **V7** | **Playwright connects over a Unix socket** via the `ws+unix://` scheme. | **CONFIRMED** | `chromium.connectOverCDP('ws+unix:///…/cdp.sock:/devtools/browser/terminal-fenster')` → `CONNECTED version= 150.0.7871.129`. |
 | **V8** | A `ws://`-scheme endpoint **skips** DevTools HTTP discovery entirely — we need no `/json/*` endpoints. | **CONFIRMED** | `chromium.ts:459-460`: `if (endpointURL.startsWith('ws')) return endpointURL;` — `urlToWSEndpoint` returns immediately, no `/json/version` fetch. Observed: broker served zero HTTP requests other than the Upgrade. |
 | **V9** | A bearer token in the WS handshake gates the connection, and Playwright supports supplying it. | **CONFIRMED** | Wrong token → `CONNECT_FAILED: … 401 Unauthorized`. Correct token → connected. Option verified in `chromium.ts:90-98` (`headers`) and `transport.ts:136-139` (`new ws(url, [], { headers: options.headers, … })`). |
 | **V10** | Real automation works through the broker. | **CONFIRMED** | Through the broker: `title= E01`, `textContent('h1') = e01 probe`, `setContent`, `fill('#q')`, `inputValue = typed via broker`. |
-| **V11** | The capability filter blocks cookie theft **while Playwright keeps working**. | **CONFIRMED** | `COOKIE_DUMP_BLOCKED: Protocol error (Storage.getCookies): BlackGlass: method Storage.getCookies is not in this grant`, and in the same session `Browser.getVersion OK product= Chrome/150.0.7871.129`. |
+| **V11** | The capability filter blocks cookie theft **while Playwright keeps working**. | **CONFIRMED** | `COOKIE_DUMP_BLOCKED: Protocol error (Storage.getCookies): Terminal-Fenster: method Storage.getCookies is not in this grant`, and in the same session `Browser.getVersion OK product= Chrome/150.0.7871.129`. |
 | **V12** | **Playwright's own connect handshake calls `Browser.setDownloadBehavior`.** Denying it breaks `connectOverCDP` outright. | **CONFIRMED** | First filtered run failed with `CONNECT_FAILED: Protocol error (Browser.setDownloadBehavior): … not in this grant`. Fixed by **virtualizing** (rewriting `downloadPath`) instead of denying. |
 | **V13** | `Network.getAllCookies` **no longer exists** at browser level in Chromium 150; the live cookie-dump method is `Storage.getCookies`. | **CONFIRMED** | `Protocol error (Network.getAllCookies): 'Network.getAllCookies' wasn't found`. A deny-list naming only the old method is **useless**. |
 | **V14** | macOS Unix sockets expose peer identity: `LOCAL_PEERCRED`, `LOCAL_PEERPID`, and `LOCAL_PEERTOKEN`. | **CONFIRMED** | `peercred.py`: `LOCAL_PEERCRED … uid=501`; `LOCAL_PEERPID … pid=57395`; `LOCAL_PEERTOKEN ok: 32 bytes audit_token_t = (501, 501, 20, 501, 20, 57395, 100026, 11504631)` — the last field is `pidversion`, which defeats PID-reuse races. |
@@ -79,7 +79,7 @@ navigation, file upload, and network interception were not exercised.
 While testing I found **an unauthenticated CDP port already open on this development machine**:
 
 ```
-Electron 37164 adeebbashir 31u IPv4 … TCP 127.0.0.1:9333 (LISTEN)
+Electron 37164 builder 31u IPv4 … TCP 127.0.0.1:9333 (LISTEN)
 ```
 
 It belongs to a sibling agent's `cdptest` fixture (its `/json/version` reports
@@ -120,7 +120,7 @@ Two further properties make it worse than it first looks:
 
 Electron's per-`webContents` debugger (`attach`, `sendCommand(method, params, sessionId)`,
 `on('message')`) is attractive because it adds **zero** OS-level attack surface: it is an in-process
-API, no fd, no socket, no flag. For BlackGlass's *own* internal needs (E-class agent verbs, DOM
+API, no fd, no socket, no flag. For Terminal-Fenster's *own* internal needs (E-class agent verbs, DOM
 snapshots for the terminal UI, accessibility extraction) it is the correct tool and should be used.
 
 But it cannot serve Playwright. `connectOverCDP` requires the **browser** target: the measured
@@ -205,7 +205,7 @@ never needed: filesystem-scoped rendezvous (§6.1), a capability token (§6.2), 
 (§6.3), and — the part that actually matters — method-level policy (§7).
 
 An alternative that preserves the no-listener property is **fd-passing via a one-shot handoff**: the
-user runs `blackglass automation exec -- npx playwright test`, and BlackGlass spawns the client as
+user runs `terminal-fenster automation exec -- npx playwright test`, and Terminal-Fenster spawns the client as
 its own child with the socket fd pre-connected on fd 3. This is strictly stronger and should be
 offered, but it cannot be the only mode because it forbids attaching to an already-running agent.
 **Recommend shipping both; make `exec` the documented default in docs and examples.**
@@ -246,7 +246,7 @@ offered, but it cannot be the only mode because it forbids attaching to an alrea
 
 ### 6.1 Rendezvous
 
-- Socket at `$TMPDIR/blackglass-<uid>/automation-<session>.sock`, directory `0700`, socket `0600`,
+- Socket at `$TMPDIR/terminal-fenster-<uid>/automation-<session>.sock`, directory `0700`, socket `0600`,
   both owned by the invoking uid. Verified in the prototype: `stat -f "%Sp %u"` →
   `drwx------ 501` and `srw------- 501`.
 - The path is **not** a secret and may appear in `ps`; all authority lives in the token. This matches
@@ -263,9 +263,9 @@ Following A09 §4.4, with which this design is fully aligned:
 | Entropy | 256 bits from the OS CSPRNG (`SecRandomCopyBytes` / `getrandom(2)`). Never a userspace PRNG. |
 | Encoding | base64url, no padding. |
 | Comparison | Constant-time (`subtle::ConstantTimeEq`; the prototype uses `crypto.timingSafeEqual`). Length-check first, and note that a length mismatch is itself a (harmless) oracle — compare against a fixed-length canonical form. |
-| Lifetime | ≤ 15 min sliding TTL; hard cap 8 h. Revoked on engine restart, profile switch, and explicit `blackglass automation revoke`. |
+| Lifetime | ≤ 15 min sliding TTL; hard cap 8 h. Revoked on engine restart, profile switch, and explicit `terminal-fenster automation revoke`. |
 | Scope | Carries an explicit capability set (§7.2) and a target scope (§7.3). There is **no** "all" token. |
-| Delivery | Printed once to the user's TTY by `blackglass automation grant`, or written to a `0600` file the user names. **Never** in argv, never in a child's environment, never logged, never in shell history. |
+| Delivery | Printed once to the user's TTY by `terminal-fenster automation grant`, or written to a `0600` file the user names. **Never** in argv, never in a child's environment, never logged, never in shell history. |
 | At rest | Not persisted by default. If the user opts into persistence, `safeStorage.encryptString` (Keychain-backed), file mode `0600` — with A09 §5.1's caveat that this does not stop malware that can drive the Keychain prompt. |
 
 **Rotation:** one token, one connection. On successful upgrade the token is marked used and a
@@ -464,7 +464,7 @@ every cookie in it.**
 
 We serve **no `/json/version`, `/json/list`, or `/json/new`**. V8 shows Playwright skips discovery
 entirely for a `ws://`-scheme URL, so these endpoints buy nothing and each is an unauthenticated
-information leak in every other CDP implementation. `blackglass automation url` prints the endpoint
+information leak in every other CDP implementation. `terminal-fenster automation url` prints the endpoint
 instead.
 
 For clients that genuinely cannot do Unix sockets, offer an explicitly-flagged
@@ -500,7 +500,7 @@ Consistent with the project's protocol-response-and-log evidence approach.
   `*ExtraInfo` event; out-of-scope `Target.targetCreated` events never reach the client.
 - **T-BRK-5.** Lifecycle: token expiry closes live connections; revoke unlinks the socket; engine
   restart invalidates all grants; TTL is enforced server-side, not client-side.
-- **T-BRK-6.** `ps auxww | grep -c blackglass.*token` = 0 — the token never appears in argv.
+- **T-BRK-6.** `ps auxww | grep -c terminal-fenster.*token` = 0 — the token never appears in argv.
 
 ---
 
@@ -524,12 +524,12 @@ Per the ownership rule these are **described, not made**.
    only when automation is enabled for the session.
 6. New module `bg-cdp-broker`: NUL-delimited CDP framing on the pipe, WS server on a Unix socket,
    token mint/verify, `LOCAL_PEERCRED`/`LOCAL_PEERTOKEN` checks, policy engine, audit log.
-7. New subcommands: `blackglass automation grant [--caps …] [--scope …] [--ttl …]`,
+7. New subcommands: `terminal-fenster automation grant [--caps …] [--scope …] [--ttl …]`,
    `automation url`, `automation revoke`, `automation status`,
    `automation exec -- <cmd>` (the fd-handoff mode of §5.1).
 8. TUI consent prompt (§6.4).
 
-**`crates/bg-proto`**
+**`crates/tf-proto`**
 9. Control-plane messages for grant/revoke/status and the consent round trip.
 
 **Dependency note:** if `tokio-tungstenite` is adopted for the WS layer, confirm its MIT/Apache-2.0
@@ -567,7 +567,7 @@ Primary sources, all fetched during this mission:
 - Playwright docs — `browserType.connectOverCDP` (`headers`, `endpointURL` accepts http **or** ws).
 - Chrome for Developers — "Changes to remote debugging switches" (Chrome 136).
 - RFC 6455 (WebSocket handshake, framing, masking).
-- BlackGlass — A09 §2.3, §4.4, §4.5, §5; B06 §2.4, §7; B04 §3.
+- Terminal-Fenster — A09 §2.3, §4.4, §4.5, §5; B06 §2.4, §7; B04 §3.
 
 Prototype artifacts (scratchpad, not part of the repo): `e01/broker.js`, `e01/client.mjs`,
 `e01/pipetest.js`, `e01/takeover.mjs`, `e01/peercred.py`, `e01/methods.json`.

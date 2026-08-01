@@ -1,11 +1,11 @@
 {
-  "name": "@blackglass/mcp",
+  "name": "@terminal-fenster/mcp",
   "version": "0.1.0",
   "private": true,
-  "description": "MCP server exposing the BlackGlass terminal browser to AI agents over stdio",
+  "description": "MCP server exposing the Terminal-Fenster terminal browser to AI agents over stdio",
   "main": "index.js",
   "bin": {
-    "blackglass-mcp": "index.js"
+    "terminal-fenster-mcp": "index.js"
   },
   "type": "commonjs",
   "engines": {
@@ -13,7 +13,7 @@
   },
   "scripts": {
     "start": "node index.js",
-    "test": "node test/handshake.js",
+    "test": "node --test test/*.test.js && node test/handshake.js",
     "test:live": "node test/live-browser.js"
   },
   "dependencies": {},
@@ -25,5 +25,5 @@
     "terminal",
     "chromium"
   ],
-  "license": "UNLICENSED"
+  "license": "MIT"
 }

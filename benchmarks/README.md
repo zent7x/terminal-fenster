@@ -1,7 +1,7 @@
-# BlackGlass benchmark harness
+# Terminal-Fenster benchmark harness
 
-Measures the real binary — `target/release/blackglass` — end to end, using the
-`BLACKGLASS_LOG` and `BLACKGLASS_EXIT_AFTER_MS` hooks that already exist in
+Measures the real binary — `target/release/terminal-fenster` — end to end, using the
+`TERMINAL_FENSTER_LOG` and `TERMINAL_FENSTER_EXIT_AFTER_MS` hooks that already exist in
 `apps/cli/src/main.rs`. No mocks, no simulated frames.
 
 It reports:
@@ -9,12 +9,31 @@ It reports:
 | Metric | Source |
 | --- | --- |
 | cold / warm start to first frame | wall clock from `spawn()` to the `first-frame` log line |
-| frames and fps | `bounded-run complete frames=…` |
-| encode milliseconds | `bounded-run complete … encode_ms=…` |
-| wire bytes per frame | `bounded-run complete … last_wire_bytes=…` |
+| engine frames received | `bounded-run complete frames=…` |
+| presentations and displayed fps | `frame-stats samples=…` plus bounded-run timestamps |
+| BGRA conversion p50 / p99 | `frame-stats … convert_ms_p50=… convert_ms_p99=…` |
+| encode p50 / p99 | `frame-stats … encode_ms_p50=… encode_ms_p99=…` |
+| wire bytes p50 / p99 | `frame-stats … wire_bytes_p50=… wire_bytes_p99=…` |
+| presentation-gap p50 / p99 | `frame-stats … gap_ms_p50=… gap_ms_p99=…` |
 | process RSS | `ps`, sampled across the whole process tree |
 
 Output is a JSON document plus a readable summary.
+
+Conversion is timed separately from protocol encoding. When multiple engine damage frames are
+coalesced before one terminal presentation, the conversion sample is their accumulated cost; the
+status row shows conversion plus encoding as renderer CPU time. Legacy logs without conversion
+fields remain parseable and report those values as unavailable rather than zero.
+
+For a terminal-independent engine memory baseline, run:
+
+```sh
+node benchmarks/engine-rss.js --duration 8000 --json
+```
+
+It drives the same private engine socket, sums RSS across the Chromium process tree, and refuses
+to pass if any PID it observed survives shutdown. On the reference M4 host, `about:blank` at
+1280×800/60 fps measured 280.6 MB peak and steady RSS over a short six-sample smoke run. macOS RSS
+double-counts shared pages, so this is explicitly an upper bound rather than physical footprint.
 
 ---
 
@@ -26,18 +45,18 @@ confirmed). kitty and WezTerm should also work but are **UNVERIFIED** here.
 
 This is not a preference, it is structural:
 
-* `blackglass open` calls `isatty(stdin)` and refuses to run otherwise
+* `terminal-fenster open` calls `isatty(stdin)` and refuses to run otherwise
   (`apps/cli/src/main.rs:228`).
 * Capability detection works by asking the terminal questions. The query bytes
   are written to **stdout** and the replies are read from **stdin**
-  (`crates/bg-term/src/caps.rs:117-120`).
+  (`crates/tf-term/src/caps.rs:117-120`).
 
 So **stdout must not be redirected**. Piping it to a file or another process
 means the terminal never sees the queries, never replies, cell size stays
 unknown, and `cmd_open` bails at "could not determine terminal pixel size"
 (`main.rs:244-251`) before writing a single log line. The harness therefore
 inherits stdin and stdout, captures only stderr, and takes every measurement
-from `$BLACKGLASS_LOG` — which is exactly why that hook exists: *"Logging must
+from `$TERMINAL_FENSTER_LOG` — which is exactly why that hook exists: *"Logging must
 never go to stdout while browsing: stdout is the graphics channel"*
 (`main.rs:29-31`).
 
@@ -60,8 +79,8 @@ escapes, which changes what is being measured. Preflight warns.
 Open **Ghostty**, then:
 
 ```sh
-cd /Users/adeebbashir/projects/blackglass
-cargo build --release                 # if target/release/blackglass is stale
+cd $REPO
+cargo build --release                 # if target/release/terminal-fenster is stale
 node benchmarks/bench.mjs
 ```
 
@@ -87,6 +106,13 @@ node benchmarks/bench.mjs --runs 10 --duration-ms 15000 --label baseline
 # no-damage control: frames should stay in the low single digits
 node benchmarks/bench.mjs --page static
 
+# dense local fast path (uses Kitty shared memory only when its real-object probe succeeds)
+node benchmarks/bench.mjs --page repaint --label shm-dense
+
+# apples-to-apples direct/zlib fallback control
+TERMINAL_FENSTER_SHM=0 TERMINAL_FENSTER_TILE_CELLS=1x1 \
+  node benchmarks/bench.mjs --page repaint --label direct-control
+
 # exercise the Unicode half-block encoder instead of kitty
 node benchmarks/bench.mjs --backend unicode
 
@@ -102,9 +128,9 @@ node benchmarks/bench.mjs --json-only > run.json
 ### Output
 
 ```
-benchmarks/results/blackglass-bench-<iso-timestamp>[-label].json
+benchmarks/results/terminal-fenster-bench-<iso-timestamp>[-label].json
 benchmarks/results/latest.json        # same content, stable path for CI
-benchmarks/results/logs/run-N.log     # raw BLACKGLASS_LOG per run
+benchmarks/results/logs/run-N.log     # raw TERMINAL_FENSTER_LOG per run
 ```
 
 Exit code is `0` when every run is valid, `1` when any run failed or preflight
@@ -127,11 +153,13 @@ The first two are measured across the process boundary by comparing the
 harness's `Date.now()` with the log's timestamp prefix. Both read the same Unix
 millisecond clock (`main.rs:34-37`), so they are directly comparable.
 
-**`fps_steady_state`** is `(frames - 1) / (first frame → end of window)`. It
-excludes load time, so it describes the pipeline rather than the page. It is the
+**`fps_steady_state`** is `(completed terminal presentations - 1) / (first
+frame → end of window)`. It excludes load time and does not count multiple
+socket frames that the core coalesces into one presentation, so it is the
 number to quote. `fps_over_window` includes load time and is pessimistic.
-`fps_logged_instantaneous` is the binary's own trailing-one-second count
-(`main.rs:842-844`) — a sample, not an average.
+`fps_received_steady_state` and `fps_logged_instantaneous` describe frames
+received from the engine; the latter is only the binary's trailing-one-second
+sample, not an average.
 
 **Cold vs warm.** `cold` is run 0, the first launch of the series. `warm` is
 runs 1..n-1, launched with the Electron framework already in the page cache.
@@ -147,24 +175,18 @@ needs a password prompt and evicts the whole machine's cache.
 These are properties of the current binary and the platform, not oversights.
 Every one of them is also recorded in the JSON so a reader cannot miss it.
 
-**1. Encode time and wire bytes are single samples, not distributions.**
-The CLI logs only the *final* frame's `encode_ms` and `last_wire_bytes`
-(`main.rs:467-470`). Nothing emits a per-frame series, so no p50/p99 over frames
-can be computed from the current binary — only one value per run, aggregated
-across runs. Fixing this needs a small change to the CLI's logging (see below);
-it cannot be fixed in the harness.
-
-**2. `compression_ratio_approx` is approximate by construction.** The numerator
-is the *first* frame's raw size and the denominator the *last* frame's encoded
-size. It is an order-of-magnitude figure. The harness verifies
+**1. `compression_ratio_approx` is approximate by construction.** The numerator
+is the *first* frame's raw size and the denominator the median presented frame's
+encoded size (or the legacy final-frame sample when parsing an older log). Damage
+size can change during a run, so it remains an order-of-magnitude figure. The harness verifies
 `payload_bytes == width * height * 4 + 32` and fails the run if the frame wire
 format ever drifts, rather than quietly reporting a meaningless ratio.
 
-**3. RSS over-counts.** `tree_total` sums per-process RSS across the tree.
+**2. RSS over-counts.** `tree_total` sums per-process RSS across the tree.
 Chromium's helpers share many pages, so read it as an upper bound. Proportional
 set size would be better but macOS does not expose it cheaply.
 
-**4. RSS resolution is bounded by how slow `ps` is.** Measured on this machine
+**3. RSS resolution is bounded by how slow `ps` is.** Measured on this machine
 (~700 processes, macOS 26.1, Apple M4):
 
 | command | cost |
@@ -180,38 +202,26 @@ full-path snapshot per run only to label the breakdown. It always reports
 of the peak is never overstated. A spike shorter than the achieved interval is
 invisible.
 
-**5. Leaked helpers are a warning, not a failure.** `shutdown()` gives the
+**4. Leaked helpers are a warning, not a failure.** `shutdown()` gives the
 engine 1.5 s before SIGKILL (`main.rs:662-675`) and Chromium unwinds on its own
 schedule, so the harness drains for up to 6 s before declaring a leak. In
 testing, a tree took 2489 ms to fully exit — a single short probe would have
 reported a phantom leak on every healthy run. A surviving helper is a real
 defect worth surfacing, but it does not make the timing numbers wrong.
 
-**6. `--url` against a real site measures the network too.** The default page is
+**5. `--url` against a real site measures the network too.** The default page is
 local (`file://`), so runs are reproducible and offline.
 
----
+Per-frame samples are retained only when `TERMINAL_FENSTER_EXIT_AFTER_MS` enables a
+bounded run. Normal interactive browsing does not accumulate metric history.
+Encode time stops before the stdout write; presentation gaps are timestamped
+after each flush, so they include terminal-output backpressure.
 
-## Recommended change to the CLI (not made here — core files are owned elsewhere)
-
-Limitation 1 is the only one worth fixing in code, and it is small and
-log-only. `Renderer::present` already computes `last_encode_ms` and
-`wire_bytes` for every frame (`main.rs:857-881`); they are simply overwritten
-each time. Accumulating them into two `Vec<f64>` / `Vec<usize>` on `Renderer`
-and emitting one extra line at the end of the bounded run —
-
-```
-frame-stats encode_ms_p50=… encode_ms_p99=… wire_bytes_p50=… wire_bytes_p99=… gap_ms_p50=… gap_ms_p99=…
-```
-
-— would turn every "one sample per run" figure above into a real distribution,
-and would let the harness report frame-gap percentiles directly comparable to
-the p50 16.65 ms / p99 19.94 ms already measured at the engine. This changes no
-product behaviour: it is one more `log_line` on the existing bounded-run path,
-which is already env-gated and off by default.
-
-The harness parser is ready for it — add the line and it can be consumed
-without restructuring anything.
+For a shared-memory dense frame, `wire_bytes` is intentionally only the Kitty command carried
+by the PTY; the raw RGB bytes live in the 0600 POSIX object reported by `t=s`. Compare displayed
+FPS and presentation gaps against the `TERMINAL_FENSTER_SHM=0` control, not just wire bytes. A generic
+Kitty reply is insufficient: Terminal-Fenster enables this path only after the terminal successfully
+opens a real 1×1 shared-memory probe, and disables it over SSH/tmux/screen.
 
 ---
 
@@ -220,6 +230,7 @@ without restructuring anything.
 ```
 benchmarks/bench.mjs           the harness
 benchmarks/pages/repaint.html  full-viewport repaint load (default page)
+benchmarks/pages/local-damage.html  small animated region (mosaic fast path)
 benchmarks/pages/static.html   no-damage control
 benchmarks/results/            output (created on first run)
 ```

@@ -1,9 +1,9 @@
 // BGRA frame -> PNG, with no dependencies.
 //
-// The screenshot an agent gets is the *same buffer the terminal is drawing*, not a fresh
-// Page.captureScreenshot. If the pixels in the terminal are wrong, the screenshot is wrong
-// in exactly the same way, which is the only version of this tool that is useful for
-// debugging the renderer.
+// The screenshot an agent gets is reconstructed from the same damage-frame protocol the
+// terminal consumes, not a fresh Page.captureScreenshot that might be a frame ahead or behind.
+// If those pixels are wrong, the screenshot is wrong in exactly the same way, which makes it
+// useful for debugging the renderer.
 //
 // PNG here is deliberately minimal: 8-bit truecolour, no interlacing, filter type 0 on
 // every scanline. zlib does the compression and Node has had it built in forever.

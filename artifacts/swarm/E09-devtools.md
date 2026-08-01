@@ -25,7 +25,7 @@ Coverage), because those are the only ones a terminal genuinely cannot render. T
 consequential measurement in this mission is that **`Overlay.highlightNode` does not composite into
 the offscreen paint stream** (§1 P10: zero paint events, zero pixels changed) even though the same
 highlight *is* present in `Page.captureScreenshot` (§1 D1: 75,206 vs 66,172 PNG bytes). Chromium
-rasterises the inspector overlay on a path Electron's OSR `paint` event does not capture, so BlackGlass
+rasterises the inspector overlay on a path Electron's OSR `paint` event does not capture, so Terminal-Fenster
 must draw the element-bounds overlay itself — which is the better outcome anyway, since a terminal-text
 overlay costs ~150 bytes instead of a ~348 KiB full-frame retransmit (A03 §0.1), stays legible in the
 half-block tier where a pixel highlight is an unreadable smear, and needs no viewport reflow at all
@@ -42,7 +42,7 @@ at **0.398** on a `mobile:true` viewport whose page lacks a viewport meta tag.
 ## 1. Evidence base
 
 Probe sources live in the scratchpad, outside the repo per the ownership rule:
-`/private/tmp/claude-501/-Users-adeebbashir/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/e09/`
+`/private/tmp/claude-501/-Users-builder/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/e09/`
 (`probe2.js`, `probe3.js`, `probe4.js`, `probe5.js`, `mock.py`, and their `results*.txt`).
 
 Each probe launched a real offscreen `BrowserWindow` (800x600, `sandbox: true`,
@@ -219,7 +219,7 @@ Two behaviours matter and follow from P19:
 2. **The window is a second CDP consumer on the same target.** Both may set overrides. If the user
    sets device emulation in the DevTools window while our responsive mode is active, the last writer
    wins and our pane's displayed state goes stale. Mitigation: while the DevTools window is open,
-   BlackGlass should re-read `Page.getLayoutMetrics` before drawing any overlay rather than trusting
+   Terminal-Fenster should re-read `Page.getLayoutMetrics` before drawing any overlay rather than trusting
    its cached override, and should show a `DT` token in the chrome row so the divided ownership is
    visible.
 
@@ -231,7 +231,7 @@ Ranked by risk removed per unit of effort.
 
 ### F1 — HIGH — CSS pixels are not surface pixels, and every overlay we draw will be wrong when they diverge
 
-`DOM.getBoxModel` returns **CSS** pixels (P9). The frame BlackGlass renders, and the coordinate space
+`DOM.getBoxModel` returns **CSS** pixels (P9). The frame Terminal-Fenster renders, and the coordinate space
 `PointerMap` operates in (`apps/cli/src/main.rs:701-727`), is **surface** pixels. §1.6 measured these
 diverging by a factor of **0.398** on a `mobile:true` viewport whose page has no viewport meta tag: an
 element whose box model reads `x100..300` was actually painted at surface `x40..118`.
@@ -451,7 +451,7 @@ Three consequences the implementation must handle, all measured:
 2. **F1/F3:** with `mobile: true` on a page lacking a viewport meta tag, the layout viewport is 980 CSS
    px scaled to the device width — measured `[innerW,innerH] = [980,2121]` behind a 390x844 surface,
    scale 0.398. Overlays need the transform; the pane should *show* the scale so the user understands
-   why the page looks shrunken, rather than assuming BlackGlass is broken. The mockup in §8.3 does this.
+   why the page looks shrunken, rather than assuming Terminal-Fenster is broken. The mockup in §8.3 does this.
 3. **`mobile: false` behaves completely differently** — measured scale 1.000, `innerWidth` 390. So
    "responsive" and "mobile device" are two distinct toggles and must be presented as such. A width
    change alone (`mobile:false`) is the common case for CSS breakpoint work; full device emulation
@@ -776,7 +776,7 @@ handler runs *before* the page mapping.
 
 The last row is not decoration. It is the measured 0.398 from §1.6 surfaced to the user, so that a page
 rendering unexpectedly small reads as *"this page has no viewport meta, here is the scale"* rather than
-as a BlackGlass bug. This is the kind of thing a terminal tool can explain in one row and a GUI browser
+as a Terminal-Fenster bug. This is the kind of thing a terminal tool can explain in one row and a GUI browser
 usually does not explain at all.
 
 ---
@@ -841,7 +841,7 @@ rendering it in a terminal.
 | Risk | Mechanism | Mitigation |
 |---|---|---|
 | **Terminal injection via console text** | Console messages are fully page-controlled | Route every message through the chrome sanitizer *plus* D06 F4's bidi/zero-width extensions and F3's display-width truncation. Higher priority than for titles, because the volume and attacker control are both greater. |
-| **Forged log lines** | A page can `console.error` anything, including text imitating BlackGlass's own UI | Severity glyph comes from the CDP event `type`, never from message content. Never let `%c` styling reach the terminal. |
+| **Forged log lines** | A page can `console.error` anything, including text imitating Terminal-Fenster's own UI | Severity glyph comes from the CDP event `type`, never from message content. Never let `%c` styling reach the terminal. |
 | **Cookie exposure in the network pane** | `*ExtraInfo` events carry raw `Set-Cookie` / `Cookie` (E01 §7.4) | Redact by default in the headers view and in `y`-as-curl; explicit `^G s` to reveal, and never include them in a yank without that step. |
 | **Response bodies containing secrets** | `getResponseBody` returns tokens verbatim | Fetch only on explicit open (P7 is lazy by design); never log bodies to disk; never include them in crash reports (B08). |
 | **REPL history leaking credentials** | Users paste tokens into consoles constantly | Per-origin, memory-only by default; opt-in persistence with `0600` and `safeStorage`, matching E01 §6.2's posture. |
@@ -913,7 +913,7 @@ Described, not made, per the ownership rule.
 11. Resolve the `^G d` collision with D06 §8.4's `--stats` binding (§9).
 12. Extend the sanitizer application to pane rows (depends on D06 F3/F4 landing).
 
-**`crates/bg-proto`**
+**`crates/tf-proto`**
 
 13. Message types for CDP request/reply and for the high-rate event stream, with a sequence number so
     the pane can detect drops rather than silently mis-ordering.
@@ -952,7 +952,7 @@ code reading. Electron is MIT (`apps/engine/node_modules/electron/package.json:"
 `dist/LICENSE` present). The pane designs are original; they take inspiration from `less`, vim and tmux
 conventions, which are behavioural idioms rather than copyrightable expression. `packages/mcp/lib/snapshot.js`
 already documents the correct posture toward Playwright MCP (Apache-2.0, no code used); §5.6 reuses that
-file's *lazy-geometry* idea, which is BlackGlass's own.
+file's *lazy-geometry* idea, which is Terminal-Fenster's own.
 
 **The repo still has no top-level `LICENSE` file.** E01 §11 flagged this; it remains unresolved and
 should be settled before any third-party code lands.

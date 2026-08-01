@@ -13,34 +13,36 @@ written as an instruction for the commander, not applied. Baseline left untouche
 
 ## Implementation status (updated 2026-08-01)
 
-C08 splits cleanly into two halves. **The first half is now implemented and verified; the
-second — the terminal-transmission tile mosaic designed below — is not, deliberately.**
+C08 splits cleanly into two halves. **Both are now implemented in code;** the compositor still
+needs interactive Ghostty confirmation before its wire-byte wins are claimed as measured.
 
 **Done — damage is consumed on the capture/compositing side.** Following the B02 spike
 (which confirmed Chromium reports device-pixel partial dirty rects), the engine crops
 `onPaint` to the dirty rect and sends only those pixels; the core composites each rect into a
 persistent RGB framebuffer (`kitty::blit_bgra_into_rgb`, `Renderer` in `apps/cli/src/main.rs`).
-Backpressure coalescing was made damage-safe by promoting a would-be-dropped frame to a full
-update (the engine bitmap is always the whole viewport). Verified by unit tests (composite,
-out-of-bounds rejection, resize realloc, full-frame == whole-buffer conversion) and by the e2e
-input-injection test, whose wire decoder now reconstructs the same framebuffer from partial
-frames — 9/9 pixel checks pass. This removes the full-bitmap copy, socket write, and BGRA→RGB
-conversion from every frame's capture path.
+Backpressure coalescing unions dirty rects across dropped paints (B07 / `frame-pipeline.js`)
+so partial updates stay correct under a slow PTY. Verified by unit tests and by the e2e
+input-injection test — 13/13 checks pass.
 
-**Not done — the terminal transmission is still a full-frame re-encode.** `present` re-encodes
-the entire framebuffer to one Kitty image per frame, so the bytes crossing the terminal (and,
-over SSH, the network) are not yet reduced. That is the actual A10 §0.1 `write()` win and it is
-the tile-mosaic design in §5 below. It is **not shipped blind** because, as §3 documents,
-Ghostty rejects the obvious in-place partial-update actions (`a=f`/`a=a`/`a=c`) and
-re-transmitting an image id deletes its placements — so the mosaic's on-screen correctness
-genuinely cannot be validated without eyes on a graphics terminal, and this repo does not ship
-unverified rendering. `Renderer::last_dirty` already carries the rect the mosaic needs.
+**Implemented — hybrid dense base + sparse tile overlays + DEC 2026 (2026-08-01).** `Renderer`
+OR-accumulates damage into a cell-aligned tile bitset. Sparse damage re-transmits only dirty
+position-bound image ids (`kitty::tile_image_id`) at z=1. At 60% dirty it clears live overlays
+and replaces one monolithic base instead of churning hundreds of terminal image objects. A real
+1×1 runtime probe enables Kitty `t=s` shared memory for that dense local base; SSH, multiplexers,
+a failed probe, or four unconsumed objects use direct/zlib fallback. `RESTORE_SEQ` clears DEC 2026
+first so a crash inside a synchronized block cannot freeze the terminal. Tests cover the mode
+switch, stale-overlay deletion, raw 0600 POSIX objects, bounded fallback, and exact direct-wire
+pixel round trips.
 
-**To finish it, interactively (Ghostty, not under the agent sandbox):** implement the
-per-position tile-image mosaic from §5, then confirm with `node benchmarks/bench.mjs --page
-repaint` that `last_wire_bytes` drops in proportion to damage on an interaction-heavy page while
-the screen stays correct (no stale tiles, no tearing) on a static one — the same measure-it-then-
-believe-it bar B02 held.
+This hybrid supersedes the original “mosaic unconditionally” conclusion in §5.2. That model
+measured compressed bytes and encode CPU, but not the terminal-side cost of replacing 222 image
+objects, and it predates the much cheaper shared-memory medium. Its sparse-damage measurements
+remain valid; its no-mode-switch recommendation is retained below as historical design evidence.
+
+**Still required before claiming the A10 wire win:** interactive Ghostty confirmation —
+the three commands in `RELEASE.md` must show displayed-FPS improvement and no stale tiles,
+tearing, or bad teardown while switching between a shared base and direct tile overlays. Do not
+treat the implementation as visually proven until that check lands.
 
 ---
 
@@ -52,11 +54,12 @@ believe-it bar B02 held.
    reports **100%**, every time. Damage tracking is worth 25–74× on interaction and exactly
    nothing on scroll. (§2)
 
-2. **A persistent tile mosaic is free.** Redrawing the *entire* screen as 222 separate tile images
+2. **Original design result (superseded for dense frames): a persistent tile mosaic is cheap in
+   bytes/CPU.** Redrawing the *entire* screen as 222 separate tile images
    costs **1.006–1.010×** a single full-frame image, measured across all 8 captured frames; at
    coarser tiles it is 2–4% *cheaper* than one image. There is therefore **no tile-vs-full-frame
-   mode switch to get wrong** — a full frame is just "all tiles dirty". This collapses the whole
-   design to one code path. (§5.2)
+   mode switch in that cost model. The shipping hybrid adds a dense switch because terminal
+   image-object churn and `t=s` were outside that model. (§5.2 and implementation status)
 
 3. **Two protocol paths are closed and one is open.** Ghostty returns
    `"ERROR: unimplemented action"` for `a=f`/`a=a`/`a=c`, so the kitty *animation-frame* partial
@@ -95,7 +98,7 @@ neither modifying any repo file.
 | Harness | Path | What it did |
 |---|---|---|
 | OSR capture | `$SCRATCH/capture2.js` | Standalone Electron script; offscreen `BrowserWindow` at 2482×814, `force-device-scale-factor=1`, logs every `paint` dirty rect and dumps checkpoint frames as raw BGRA |
-| Encoder bench | `$SCRATCH/c08bench` | Detached cargo crate with a path dependency on `bg-term`; calls the **real** `kitty::bgra_rect_to_rgb` + `kitty::encode_rgb_frame` at the level the CLI actually passes (`1`, `apps/cli/src/main.rs:866`) |
+| Encoder bench | `$SCRATCH/c08bench` | Detached cargo crate with a path dependency on `tf-term`; calls the **real** `kitty::bgra_rect_to_rgb` + `kitty::encode_rgb_frame` at the level the CLI actually passes (`1`, `apps/cli/src/main.rs:866`) |
 
 Fidelity check: captured frames are **8,081,392 bytes at 2482×814**, byte-for-byte the payload
 size in the end-to-end Ghostty run cited in the brief (8,081,424 − 32-byte header). This is the
@@ -312,7 +315,7 @@ Calibration against the measured encoder, all at level 1 on the real page:
 | mixed page, 4×4-cell tile | 68×148 | 284 | 0.028 |
 | flat colour | 85×111 | 272 | 0.029 |
 
-### 5.2 The tile-vs-full-frame decision — and why it is vacuous
+### 5.2 Historical tile-vs-full-frame model (dense conclusion superseded)
 
 Under the mosaic, a "full frame" *is* the mosaic with every tile dirty. So with `N` tiles total,
 `n` dirty, uniform tile area `A_t`:
@@ -342,7 +345,7 @@ whole-screen redraw, level 1, including 10 B/tile of cursor positioning:
 consistently 2–4% cheaper than a single image.** The worst case of the mosaic model is a 1%
 regression against today's behaviour; the best case is 83×.
 
-**Therefore: do not implement a mode switch.** There is one code path — mark tiles dirty, send
+**Original conclusion (now superseded): do not implement a mode switch.** There is one code path — mark tiles dirty, send
 dirty tiles. A07's `FrameStrategy::FullFrame` and `FrameStrategy::DirtyTiles` arms collapse into
 one. This is the main simplification C08 contributes over A07 §3.8.
 
@@ -398,7 +401,7 @@ merge(a, b)  iff   area(a ∪ b)  <=  1.25 · (area(a) + area(b))
 ```
 
 Conservative on the measured crossover, and cheap: it is two multiplications on `Rect::union`,
-which `bg-term` already provides (`crates/bg-term/src/lib.rs:39`).
+which `tf-term` already provides (`crates/tf-term/src/lib.rs:39`).
 
 ### 5.5 Choosing the tile size
 
@@ -431,7 +434,7 @@ On this display that resolves to **4×4 cells = 68×148 px, 222 tiles**. Rule 2 
 terminal to 8×4 tiles (`ceil(300/8)·ceil(80/4) = 38·20 = 760` exceeds 256, so it would step up to
 16×8 → 19×10 = 190).
 
-Constant to expose so this is retunable without a rebuild: `BLACKGLASS_TILE_CELLS=4x4`.
+Constant to expose so this is retunable without a rebuild: `TERMINAL_FENSTER_TILE_CELLS=4x4`.
 
 ---
 
@@ -448,7 +451,7 @@ in the page that no amount of retrying will fix.
 ### 6.2 Allocation
 
 ```rust
-// crates/bg-term/src/kitty.rs — proposed additions (commander's call)
+// crates/tf-term/src/kitty.rs — proposed additions (commander's call)
 
 /// Base of the id block owned by the page mosaic. Tile (col, row) always gets the same id.
 pub const PAGE_TILE_ID_BASE: u32 = 1000;
@@ -547,7 +550,7 @@ already tests values 0/1/2/3/4 correctly. Three lines.
 `?2026h` and `?2026l`, the terminal stays in synchronized mode and **the user's screen is frozen**.
 That is a worse failure than anything in the current teardown path.
 
-> `RESTORE_SEQ` in `crates/bg-term/src/tty.rs:27` **must** gain `\x1b[?2026l` as its **first**
+> `RESTORE_SEQ` in `crates/tf-term/src/tty.rs:27` **must** gain `\x1b[?2026l` as its **first**
 > element, before the kitty delete and before leaving the alternate screen. Adopting 2026 without
 > this change is a net regression in the crate's stated top invariant.
 
@@ -574,7 +577,7 @@ iteration order of the grid — and is the one visual-quality knob available wit
 
 ## 8. Exactly how the CLI should use `bgra_rect_to_rgb`
 
-`bgra_rect_to_rgb` (`crates/bg-term/src/kitty.rs:54`) currently has **no callers anywhere in the
+`bgra_rect_to_rgb` (`crates/tf-term/src/kitty.rs:54`) currently has **no callers anywhere in the
 repo** — C01 D10 flagged it as dead code. This section is the instruction set that wakes it up.
 All of it is in `apps/cli/src/main.rs`, which the commander owns.
 
@@ -617,7 +620,7 @@ image:
 
 The horizontal case is the dangerous one: no panic, no error, wrong pixels on screen.
 `FrameHeader.dirty_*` arrives over a socket and is parsed without validation
-(`bg-proto/src/lib.rs:33-48`), so this is also the B06 attack surface reaching a memory-adjacent
+(`tf-proto/src/lib.rs:33-48`), so this is also the B06 attack surface reaching a memory-adjacent
 primitive.
 
 `Rect::clamp_to` (`lib.rs:53`) is already correct — verified: `(8,0,5,1).clamp_to(10,10)` →
@@ -829,7 +832,7 @@ Blocked on verifying `z` ordering on real hardware (§10). Do not build this bef
 
 None of the multi-tile behaviour has been exercised against a real terminal — the machine is at a
 lock screen, so this is protocol-level and log-level evidence only. These are the checks that
-convert it to verified, in dependency order. Each is a `blackglass doctor` subcommand or a
+convert it to verified, in dependency order. Each is a `terminal-fenster doctor` subcommand or a
 one-shot script; all are CI-able against Ghostty.
 
 | # | Test | Pass criterion | Blocks |

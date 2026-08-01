@@ -1,18 +1,26 @@
 # Third-party notices
 
-BlackGlass is licensed MIT OR Apache-2.0. It depends on the following third-party
+Terminal-Fenster is licensed MIT. It depends on the following third-party
 components, which carry their own licenses.
 
 | Component | Version | License | Role |
 |---|---|---|---|
 | Electron | 43.2.0 | MIT (bundles Chromium, BSD-3-Clause + others) | Offscreen browser engine |
 | Chromium | 150.0.7871.129 | BSD-3-Clause and others | Web engine, shipped inside Electron |
-| `libc` (crates.io) | 0.2.x | MIT OR Apache-2.0 | termios / ioctl / poll bindings |
-| `flate2` (crates.io) | 1.x | MIT OR Apache-2.0 | zlib compression of frame payloads |
+| `libc` | 0.2.189 | MIT OR Apache-2.0 | termios / ioctl / poll / shared-memory bindings |
+| `flate2` | 1.1.9 | MIT OR Apache-2.0 | zlib compression of direct frame payloads |
+| `crc32fast` | 1.5.0 | MIT OR Apache-2.0 | `flate2` dependency |
+| `cfg-if` | 1.0.4 | MIT OR Apache-2.0 | `crc32fast` dependency |
+| `miniz_oxide` | 0.8.9 | MIT OR Zlib OR Apache-2.0 | `flate2` dependency |
+| `adler2` | 2.0.1 | 0BSD OR MIT OR Apache-2.0 | `miniz_oxide` dependency |
+| `simd-adler32` | 0.3.10 | MIT | `miniz_oxide` dependency |
 
-Electron is **not vendored** into this repository. It is installed via npm into
-`apps/engine/node_modules` and must be verified against upstream `SHASUMS256.txt` before
-distribution (see `artifacts/swarm/B10-packaging-updater.md`).
+Electron is **not vendored** into the source repository. Source installs acquire the exact npm
+pin. Prebuilt release archives instead fetch Electron's official platform archive and its
+free-codecs FFmpeg archive, verify both against `packaging/engine-lock.json`, and ship no npm
+downloader dependencies. Each prebuilt archive includes the exact Cargo license files under
+`licenses/rust/`, Electron's `dist/LICENSE`, and Chromium's full
+`dist/LICENSES.chromium.html`. See ADR-0002 and `tools/package-release.sh`.
 
 ## Studied but not copied
 

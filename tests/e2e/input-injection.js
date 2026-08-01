@@ -16,6 +16,7 @@
 'use strict';
 
 const net = require('net');
+const http = require('http');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -57,6 +58,9 @@ const PAGE = `<!doctype html><html><body style="margin:0;background:#ffffff">
 </script>
 </body></html>`;
 
+const SECOND_PAGE = `<!doctype html><html><head><title>Second Tab</title></head>
+<body style="margin:0;background:#ff00ff"><div style="color:#000;font:30px sans-serif">TAB TWO</div></body></html>`;
+
 function encodeMessage(type, payload) {
   const head = Buffer.allocUnsafe(5);
   head.writeUInt8(type, 0);
@@ -69,28 +73,59 @@ class Harness {
     this.frames = [];
     this.events = [];
     this.latest = null;
+    this.cdpPending = new Map();
+    this.cdpId = 0;
   }
 
   async start() {
     this.dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bg-e2e-'));
     this.sockPath = path.join(this.dir, 'e.sock');
-    const url = 'data:text/html;charset=utf-8,' + encodeURIComponent(PAGE);
+    this.httpServer = http.createServer((req, res) => {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(req.url === '/tab-two' ? SECOND_PAGE : PAGE);
+    });
+    await new Promise((resolve, reject) => {
+      this.httpServer.once('error', reject);
+      this.httpServer.listen(0, '127.0.0.1', resolve);
+    });
+    const address = this.httpServer.address();
+    const url = `http://127.0.0.1:${address.port}/`;
+    this.secondUrl = `http://127.0.0.1:${address.port}/tab-two`;
 
+    let connectTimer;
     const connected = new Promise((resolve, reject) => {
       this.server = net.createServer((sock) => {
+        clearTimeout(connectTimer);
         this.sock = sock;
         this._attach(sock);
+        // Deliberately race a resize against BrowserWindow creation. Real terminals do this
+        // while settling a newly opened window; the engine must retain it before `ready`.
+        sock.write(encodeMessage(
+          T_COMMAND,
+          Buffer.from(JSON.stringify({ t: 'resize', w: W, h: H }), 'utf8')
+        ));
         resolve();
       });
       this.server.listen(this.sockPath);
-      setTimeout(() => reject(new Error('engine did not connect in 30s')), 30000);
+      connectTimer = setTimeout(() => reject(new Error('engine did not connect in 30s')), 30000);
     });
 
     this.child = spawn(
       ELECTRON,
-      [MAIN, `--bg-socket=${this.sockPath}`, `--bg-width=${W}`, `--bg-height=${H}`, `--bg-url=${url}`],
-      { stdio: 'ignore' }
+      [
+        MAIN,
+        `--tf-socket=${this.sockPath}`,
+        '--tf-width=640',
+        '--tf-height=480',
+        `--tf-url=${url}`,
+        `--user-data-dir=${path.join(this.dir, 'profile')}`,
+      ],
+      { stdio: ['ignore', 'ignore', 'pipe'] }
     );
+    this.stderr = '';
+    this.child.stderr.on('data', (chunk) => {
+      this.stderr = (this.stderr + chunk.toString('utf8')).slice(-16384);
+    });
     await connected;
   }
 
@@ -108,7 +143,16 @@ class Harness {
         if (type === T_FRAME) {
           this._compositeFrame(payload);
         } else if (type === T_EVENT) {
-          this.events.push(JSON.parse(payload.toString('utf8')));
+          const event = JSON.parse(payload.toString('utf8'));
+          if (event.t === 'cdpResult' && this.cdpPending.has(event.id)) {
+            const pending = this.cdpPending.get(event.id);
+            clearTimeout(pending.timer);
+            this.cdpPending.delete(event.id);
+            if (event.error) pending.reject(new Error(event.error.message));
+            else pending.resolve(event.result || {});
+          } else {
+            this.events.push(event);
+          }
         }
       }
     });
@@ -164,10 +208,63 @@ class Harness {
     await new Promise((r) => setTimeout(r, ms));
   }
 
-  stop() {
+  async waitFor(predicate, timeoutMs, label) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (predicate()) return true;
+      await this.settle(50);
+    }
+    throw new Error(`timed out waiting for ${label}${this.stderr ? `\nengine stderr:\n${this.stderr}` : ''}`);
+  }
+
+  async waitForStats(predicate, timeoutMs, label) {
+    const deadline = Date.now() + timeoutMs;
+    let latest = null;
+    while (Date.now() < deadline) {
+      latest = await this.engineStats();
+      if (predicate(latest)) return latest;
+      await this.settle(100);
+    }
+    throw new Error(`timed out waiting for ${label}; last stats=${JSON.stringify(latest)}`);
+  }
+
+  async engineStats() {
+    const start = this.events.length;
+    this.send({ t: 'stats' });
+    for (let i = 0; i < 50; i++) {
+      const found = this.events.slice(start).find((e) => e.t === 'stats');
+      if (found) return found;
+      await this.settle(20);
+    }
+    throw new Error('timed out waiting for engine stats');
+  }
+
+  cdp(method, params = {}) {
+    const id = ++this.cdpId;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.cdpPending.delete(id);
+        reject(new Error(`timed out waiting for CDP ${method}`));
+      }, 5000);
+      this.cdpPending.set(id, { resolve, reject, timer });
+      this.send({ t: 'cdp', id, method, params });
+    });
+  }
+
+  async stop() {
     try { this.send({ t: 'quit' }); } catch (e) {}
-    try { this.child.kill(); } catch (e) {}
+    if (this.child && this.child.exitCode === null && this.child.signalCode === null) {
+      let exited = false;
+      const exit = new Promise((resolve) => this.child.once('exit', () => { exited = true; resolve(); }));
+      await Promise.race([exit, this.settle(1000)]);
+      if (!exited) {
+        try { this.child.kill(); } catch (e) {}
+        await Promise.race([exit, this.settle(500)]);
+      }
+    }
+    try { this.sock.end(); } catch (e) {}
     try { this.server.close(); } catch (e) {}
+    try { this.httpServer.close(); } catch (e) {}
     try { fs.rmSync(this.dir, { recursive: true, force: true }); } catch (e) {}
   }
 }
@@ -178,16 +275,33 @@ function check(name, pass, detail) {
   console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  -- ' + detail : ''}`);
 }
 
+let activeHarness = null;
+
 (async () => {
-  const h = new Harness();
+  const h = activeHarness = new Harness();
   await h.start();
-  await h.settle(2500);
+  await h.waitFor(() => h.frames.length > 0, 10000, 'the first real frame');
 
   check('engine emits frames', h.frames.length > 0, `${h.frames.length} frames`);
   check(
-    'frame geometry matches requested viewport',
+    'startup resize race resolves to the requested viewport',
     h.latest && h.latest.width === W && h.latest.height === H,
     h.latest ? `${h.latest.width}x${h.latest.height}` : 'none'
+  );
+
+  const idleStats = await h.waitForStats((stats) => stats.rate === 1, 5000, 'idle paint pacing');
+  check(
+    'static pages throttle the offscreen compositor to idle',
+    idleStats.rate === 1,
+    `rate=${idleStats.rate}`
+  );
+
+  h.send({ t: 'input', kind: 'mouse', action: 'move', x: 50, y: 50 });
+  const activeStats = await h.engineStats();
+  check(
+    'input wakes the compositor before injection',
+    activeStats.rate > idleStats.rate,
+    `rate=${activeStats.rate}`
   );
 
   // --- 1. click target A ---------------------------------------------------------
@@ -248,15 +362,128 @@ function check(name, pass, detail) {
     wasYellow && !stillYellow,
     `marker before yellow=${wasYellow} after yellow=${stillYellow}`
   );
+  const scrollState = await h.cdp('Runtime.evaluate', {
+    expression: 'scrollY',
+    returnByValue: true,
+  });
+  const scrollY = scrollState.result && scrollState.result.value;
+  check('wheel advances the page scroll offset', scrollY > 0, `scrollY=${scrollY}`);
 
-  // --- 6. lifecycle events -------------------------------------------------------
+  // --- 6. tabs -------------------------------------------------------------------
+  const newTabStart = h.events.length;
+  h.send({ t: 'tabNew', url: h.secondUrl });
+  await h.waitFor(
+    () => h.events.slice(newTabStart).some((e) => e.t === 'tabs' && e.n === 2 && e.active === 1),
+    5000,
+    'the second tab to become active'
+  );
+  await h.waitFor(() => {
+    const pixel = h.pixel(700, 500);
+    return pixel.r > 200 && pixel.b > 200 && pixel.g < 100;
+  }, 5000, 'the second tab full repaint');
+  check('new tab becomes active and paints its own full page', true);
+
+  const secondLocation = await h.cdp('Runtime.evaluate', {
+    expression: 'location.pathname',
+    returnByValue: true,
+  });
+  check(
+    'automation follows the active tab',
+    secondLocation.result.value === '/tab-two',
+    secondLocation.result.value
+  );
+
+  const switchStart = h.events.length;
+  h.send({ t: 'tabSwitch', index: 0 });
+  await h.waitFor(
+    () => h.events.slice(switchStart).some((e) => e.t === 'tabs' && e.n === 2 && e.active === 0),
+    5000,
+    'the first tab to become active again'
+  );
+  await h.waitFor(() => h.isGreen(50, 50), 5000, 'the preserved first-tab pixels');
+  check('switching tabs restores preserved page state without stale pixels', h.isGreen(50, 50));
+
+  const closeStart = h.events.length;
+  h.send({ t: 'tabClose', index: 1 });
+  await h.waitFor(
+    () => h.events.slice(closeStart).some((e) => e.t === 'tabs' && e.n === 1 && e.active === 0),
+    5000,
+    'the background tab to close'
+  );
+  check('background tabs close without terminating the browser', true);
+
+  // --- 7. lifecycle events -------------------------------------------------------
   check(
     'engine reported ready with version info',
     h.events.some((e) => e.t === 'ready' && e.chrome),
     h.events.find((e) => e.t === 'ready')?.chrome
   );
 
-  h.stop();
+  const permissionStart = h.events.length;
+  const permissionResult = await h.cdp('Runtime.evaluate', {
+    expression: `new Promise((resolve) => navigator.geolocation.getCurrentPosition(
+      () => resolve('granted'),
+      (error) => resolve('denied:' + error.code)
+    ))`,
+    awaitPromise: true,
+    returnByValue: true,
+  });
+  const permissionValue = permissionResult.result && permissionResult.result.value;
+  const permissionEvent = h.events.slice(permissionStart).find(
+    (e) => e.t === 'permissionDenied' && e.permission === 'geolocation'
+  );
+  check(
+    'privileged page permissions are denied and reported',
+    typeof permissionValue === 'string' && permissionValue.startsWith('denied:') && !!permissionEvent,
+    `${permissionValue || 'no result'}; event=${permissionEvent ? permissionEvent.permission : 'none'}`
+  );
+
+  const navigationStart = h.events.length;
+  const beforeExternal = await h.cdp('Runtime.evaluate', {
+    expression: 'location.href',
+    returnByValue: true,
+  });
+  await h.cdp('Runtime.evaluate', {
+    expression: `location.href = 'terminal-fenster-external-test://should-not-launch'`,
+    returnByValue: true,
+  });
+  await h.settle(250);
+  const afterExternal = await h.cdp('Runtime.evaluate', {
+    expression: 'location.href',
+    returnByValue: true,
+  });
+  const navigationEvent = h.events.slice(navigationStart).find(
+    (e) => e.t === 'navigationBlocked' && e.url.startsWith('terminal-fenster-external-test:')
+  );
+  check(
+    'external application protocols are blocked without leaving the page',
+    beforeExternal.result.value === afterExternal.result.value && !!navigationEvent,
+    navigationEvent ? navigationEvent.url : 'no blocked-navigation event'
+  );
+
+  const zoomEventStart = h.events.length;
+  h.send({ t: 'zoom', factor: 1.25 });
+  await h.settle(200);
+  const zoomEvent = h.events.slice(zoomEventStart).find((e) => e.t === 'zoom');
+  check(
+    'page zoom command is applied and acknowledged',
+    zoomEvent && Math.abs(zoomEvent.factor - 1.25) < 0.001,
+    zoomEvent ? `factor=${zoomEvent.factor}` : 'no zoom event'
+  );
+  h.send({ t: 'zoom', factor: 1 });
+  await h.settle(100);
+
+  h.send({ t: 'visibility', visible: false });
+  const hiddenStats = await h.engineStats();
+  check(
+    'terminal focus loss gates output and lowers paint rate',
+    hiddenStats.visible === false && hiddenStats.rate <= 10,
+    `visible=${hiddenStats.visible} rate=${hiddenStats.rate}`
+  );
+  h.send({ t: 'visibility', visible: true });
+
+  await h.stop();
+  activeHarness = null;
 
   const failed = results.filter((r) => !r.pass);
   console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
@@ -265,7 +492,8 @@ function check(name, pass, detail) {
     JSON.stringify({ when: new Date().toISOString(), results }, null, 2)
   );
   process.exit(failed.length ? 1 : 0);
-})().catch((e) => {
+})().catch(async (e) => {
   console.error('harness error:', e);
+  if (activeHarness) await activeHarness.stop();
   process.exit(2);
 });

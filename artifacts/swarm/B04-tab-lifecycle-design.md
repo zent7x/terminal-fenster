@@ -1,4 +1,4 @@
-# B04 — Multi-tab support for the BlackGlass engine host
+# B04 — Multi-tab support for the Terminal-Fenster engine host
 
 **Status:** design + measured evidence + ready-to-apply JS diff
 **Owner of this file:** B04. `apps/engine/src/main.js` is NOT edited here; the diff below is for the commander to apply.
@@ -16,7 +16,7 @@ Activation is `stopPainting()` on the outgoing tab then `startPainting()` on the
 measured to emit one full frame at the current geometry even for a completely static page — so a tab
 switch repaints the terminal with no extra nudge and no protocol round trip. Tab identity rides in the
 frame header as a single byte that is zero for tab 0, so the existing single-tab decoder in
-`crates/bg-proto` keeps working byte-for-byte. Do **not** use `setFrameRate(0)` (it silently clamps to 1,
+`crates/tf-proto` keeps working byte-for-byte. Do **not** use `setFrameRate(0)` (it silently clamps to 1,
 measured) and do **not** ship CDP page freezing in v1 (it stops painting but I could not restore a frozen
 tab, measured).
 
@@ -27,8 +27,8 @@ tab, measured).
 All numbers below come from running the Electron binary already vendored in this repo:
 
 ```
-/Users/adeebbashir/projects/blackglass/apps/engine/node_modules/electron/dist/version  ->  43.2.0
-cd /Users/adeebbashir/projects/blackglass/apps/engine
+$REPO/apps/engine/node_modules/electron/dist/version  ->  43.2.0
+cd $REPO/apps/engine
 ./node_modules/.bin/electron <probe>.js        # agent Bash sandbox disabled; Chromium
                                                # children cannot spawn under it
 ```
@@ -47,7 +47,7 @@ Probe scripts (scratchpad, outside the repo — nothing was written into the tre
 | `probe9.js` | static-page resume, deferred resize | `b04/probe9.log` |
 | `probe10.js` | first frame for a tab loaded in the background | `b04/probe10.log` |
 
-Base directory: `/private/tmp/claude-501/-Users-adeebbashir/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/b04/`
+Base directory: `/private/tmp/claude-501/-Users-builder/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/b04/`
 
 ### 2.1 A methodology correction worth recording
 
@@ -250,7 +250,7 @@ Findings that shape the design:
 ### 8.1 Frame header — one byte, zero breakage
 
 Bytes 28..31 are currently a `u32 format` whose only ever value is `0`
-(`apps/engine/src/main.js:95`, `crates/bg-proto/src/lib.rs:29`). Redefine them as:
+(`apps/engine/src/main.js:95`, `crates/tf-proto/src/lib.rs:29`). Redefine them as:
 
 ```
 offset 28  u8   format    0 = BGRA8888
@@ -264,7 +264,7 @@ offset 28 still sees `format == 0`. `FRAME_HEADER_LEN` stays 32 — no payload-o
 `truncated_frame_is_dropped_not_rendered` / `full_frame_is_accepted` tests stay green unmodified.
 
 **Core-side change for the commander (I did not edit `crates/`):** in
-`crates/bg-proto/src/lib.rs:38-47`, replace `format: g(28)` with
+`crates/tf-proto/src/lib.rs:38-47`, replace `format: g(28)` with
 
 ```rust
 format: b[28] as u32,
@@ -789,7 +789,7 @@ in §8.1 for the commander to make separately.
 
 ## 11. How to verify the diff
 
-1. **No regression, single tab.** `blackglass open https://example.com` must behave exactly as the verified
+1. **No regression, single tab.** `terminal-fenster open https://example.com` must behave exactly as the verified
    run: `ready` first, first frame at the same latency, `2482x814` BGRA, terminal restored on `ctrl+q`.
    The frame header for tab 0 is byte-identical to today, so this works before any Rust change lands.
 2. **Background tab costs nothing.** Send `tab.new` with `activate:false`, then `stats`. `produced` must

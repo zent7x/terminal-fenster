@@ -1,4 +1,4 @@
-<!-- BlackGlass fixture: contenteditable
+<!-- Terminal-Fenster fixture: contenteditable
      Proves: a rich-text editing host accepts synthetic keys, reports selection and caret
      geometry, and emits the beforeinput/inputType stream a terminal editor needs.
      The caret rectangle is the number the terminal cursor has to be drawn at.
@@ -109,7 +109,7 @@ window.__bg = {
     },
     caretMark: { colour: '#ff00ff', widthPx: 3,
                  note: 'top-left of #caretmark equals the caret rect origin in CSS px' },
-    passWhen: "#rich text content ends with 'BLACKGLASS'",
+    passWhen: "#rich text content ends with 'TERMINAL_FENSTER'",
     determinism: 'add ?caret=off to suppress the blinking native caret'
   };
 
@@ -146,7 +146,7 @@ window.__bg = {
     if (cr) { mark.style.left = cr.x + 'px'; mark.style.top = cr.y + 'px';
               mark.style.height = (cr.h || 24) + 'px'; }
     else { mark.style.left = '-10px'; mark.style.top = '-10px'; }
-    bg._status(/BLACKGLASS$/.test(rich.textContent.trim()));
+    bg._status(/TERMINAL_FENSTER$/.test(rich.textContent.trim()));
     bg._dump();
   }
 

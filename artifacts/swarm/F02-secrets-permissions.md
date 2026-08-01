@@ -8,7 +8,7 @@ Deliver a concrete policy.
 lives in commander-owned code (`apps/engine/src/main.js`, `apps/cli/src/main.rs`, `packages/mcp/`).
 Per the swarm rules I **describe** each change with exact `file:line`, exact patch shape, and exact
 test vector — I applied none of them. Probe sources live outside the repo, in the agent scratchpad
-at `/private/tmp/claude-501/-Users-adeebbashir/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/f02/`,
+at `/private/tmp/claude-501/-Users-builder/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/f02/`,
 and are reproduced verbatim in §10 so they can be re-run or promoted into the test suite by whoever
 owns those files.
 
@@ -22,7 +22,7 @@ Twelve findings. **Eight were measured on this machine against the shipped code*
 the primary-source documentation for the exact Electron version we run, and two are marked
 `[UNVERIFIED]` with the command that would settle them.
 
-The headline is not any single bug. It is that **BlackGlass currently has no secret-handling layer
+The headline is not any single bug. It is that **Terminal-Fenster currently has no secret-handling layer
 at all** — not a weak one, not a partial one. There is no permission handler, no redactor, no
 classification of what may reach a log, no scheme allowlist, and no isolation of the profile that
 accumulates cookies. Every protection that exists today is one Chromium happens to provide by
@@ -34,15 +34,23 @@ hold secrets.
 | **F02-01** | **CRITICAL** | The agent snapshot emits the **plaintext value of every editable field except `type=password`** into the model's context and the MCP response. Measured leaks: an OTP code, an API key, a card number, and a textarea. `snapshot.js:121-122` has no exclusion of any kind. | §3.1, **measured** |
 | **F02-02** | **CRITICAL** | No permission handler exists, so **Electron auto-approves every permission request**. A page silently gets camera, microphone, geolocation, screen capture — and `clipboard-read`, which in a terminal browser means reading the clipboard of the shell the user is about to paste into. | §3.2, primary source + code |
 | **F02-03** | **HIGH** | Cookies persist in the **shared, generic `~/Library/Application Support/Electron/` profile**, co-tenanted with every other unpackaged Electron app on the machine. Not designed — already happening: **10 cookies across 6 hosts** are sitting there now. | §3.3, **measured** |
-| **F02-04** | **HIGH** | **The security opt-out makes storage worse.** Setting `BLACKGLASS_MCP_CDP=0` to close the unauthenticated DevTools port also drops `--user-data-dir`, silently relocating the agent's browsing from a throwaway profile into the shared persistent one. | §3.4, code |
-| **F02-05** | **HIGH** | `BLACKGLASS_LOG` records **every URL and every page title verbatim**, in a file created **mode 0644**. URLs are where password-reset tokens, magic links, OAuth codes and session IDs live. | §3.5, **measured** |
+| **F02-04** | **HIGH** | **The security opt-out makes storage worse.** Setting `TERMINAL_FENSTER_MCP_CDP=0` to close the unauthenticated DevTools port also drops `--user-data-dir`, silently relocating the agent's browsing from a throwaway profile into the shared persistent one. | §3.4, code |
+| **F02-05** | **HIGH** | `TERMINAL_FENSTER_LOG` records **every URL and every page title verbatim**, in a file created **mode 0644**. URLs are where password-reset tokens, magic links, OAuth codes and session IDs live. | §3.5, **measured** |
 | **F02-06** | **HIGH** | The MCP audit log defaults to a **predictable path** in `os.tmpdir()`, mode **0644**, containing **full navigation URLs**. A live 9,661-byte file already exists. On Linux that directory is world-readable and the name is guessable. | §3.6, **measured** |
 | **F02-07** | **MEDIUM** | The target URL is passed as a **command-line argument** (`--bg-url=`), readable from `ps` by any process running as this user — and cross-user on Linux. | §3.7, **measured** |
 | **F02-08** | **MEDIUM** | **The obvious fix for F02-01 is a trap.** `DOM.describeNode`, the API you need to *identify* a password field, returns that password's **plaintext** in its attribute list — handing back the one secret Chromium had masked. | §3.8, **measured** |
 | **F02-09** | **MEDIUM** | Chromium's password masking preserves length exactly: a 17-character password renders as 17 bullets. The snapshot leaks password length to the model and to any log that captures it. | §3.9, **measured** |
 | **F02-10** | **MEDIUM** | **No scheme allowlist anywhere.** `browser_navigate` and the CLI's `normalize_url` both accept `file://`, so an agent — or a prompt-injected agent — can read local files and exfiltrate them as snapshot text. | §3.10, code |
-| **F02-11** | **MEDIUM** | With `BLACKGLASS_MCP_PROFILE` pointed at a real profile, the unauthenticated loopback CDP port becomes a **cookie-theft endpoint** for any same-uid process (`Network.getAllCookies`). | §3.11, code |
+| **F02-11** | **MEDIUM** | With `TERMINAL_FENSTER_MCP_PROFILE` pointed at a real profile, the unauthenticated loopback CDP port becomes a **cookie-theft endpoint** for any same-uid process (`Network.getAllCookies`). | §3.11, code |
 | **F02-12** | **LOW** | Log sinks perform **no control-character sanitization**. Raw event JSON is incidentally safe because `JSON.stringify` escapes `ESC`; the `start url=` record at `main.rs:257` is not, and nothing enforces the property. | §3.12, **measured** |
+
+> **2026-08-01 implementation update:** this is the historical audit. The editable AX-value,
+> permission, generic-profile, diagnostic-log, MCP-audit, URL-in-argv, agent local-file scheme, and
+> log-control findings have since been addressed. Editable values are length-only; permissions
+> deny by default; initial URLs use the private socket; logs are 0600/O_NOFOLLOW with structural
+> URL redaction; and agent navigation has a narrower tested scheme policy. Remaining recommendations
+> in this report should still be evaluated individually rather than treating the whole document as
+> closed.
 
 **Single most actionable recommendation** (expanded in §9): **fix F02-01 first, and fix it by
 default-deny.** Change `packages/mcp/lib/snapshot.js:122` so that a value on an *editable* node is
@@ -72,7 +80,7 @@ recalled from training.
 | Electron auto-approves permissions by default | `curl raw.githubusercontent.com/electron/electron/v43.2.0/docs/tutorial/security.md` | line 283 |
 | Cookies persist in the shared default profile | `sqlite3 ~/Library/Application\ Support/Electron/Cookies` | 10 rows, 6 distinct hosts |
 | Log/audit files are created world-readable | `umask` + append-create probe | `022` → `-rw-r--r--` |
-| MCP audit file exists with full URLs | `ls -l "$TMPDIR/blackglass-mcp-audit.jsonl"` | 9,661 bytes, `-rw-r--r--` |
+| MCP audit file exists with full URLs | `ls -l "$TMPDIR/terminal-fenster-mcp-audit.jsonl"` | 9,661 bytes, `-rw-r--r--` |
 | argv is visible in `ps` | `exec -a` + `ps -eo user,args` | full `--bg-url=…?token=…` visible |
 | `JSON.stringify` escapes `ESC` | `node -e` (§3.12) | `contains_raw_ESC: false` |
 
@@ -104,12 +112,12 @@ first noted by D05; re-confirmed here (`ls LICENSE*` → no matches). Unchanged,
 ## 2. Asset inventory — what is actually secret here
 
 A redaction policy is only as good as its inventory. This is every secret-bearing datum that
-crosses a BlackGlass boundary today, with where it lives and which sinks can see it.
+crosses a Terminal-Fenster boundary today, with where it lives and which sinks can see it.
 
 | # | Asset | Lives in | Sinks that can see it today |
 |---|---|---|---|
 | A1 | Session cookies, auth cookies | shared `Electron` profile (F02-03) | disk (persistent), CDP (F02-11) |
-| A2 | Bearer/reset/OAuth tokens **in URLs** | `state.url`, `did-navigate` events | `BLACKGLASS_LOG` (F02-05), MCP audit (F02-06), `ps` (F02-07), status bar, model context |
+| A2 | Bearer/reset/OAuth tokens **in URLs** | `state.url`, `did-navigate` events | `TERMINAL_FENSTER_LOG` (F02-05), MCP audit (F02-06), `ps` (F02-07), status bar, model context |
 | A3 | OTP / 2FA codes | page fields (`type=text`) | **model context** (F02-01) |
 | A4 | API keys, recovery codes | page fields (`type=text`) | **model context** (F02-01) |
 | A5 | Card numbers / PAN | page fields (`type=tel`/`text`) | **model context** (F02-01) |
@@ -117,7 +125,7 @@ crosses a BlackGlass boundary today, with where it lives and which sinks can see
 | A7 | Free-text notes, message drafts | `<textarea>` | **model context** (F02-01) |
 | A8 | System clipboard (SSH keys, tokens) | OS pasteboard | page JS via auto-granted `clipboard-read` (F02-02); terminal path per D04 |
 | A9 | Camera / microphone / location | OS devices | page JS via auto-granted permissions (F02-02) |
-| A10 | Browsing history (URL + title) | events, logs | `BLACKGLASS_LOG` (F02-05), MCP audit (F02-06) |
+| A10 | Browsing history (URL + title) | events, logs | `TERMINAL_FENSTER_LOG` (F02-05), MCP audit (F02-06) |
 | A11 | Local filesystem contents | disk | agent via `file://` navigation (F02-10) |
 | A12 | Downloaded file contents | disk | per B09/D05 — no quarantine, no save path |
 
@@ -194,7 +202,7 @@ lines 283-285 — fetched during this mission, not recalled:
 **The chain that matters most.** `clipboard-read` is ordinary in a GUI browser and dangerous here:
 
 ```
-attacker page loads in BlackGlass
+attacker page loads in Terminal-Fenster
   → navigator.clipboard.readText()          (auto-granted: no handler)
   → returns the clipboard of the terminal the user is working in
   → which routinely holds: an SSH private key, a pasted API token,
@@ -202,7 +210,7 @@ attacker page loads in BlackGlass
   → page POSTs it to attacker origin
 ```
 
-A GUI browser at least renders a permission chip the user can see. BlackGlass composites a single
+A GUI browser at least renders a permission chip the user can see. Terminal-Fenster composites a single
 terminal row of chrome (`main.rs:254`) and has no prompt layer at all yet, so **there is no pixel on
 screen that could ever tell the user this happened.** D05 designs that prompt layer; until it lands,
 default-deny is not a preference, it is the only correct posture.
@@ -259,10 +267,10 @@ the machine.
 
 1. **Cross-application co-tenancy.** Any other unpackaged Electron app — a colleague's prototype,
    an `npx` one-liner, a tutorial project, a malicious postinstall that spawns Electron — resolves to
-   the *same* `userData` path and therefore the *same* cookie jar. It can read BlackGlass's session
+   the *same* `userData` path and therefore the *same* cookie jar. It can read Terminal-Fenster's session
    cookies and write its own. This is not a sandbox escape; it is two apps agreeing to share a
    database because neither named itself.
-2. **Unconsented persistence.** A user who runs `blackglass open https://mail.example.com`, logs in,
+2. **Unconsented persistence.** A user who runs `terminal-fenster open https://mail.example.com`, logs in,
    and quits reasonably expects a terminal tool to be ephemeral. It is not: the session survives, on
    disk, indefinitely, with no private mode and no way to clear it from the product.
 3. **A dev/prod blast radius.** Every swarm probe and e2e run in this repo has been writing into the
@@ -278,7 +286,7 @@ that matters on a developer workstation running untrusted npm lifecycle scripts.
 **not established** — `packages/mcp/lib/engine.js:113-116` only enables `--remote-debugging-port` in
 the same breath as `--user-data-dir`, so this file should not be here from the MCP path, and it may
 belong to an unrelated Electron app (which is itself an illustration of problem 1). I am not
-claiming a BlackGlass bug from it. The 0644 mode is contained by the 0700 parent directory.
+claiming a Terminal-Fenster bug from it. The 0644 mode is contained by the 0700 parent directory.
 
 **Fix.** §7.1 — adopt B09's partition design; the minimal stop-gap is one `app.setPath` call.
 
@@ -294,13 +302,13 @@ if (this.useCdp) {
 }
 ```
 
-Both flags are inside one conditional. `useCdp` is false when `BLACKGLASS_MCP_CDP=0`
+Both flags are inside one conditional. `useCdp` is false when `TERMINAL_FENSTER_MCP_CDP=0`
 (`index.js:86`) — which is the documented, security-motivated opt-out. The file's own header comment
 (`engine.js:14-22`) presents it exactly that way: the DevTools listener is "UNAUTHENTICATED: any
 process running as this user can attach and drive the browser… It is therefore: opt-out via
-`BLACKGLASS_MCP_CDP=0`".
+`TERMINAL_FENSTER_MCP_CDP=0`".
 
-**The inversion.** A user who reads that comment and sets `BLACKGLASS_MCP_CDP=0` closes the
+**The inversion.** A user who reads that comment and sets `TERMINAL_FENSTER_MCP_CDP=0` closes the
 unauthenticated port and, in the same action and without any indication, **moves all agent browsing
 out of the throwaway `mkdtemp` profile and into the shared persistent `Electron` profile of F02-03.**
 They traded a local-attach surface for permanent, co-tenanted cookie storage. The safer-looking
@@ -313,13 +321,13 @@ convenience — but it is the kind that survives review because the conditional 
 
 ---
 
-### 3.5 F02-05 · HIGH · `BLACKGLASS_LOG` records every URL and title, world-readable
+### 3.5 F02-05 · HIGH · `TERMINAL_FENSTER_LOG` records every URL and title, world-readable
 
 **The code.** `apps/cli/src/main.rs:32-41`:
 
 ```rust
 fn log_line(msg: &str) {
-    let Ok(path) = std::env::var("BLACKGLASS_LOG") else { return };
+    let Ok(path) = std::env::var("TERMINAL_FENSTER_LOG") else { return };
     …
     if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
         let _ = writeln!(f, "{ts} {msg}");
@@ -360,7 +368,7 @@ $ python3 -c "...os.open('/tmp/bgrust.log', O_CREAT|O_APPEND|O_WRONLY, 0o666)...
 socket is deliberately `0600` inside a `0700` directory (`main.rs:387-400`) with the comment "so no
 other local user can connect — an open control socket would be full browser takeover." The socket is
 hardened; the file containing the user's entire session-token-bearing history is not. If the user
-sets `BLACKGLASS_LOG=/tmp/bg.log` on Linux, that history is readable by every account on the box.
+sets `TERMINAL_FENSTER_LOG=/tmp/bg.log` on Linux, that history is readable by every account on the box.
 
 **Fix.** §4 (the redaction policy) and §7.3 (mode 0600 + `O_NOFOLLOW`).
 
@@ -371,7 +379,7 @@ sets `BLACKGLASS_LOG=/tmp/bg.log` on Linux, that history is readable by every ac
 **The code.** `packages/mcp/index.js:40-45`:
 
 ```js
-const AUDIT_FILE = process.env.BLACKGLASS_MCP_AUDIT || path.join(os.tmpdir(), 'blackglass-mcp-audit.jsonl');
+const AUDIT_FILE = process.env.TERMINAL_FENSTER_MCP_AUDIT || path.join(os.tmpdir(), 'terminal-fenster-mcp-audit.jsonl');
 function audit(entry) {
   try { fs.appendFileSync(AUDIT_FILE, JSON.stringify({ ts: Date.now(), actor: 'agent', ...entry }) + '\n'); }
   catch { /* never let auditing break a tool call */ }
@@ -383,8 +391,8 @@ function audit(entry) {
 **The measurement.** The file already exists on this machine from prior swarm work:
 
 ```
-$ ls -l "$TMPDIR/blackglass-mcp-audit.jsonl"
--rw-r--r--@ 1 adeebbashir  staff  9661 31 Jul 23:08 …/T//blackglass-mcp-audit.jsonl
+$ ls -l "$TMPDIR/terminal-fenster-mcp-audit.jsonl"
+-rw-r--r--@ 1 builder  staff  9661 31 Jul 23:08 …/T//terminal-fenster-mcp-audit.jsonl
 ```
 
 Mode **0644**, 9,661 bytes, and its first record is a `browser_navigate` carrying a fully
@@ -397,7 +405,7 @@ and world-writable. There, the same code produces:
 
 1. **Cross-user history disclosure.** The filename is a compile-time constant, so any local account
    reads the agent's complete navigation history including tokens in URLs.
-2. **A pre-creation squat.** An attacker who creates `/tmp/blackglass-mcp-audit.jsonl` first — as a
+2. **A pre-creation squat.** An attacker who creates `/tmp/terminal-fenster-mcp-audit.jsonl` first — as a
    file they own, or as a **symlink to a file they want appended to** — wins, because
    `appendFileSync` follows symlinks and the `catch {}` swallows every error silently. The audit
    trail then either lands in the attacker's file or vanishes with no signal. An audit log that can
@@ -421,7 +429,7 @@ and integrity are both required here; §7.4 gets both by creating the file `O_EX
 ```
 $ /bin/sh -c 'exec -a "electron --bg-url=https://mail.example.com/?token=SECRET_TOKEN_XYZ" /bin/sleep 20' &
 $ ps -eo user,args | grep SECRET_TOKEN_XYZ
-adeebbashir      electron --bg-url=https://mail.example.com/?token=SECRET_TOKEN_XYZ 20
+builder      electron --bg-url=https://mail.example.com/?token=SECRET_TOKEN_XYZ 20
 ```
 
 **Scoping, honestly.** On macOS, `KERN_PROCARGS2` restricts full argv to the same uid or root, so
@@ -524,7 +532,7 @@ told "check the config file at /Users/x/.aws/credentials" will comply, and the f
 mark the stolen credentials as untrusted.
 
 **For the CLI path** `file://` is a legitimate feature — a terminal browser that cannot open a local
-HTML file is worse for it. The asymmetry is the point: **a human typing `blackglass open ./report.html`
+HTML file is worse for it. The asymmetry is the point: **a human typing `terminal-fenster open ./report.html`
 has consented; an agent calling `browser_navigate("file:///…")` has not.** The policy in §6.4 splits
 on that.
 
@@ -536,9 +544,9 @@ on that.
 DevTools listener is loopback-only ("verified with lsof") but **unauthenticated**, so any same-uid
 process can attach.
 
-The finding F02 adds is the interaction with `BLACKGLASS_MCP_PROFILE` (`engine.js:88`). The
+The finding F02 adds is the interaction with `TERMINAL_FENSTER_MCP_PROFILE` (`engine.js:88`). The
 throwaway-profile mitigation is what keeps the unauthenticated port boring — an attacker who attaches
-to a blank profile gets a blank browser. The moment a user sets `BLACKGLASS_MCP_PROFILE` to a real,
+to a blank profile gets a blank browser. The moment a user sets `TERMINAL_FENSTER_MCP_PROFILE` to a real,
 logged-in profile (which is the natural thing to do the first time an agent hits a login wall), the
 same port becomes a **credential exfiltration endpoint**: attach, `Network.getAllCookies`, done —
 returning decrypted cookie values for every host in the jar, bypassing the at-rest encryption of
@@ -546,7 +554,7 @@ returning decrypted cookie values for every host in the jar, bypassing the at-re
 
 Also note `DevToolsActivePort` is written mode 0644 (measured, §3.3). Contained by the 0700 profile
 directory when the profile is a `mkdtemp` one; **not** necessarily contained for a user-chosen
-`BLACKGLASS_MCP_PROFILE` path, whose mode nobody checks.
+`TERMINAL_FENSTER_MCP_PROFILE` path, whose mode nobody checks.
 
 **Fix.** §7.6 — refuse to enable CDP and a non-throwaway profile simultaneously; fail loudly rather
 than silently combining them. The durable fix remains the one `engine.js:21` already names: move
@@ -581,7 +589,7 @@ a defense:
    with no JSON envelope and no sanitization. A URL containing an escape sequence — trivially
    arrived at by pasting one, and `data:` URLs make it easy — lands raw in the log.
 
-`crates/bg-term/src/unicode.rs` already provides `sanitize_for_terminal`, used for the status bar at
+`crates/tf-term/src/unicode.rs` already provides `sanitize_for_terminal`, used for the status bar at
 `main.rs:887-888`. The log sink should use the same function. The property is cheap to hold and
 cheap to test (§8, gate G5).
 
@@ -662,25 +670,25 @@ only question a log is actually asked about titles — answerable, without discl
 | Level | Env | Contents | Default |
 |---|---|---|---|
 | `off` | unset | nothing; sink never created | ✅ |
-| `ops` | `BLACKGLASS_LOG_LEVEL=ops` | S2 only. No URLs, no titles. Enough to debug a rendering or protocol fault. | |
+| `ops` | `TERMINAL_FENSTER_LOG_LEVEL=ops` | S2 only. No URLs, no titles. Enough to debug a rendering or protocol fault. | |
 | `nav` | `…=nav` | S2 + S1-redacted (§4.2, §4.3). The useful default for a bug report. | |
 | `full` | `…=full` | S1 verbatim. **S0 still never appears.** Prints a one-line warning to stderr at startup naming the file and stating it will contain URLs and titles. | |
 
-**`BLACKGLASS_LOG` being set must no longer imply a level.** Today, setting the path enables full URL
+**`TERMINAL_FENSTER_LOG` being set must no longer imply a level.** Today, setting the path enables full URL
 and title logging (§3.5). It should default to `nav`. There is no level at which S0 is written; the
 `full` level is about S1, and that distinction must be enforced by the type system rather than by
 reviewer discipline (§4.1's construction rule).
 
 ### 4.5 Sink hygiene
 
-Applies to `BLACKGLASS_LOG`, `BLACKGLASS_MCP_LOG`, and `BLACKGLASS_MCP_AUDIT` alike:
+Applies to `TERMINAL_FENSTER_LOG`, `TERMINAL_FENSTER_MCP_LOG`, and `TERMINAL_FENSTER_MCP_AUDIT` alike:
 
 1. **Mode `0600` on creation**, set atomically via `OpenOptionsExt::mode(0o600)` on Unix (Rust) and
    `fs.openSync(path, 'a', 0o600)` (Node). Do not create-then-`chmod`: that races.
 2. **`O_NOFOLLOW`**, so a symlink planted at the path fails the open instead of appending to the
    target (§3.6).
 3. **Default location must not be world-writable.** Replace `os.tmpdir()` with a `0700`
-   application directory (`$XDG_STATE_HOME/blackglass/` or `~/Library/Application Support/BlackGlass/`).
+   application directory (`$XDG_STATE_HOME/terminal-fenster/` or `~/Library/Application Support/Terminal-Fenster/`).
    If a tmpdir path is kept for compatibility, create it `O_EXCL` once at startup and fail loudly if
    it exists and is not a 0600 regular file owned by the current uid.
 4. **Sanitize on write.** Every string reaching a sink passes `unicode::sanitize_for_terminal`
@@ -722,12 +730,12 @@ by class not by sink, to:
 | Crash reports (B08) | S1 in the URL/title of the crashed page | Same S0/S1 rules. Never attach the frame buffer: a screenshot **is** the rendered secret. |
 | Recorder/replay traces (E06) | typed text is S0 by definition | Record `length` + field ref, never the text — mirror `index.js:445`'s existing discipline |
 | MCP tool **responses** | `statusLine()` (`index.js:112-117`) emits the **full URL and title on every single tool call** | These go to the model provider. Apply §4.2 unless the run opts in. **This is the highest-volume S1 egress in the product and is currently unredacted.** |
-| `process.env` dumps in diagnostics | would capture `BLACKGLASS_MCP_PROFILE`, proxy creds | Allowlist `BLACKGLASS_*` non-secret keys; never dump env wholesale |
+| `process.env` dumps in diagnostics | would capture `TERMINAL_FENSTER_MCP_PROFILE`, proxy creds | Allowlist `TERMINAL_FENSTER_*` non-secret keys; never dump env wholesale |
 | Terminal scrollback | the rendered page is in the user's scrollback | Out of scope for redaction; note it in docs — TB3 |
 | `ps` / argv | §3.7 | Fixed by moving the URL to the socket (§7.5) |
 
 The third row deserves emphasis. `statusLine()` runs on the return path of essentially every tool in
-`packages/mcp/index.js`. Whatever `BLACKGLASS_LOG` does or does not record, the **full URL and title
+`packages/mcp/index.js`. Whatever `TERMINAL_FENSTER_LOG` does or does not record, the **full URL and title
 are already being sent to the model provider on every action** — which makes it a larger egress
 channel than any file on disk.
 
@@ -822,7 +830,7 @@ only*, never attributes, and so cannot leak by construction. That is the shape t
 | `https:` | allow | allow |
 | `http:` | allow + warn | allow + warn |
 | `about:blank` | allow | allow |
-| `file:` | **allow** — explicit human action | **DENY by default** (§3.10). Opt-in via `BLACKGLASS_MCP_ALLOW_FILE=1`, and even then confined to a configured root, resolved with symlinks followed **before** the prefix check |
+| `file:` | **allow** — explicit human action | **DENY by default** (§3.10). Opt-in via `TERMINAL_FENSTER_MCP_ALLOW_FILE=1`, and even then confined to a configured root, resolved with symlinks followed **before** the prefix check |
 | `data:` | allow | allow, capped at 64 KiB |
 | `blob:`, `filesystem:` | allow | deny |
 | `javascript:` | **deny both** | **deny both** — a `javascript:` navigation is script injection into whatever origin is loaded |
@@ -851,12 +859,12 @@ estimate of the diff, not of review.
 | # | File:line | Change | Effort |
 |---|---|---|---|
 | **7.0** | `packages/mcp/lib/snapshot.js:121-122` | **F02-01.** Emit `value=<redacted:N chars>` for editable nodes; verbatim only for non-editable; add `includeFieldValues` opt-in (§6.2). **Do this first.** | ~15 lines |
-| **7.1** | `apps/engine/src/main.js` (new, near `:288`) | **F02-02 + F02-03.** `session.defaultSession.setPermissionRequestHandler` **and** `setPermissionCheckHandler` from the §5 table; `app.setPath('userData', …)` to a BlackGlass-specific dir before `whenReady` resolves. Adopt B09's partition design as the full version. | ~20 lines |
+| **7.1** | `apps/engine/src/main.js` (new, near `:288`) | **F02-02 + F02-03.** `session.defaultSession.setPermissionRequestHandler` **and** `setPermissionCheckHandler` from the §5 table; `app.setPath('userData', …)` to a Terminal-Fenster-specific dir before `whenReady` resolves. Adopt B09's partition design as the full version. | ~20 lines |
 | **7.2** | `packages/mcp/lib/engine.js:113-116` | **F02-04.** Hoist `--user-data-dir` out of the `if (this.useCdp)` block. | 3 lines |
-| **7.3** | `apps/cli/src/main.rs:32-41, 257, 549` | **F02-05 + F02-12.** `OpenOptionsExt::mode(0o600)` + `custom_flags(O_NOFOLLOW)`; route both call sites through the §4.2/§4.3 redactor; `sanitize_for_terminal` on write; add `BLACKGLASS_LOG_LEVEL` (§4.4). | ~60 lines + tests |
+| **7.3** | `apps/cli/src/main.rs:32-41, 257, 549` | **F02-05 + F02-12.** `OpenOptionsExt::mode(0o600)` + `custom_flags(O_NOFOLLOW)`; route both call sites through the §4.2/§4.3 redactor; `sanitize_for_terminal` on write; add `TERMINAL_FENSTER_LOG_LEVEL` (§4.4). | ~60 lines + tests |
 | **7.4** | `packages/mcp/index.js:40-45, 373` | **F02-06.** Move default out of `os.tmpdir()` to a 0700 app dir; create `O_EXCL|O_NOFOLLOW` 0600 at startup; redact the URL at `:373`. Keep the `catch {}` on **write** only. | ~25 lines |
 | **7.5** | `apps/cli/src/main.rs:402-411`; `packages/mcp/lib/engine.js:104-111`; `apps/engine/src/main.js:23` | **F02-07.** Drop `--bg-url`; send `{t:'navigate',url}` over the 0600 socket after `ready`. The engine handler already exists (`main.js:228-230`). | ~15 lines |
-| **7.6** | `packages/mcp/lib/engine.js:88, 113` | **F02-11.** If `BLACKGLASS_MCP_PROFILE` is set **and** `useCdp`, refuse to start with an explanatory error. Verify the profile dir is 0700 and uid-owned. | ~10 lines |
+| **7.6** | `packages/mcp/lib/engine.js:88, 113` | **F02-11.** If `TERMINAL_FENSTER_MCP_PROFILE` is set **and** `useCdp`, refuse to start with an explanatory error. Verify the profile dir is 0700 and uid-owned. | ~10 lines |
 | **7.7** | `apps/cli/src/main.rs:293`; `packages/mcp/index.js:367`; engine `will-navigate` | **F02-10.** The §6.4 scheme allowlist at all three points. | ~30 lines |
 | **7.8** | shared module (new) | §4.6 secret net + §4.2 URL redactor, with the `aho-corasick` prefilter. Needed by 7.3, 7.4, and 7.0. | ~120 lines + tests |
 | **7.9** | `packages/mcp/index.js:112-117` | §4.7. Redact `statusLine()`'s URL/title unless opted in — the highest-volume S1 egress in the product. | ~5 lines |
@@ -876,14 +884,14 @@ verification is unavailable at a lock screen.
 | Gate | Assertion | Fails today? |
 |---|---|---|
 | **G1** | For each row of the §4.2 table, `redact_url(input) == expected`. Table-driven unit test. | n/a (no redactor) |
-| **G2** | **Canary sweep.** Drive a page holding one canary per field type from §3.1; then `grep -c 'CANARY' <every sink>` — MCP response, `BLACKGLASS_LOG`, audit JSONL, MCP stderr log — **must be 0**. Passwords must appear as neither plaintext nor a length-preserving bullet run. | **YES — measured, §3.1** |
+| **G2** | **Canary sweep.** Drive a page holding one canary per field type from §3.1; then `grep -c 'CANARY' <every sink>` — MCP response, `TERMINAL_FENSTER_LOG`, audit JSONL, MCP stderr log — **must be 0**. Passwords must appear as neither plaintext nor a length-preserving bullet run. | **YES — measured, §3.1** |
 | **G3** | Load a page calling `getUserMedia`, `geolocation.getCurrentPosition`, `navigator.clipboard.readText`, and `getDisplayMedia`; assert **every** one rejects and each emits a deny event. | **YES — §3.2** |
-| **G4** | After a full browse-and-quit cycle, assert no new rows in `~/Library/Application Support/Electron/Cookies` and that the profile path used is BlackGlass-specific. | **YES — §3.3** |
+| **G4** | After a full browse-and-quit cycle, assert no new rows in `~/Library/Application Support/Electron/Cookies` and that the profile path used is Terminal-Fenster-specific. | **YES — §3.3** |
 | **G5** | Write a title/URL containing `ESC`, `BEL`, `CSI`, and an `OSC 52` payload; assert no byte `< 0x20` other than `\n` reaches any log file. | **YES for `main.rs:257` — §3.12** |
 | **G6** | `stat` every sink after a run: mode must be `0600`, owner the current uid, and the parent directory `0700`. | **YES — measured 0644, §3.5/§3.6** |
 | **G7** | `ps -eo args` during a session must not match the canary token embedded in the URL. | **YES — measured, §3.7** |
 | **G8** | `browser_navigate('file:///etc/passwd')` must be refused by the MCP server, and `browser_navigate('javascript:1')` refused by both front ends. | **YES — §3.10** |
-| **G9** | Pre-create the audit path as a symlink to a canary file; assert BlackGlass refuses and the canary is unmodified. | **YES — §3.6** |
+| **G9** | Pre-create the audit path as a symlink to a canary file; assert Terminal-Fenster refuses and the canary is unmodified. | **YES — §3.6** |
 | **G10** | Grep gate: no `format!`/template literal interpolating `url`, `title`, or `value` into a log call outside the redactor module. Enforces §4.1's construction rule mechanically. | **YES — `main.rs:257`, `:549`** |
 
 G2 is the one to build first: it is a single harness that would have caught F02-01, F02-05, F02-06,
@@ -987,14 +995,14 @@ disappears the moment focus forwarding is implemented. Register the §5 handler 
 | `will-download` with no handler raises an invisible `NSSavePanel` | **D05 measured this** (probe D: no `done` event for 20 s, then `cancelled` with an empty save path). I did not re-run it and I accept D05's result. | D05 §3.1 |
 | File chooser (`<input type=file>`) behavior offscreen | not executed; D05 reports Electron has no public API for it and that CDP is required | D05 §5 |
 | Cross-user `/proc/<pid>/cmdline` visibility on Linux | this host is macOS; the macOS half is measured (§3.7) | run G7 on a Linux CI runner |
-| Provenance of `DevToolsActivePort` in the shared profile | file present, writer not identified; may belong to an unrelated Electron app | `lsof` during a clean BlackGlass run |
+| Provenance of `DevToolsActivePort` in the shared profile | file present, writer not identified; may belong to an unrelated Electron app | `lsof` during a clean Terminal-Fenster run |
 | iTerm2 behavior for any of the above | macOS TCC blocks automation (project constraint) | manual run |
 
 ---
 
 ## 12. One-paragraph summary for the commander
 
-BlackGlass has no secret-handling layer today: no permission handler, no redactor, no data
+Terminal-Fenster has no secret-handling layer today: no permission handler, no redactor, no data
 classification, no scheme allowlist, and no profile isolation. Eight of the twelve findings here were
 measured on this machine against shipped code. The worst is that the agent snapshot emits the
 plaintext of every editable field except `type=password` — I recovered a planted OTP, API key, card
@@ -1004,8 +1012,8 @@ Second is that Electron auto-approves every permission request because no handle
 (primary source: Electron v43.2.0 `security.md:283`), which hands any page the camera, microphone,
 geolocation, and the clipboard of the shell the user is about to paste into. Behind those, cookies
 are quietly accumulating in the generic shared `Electron` profile (10 cookies, 6 hosts, measured),
-`BLACKGLASS_LOG` writes every URL and title into a 0644 file, and the documented security opt-out
-`BLACKGLASS_MCP_CDP=0` silently makes storage isolation worse. §4 gives the redaction policy — S0
+`TERMINAL_FENSTER_LOG` writes every URL and title into a 0644 file, and the documented security opt-out
+`TERMINAL_FENSTER_MCP_CDP=0` silently makes storage isolation worse. §4 gives the redaction policy — S0
 never logged, S1 redacted by default, URLs stripped of query *values* and the entire fragment, log
 records built from typed fields rather than formatted from free strings — and §5 gives the
 default-deny permission matrix. Fix `snapshot.js:122` first: it is fifteen lines, it depends on

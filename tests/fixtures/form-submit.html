@@ -1,4 +1,4 @@
-<!-- BlackGlass fixture: form-submit
+<!-- Terminal-Fenster fixture: form-submit
      Proves: a form submission is a real navigation. The engine must emit did-navigate and
      the URL must carry the encoded fields. Three submission routes are exercised because
      they take different paths through Blink: a submit button click, Enter pressed inside a
@@ -43,7 +43,7 @@ button{background:#22222c;cursor:pointer;border-color:#4a4a5a}
 <div class="hdr" style="left:40px;top:96px">GET form — the expected result URL is fully determined</div>
 <form id="getForm" method="get" action="form-target.html">
   <label style="left:40px;top:124px">q</label>
-  <input name="q" id="q" value="blackglass" style="left:40px;top:144px;width:200px">
+  <input name="q" id="q" value="terminal-fenster" style="left:40px;top:144px;width:200px">
   <label style="left:260px;top:124px">n</label>
   <input name="n" id="n" value="42" style="left:260px;top:144px;width:80px">
   <label style="left:360px;top:124px">opt</label>
@@ -56,7 +56,7 @@ button{background:#22222c;cursor:pointer;border-color:#4a4a5a}
   <button type="submit" id="submitGet" style="left:560px;top:144px;width:150px">submit (button)</button>
 </form>
 <div class="note" style="left:40px;top:186px">
-expected: <code>form-target.html?q=blackglass&amp;n=42&amp;opt=b&amp;hidden=h1&amp;chk=on</code>
+expected: <code>form-target.html?q=terminal-fenster&amp;n=42&amp;opt=b&amp;hidden=h1&amp;chk=on</code>
 </div>
 
 <div class="hdr" style="left:40px;top:236px">Enter-key submission — no submit button in this form</div>
@@ -130,7 +130,7 @@ window.__bg = {
   bg.expect = {
     unit: 'CSS pixels',
     getForm: { submitButton: { box: [560, 144, 150, 32], centre: [635, 160] },
-               resultQuery: '?q=blackglass&n=42&opt=b&hidden=h1&chk=on',
+               resultQuery: '?q=terminal-fenster&n=42&opt=b&hidden=h1&chk=on',
                resultPath: 'form-target.html' },
     enterForm: { field: { id: 'q2', box: [40, 264, 200, 32], centre: [140, 280] },
                  route: 'focus the field, send Return',

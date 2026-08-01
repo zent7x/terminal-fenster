@@ -1,6 +1,6 @@
 # C01 — Kitty Graphics Protocol Conformance Audit
 
-**Target:** `crates/bg-term/src/kitty.rs` (396 lines, read-only for this audit)
+**Target:** `crates/tf-term/src/kitty.rs` (396 lines, read-only for this audit)
 **Auditor:** Swarm agent C01
 **Date:** 2026-07-31
 **Verdict:** **Wire format is conformant. No frame-corrupting defect found.** Ten defects
@@ -30,9 +30,9 @@ Id reuse — *"the existing image and all its placements must be deleted."*
 ## Method
 
 I did not trust the source comments. I built a throwaway harness outside the repo
-(`$SCRATCH/kdump`, a detached cargo project with a path dependency on `bg-term`) that calls
+(`$SCRATCH/kdump`, a detached cargo project with a path dependency on `tf-term`) that calls
 the public encoder and prints every emitted byte with escapes rendered. No repo file was
-modified. Baseline confirmed first: `cargo test -p bg-term` → **70 passed; 0 failed**.
+modified. Baseline confirmed first: `cargo test -p tf-term` → **70 passed; 0 failed**.
 
 ### Byte-exact output actually produced
 
@@ -147,7 +147,7 @@ Spec: https://sw.kovidgoyal.net/kitty/graphics-protocol/
 ### D3 — No APC/DCS branch in the input decoder; only `q=2` prevents keystroke injection (High)
 
 Not in `kitty.rs`, but it is the failure mode `kitty.rs` is implicitly relying on, so it belongs
-in this audit. `crates/bg-term/src/input.rs` `step()` dispatches on `self.buf[1]` with arms for
+in this audit. `crates/tf-term/src/input.rs` `step()` dispatches on `self.buf[1]` with arms for
 `b'['` (CSI) and `b'O'` (SS3) only; everything else falls to the catch-all that decodes
 `ESC <char>` as **Alt+char**. There is no `ESC _` (APC) or `ESC P` (DCS) arm — I grepped for one
 and the only `b'P'` hit is an SS3 F1 mapping at `input.rs:318`.
@@ -209,7 +209,7 @@ image data of those placements. Images held in terminal storage with no visible 
 not touched. The comment should say what the code does.
 
 More importantly, the sequence is written twice. `kitty.rs:220` emits `\x1b_Ga=d,d=A\x1b\\`, and
-`crates/bg-term/src/tty.rs:33` hardcodes the identical literal inside `RESTORE_SEQ`, pinned by a
+`crates/tf-term/src/tty.rs:33` hardcodes the identical literal inside `RESTORE_SEQ`, pinned by a
 test at `tty.rs:233`. `kitty::delete_all` has **no callers anywhere in the repo** — I grepped.
 Two sources of truth for the escape that enforces the crate's stated top invariant ("the terminal
 must always be restored") is exactly where drift will happen.
@@ -264,7 +264,7 @@ Low likelihood, self-limiting (we are exiting anyway), but it is a genuine proto
 the terminal's `currently_loading` state is left dangling.
 
 **Recommendation.** Track an "in a chunked transfer" flag and have the restore path emit the
-final `m=0` terminator before the delete. Note this only matters if BlackGlass ever leaves the
+final `m=0` terminator before the delete. Note this only matters if Terminal-Fenster ever leaves the
 alternate screen with images intended to persist.
 
 ### D10 — Dead code and one unreachable panic (Low / informational)

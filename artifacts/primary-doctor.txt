@@ -1,4 +1,4 @@
-blackglass doctor 0.1.0
+terminal-fenster doctor 0.1.0
 
   terminal
     TERM                xterm-ghostty
@@ -25,7 +25,7 @@ blackglass doctor 0.1.0
     page viewport       2482x851
 
   engine
-    electron            /Users/adeebbashir/projects/blackglass/apps/engine/node_modules/.bin/electron
+    electron            $REPO/apps/engine/node_modules/.bin/electron
 
   raw replies
     kitty_graphics      \e_Gi=31;OK\e\

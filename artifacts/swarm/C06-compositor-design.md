@@ -37,18 +37,18 @@ Read directly from the tree; not restated from the brief.
 
 | Fact | Evidence |
 |---|---|
-| Page frame arrives as BGRA, 32-byte header + `w*h*4` pixels | `crates/bg-proto/src/lib.rs:16-54`; arithmetic check: `2482*814*4 + 32 = 8,081,424` — exactly the byte count in the brief |
+| Page frame arrives as BGRA, 32-byte header + `w*h*4` pixels | `crates/tf-proto/src/lib.rs:16-54`; arithmetic check: `2482*814*4 + 32 = 8,081,424` — exactly the byte count in the brief |
 | Wire reduction 8,081,424 → 53,999 B = **149.7×** | computed; matches the brief's "150×" |
 | Ghostty geometry is cell-exact: 2482/17 = **146 cols**, 851/37 = **23 rows**, page 814/37 = **22 rows** | computed from A04's measured cell size 17×37 |
 | Exactly **one** bottom row is reserved for chrome today | `apps/cli/src/main.rs:254` — `page_h = vp_h - cell_h` |
 | The compositor already builds one buffer and does **one** `write`+`flush` | `apps/cli/src/main.rs:899-901` |
-| `Placement` already carries `cols`, `rows`, `z`, `no_cursor_move` and encodes them | `crates/bg-term/src/kitty.rs:80-95`, encoded at `:137-148` |
+| `Placement` already carries `cols`, `rows`, `z`, `no_cursor_move` and encodes them | `crates/tf-term/src/kitty.rs:80-95`, encoded at `:137-148` |
 | …but every caller uses `Placement::default()` → `cols=None, rows=None, z=0` | `apps/cli/src/main.rs:860`; default at `kitty.rs:93` |
-| Page-derived text is sanitized (strips C0, DEL, C1, U+2028/9) before the tty | `crates/bg-term/src/unicode.rs:60-75`, tested `:126-142` |
+| Page-derived text is sanitized (strips C0, DEL, C1, U+2028/9) before the tty | `crates/tf-term/src/unicode.rs:60-75`, tested `:126-142` |
 | Three independent writers to the tty exist; A09 demands one | `artifacts/swarm/B01-architecture-rfc.md` §2.1 |
 | Consumer currently ignores the dirty rect and re-encodes the full frame | `apps/cli/src/main.rs:848-880`; corroborated by B07:29 |
 | The engine **discards** the dirty rect when coalescing (latent stale-region bug) | B07:12-13, 26, pointing at `apps/engine/src/main.js:96-97` |
-| Teardown already deletes all images | `crates/bg-term/src/tty.rs:36` (`a=d,d=A`), tested `:233` |
+| Teardown already deletes all images | `crates/tf-term/src/tty.rs:36` (`a=d,d=A`), tested `:233` |
 
 Two of these are load-bearing for everything below: the placement mechanism is **built but
 unused**, and damage-only transmit is **not yet safe** because the engine drops damage on coalesce.
@@ -494,7 +494,7 @@ dismissible with a single key. The find bar's occlusion of a search hit is a rea
 positioned by an explicit `CUP` at the page band's first row; a placement of `r` rows starting at
 row `R` occupies exactly rows `R … R+r−1`, and trust bands lie outside that interval. The page has
 no second channel: page-*derived text* (title, URL) is stripped of ESC, C0, C1 and DEL before it
-reaches the tty (`crates/bg-term/src/unicode.rs:60-75`, tested `:126-142`), so it cannot smuggle
+reaches the tty (`crates/tf-term/src/unicode.rs:60-75`, tested `:126-142`), so it cannot smuggle
 `CUP`/`SGR` to escape its band.
 
 **This argument depends on three things, and each is a real obligation:**
@@ -535,7 +535,7 @@ strong argument for it, since three of our four backends cannot do z-ordering at
 
 ## 11. Byte-exact sequence catalogue
 
-Derived from A04 §1.2/§1.6 and from our encoder (`crates/bg-term/src/kitty.rs:125-156`).
+Derived from A04 §1.2/§1.6 and from our encoder (`crates/tf-term/src/kitty.rs:125-156`).
 
 ```text
 # Page: transmit + display, full frame  (current hot path)
@@ -617,7 +617,7 @@ confirmed before the design is trusted in full.
   UX cost.
 - **Q4 — damage patches vs. band boundaries.** A damage patch whose rect touches the page band's
   last row must be clipped to the band before placement, or it spills into chrome. `Rect::clamp_to`
-  (`crates/bg-term/src/lib.rs:53-63`) already does exactly this and should be used.
+  (`crates/tf-term/src/lib.rs:53-63`) already does exactly this and should be used.
 
 ---
 

@@ -1,6 +1,6 @@
 # C04 — Unicode fallback quality: measured analysis and proposed algorithms
 
-**Scope:** review of `crates/bg-term/src/unicode.rs` (164 lines, `render_half_blocks` at
+**Scope:** review of `crates/tf-term/src/unicode.rs` (164 lines, `render_half_blocks` at
 `unicode.rs:20-50`). Proposals only. No core source was modified.
 
 **Verdict up front.** The mission's premise was that higher sub-cell resolution (quadrants,
@@ -374,7 +374,7 @@ rasterisation and bbox rounding.
 The nuance that keeps octants alive at all: kitty, Ghostty, WezTerm and foot draw block and
 box-drawing glyphs *procedurally*, bypassing the font entirely (UNVERIFIED on this machine — the
 lock screen blocks visual confirmation; it is documented behaviour for kitty and Ghostty and should
-be re-checked). Those terminals all have a graphics protocol, so BlackGlass would normally never
+be re-checked). Those terminals all have a graphics protocol, so Terminal-Fenster would normally never
 select the Unicode backend there — **except under tmux**, which blocks kitty graphics passthrough
 but not text. That is the one real octant opportunity.
 
@@ -424,12 +424,12 @@ the cell centre, giving up to ±8.5 px horizontal and ±18.5 px vertical positio
 rules closer than 17 px merge into one. The measured position error was 8–18 px versus **3.7 px**
 for contrast-preserving octants, which reuse the sub-cell grid already being computed, need no
 additional repertoire, and cost no extra detection pass. Box-drawing is worth keeping only for
-deliberate chrome that BlackGlass itself draws, not for reconstructing page content.
+deliberate chrome that Terminal-Fenster itself draws, not for reconstructing page content.
 
 ### Dithering
 
 With two colours per cell, smooth gradients band; §5 shows gradients are also the one region where
-finer sub-grids help. Error diffusion is the wrong tool because BlackGlass renders a live scrolling
+finer sub-grids help. Error diffusion is the wrong tool because Terminal-Fenster renders a live scrolling
 page and diffused error is history-dependent, so a static region would boil. An ordered Bayer
 threshold is a deterministic function of position, so a static region is stable frame to frame and
 scrolling shifts a coherent pattern: replace `mask_k = cov_k > τ` with `mask_k = cov_k > B(x,y)`
@@ -573,6 +573,6 @@ python3 exp6.py       # 23-hairline chart; text stroke contrast retention
 
 Harness is `harness.py` (overlap matrices, renderers, PSNR/SSIM). It has no dependencies beyond
 numpy and PIL, both already present. Written under
-`/private/tmp/claude-501/-Users-adeebbashir/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/`,
+`/private/tmp/claude-501/-Users-builder/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/`,
 which is session-scoped; the scripts should be moved into `benchmarks/` by whoever owns that path
 if these measurements are to be kept in CI.

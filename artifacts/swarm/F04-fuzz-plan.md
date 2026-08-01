@@ -1,7 +1,7 @@
 # F04 — Fuzz and Property Testing Plan
 
-**Scope:** `crates/bg-term/src/input.rs`, `crates/bg-term/src/kitty.rs` + `b64.rs`,
-`crates/bg-proto/src/lib.rs`, `crates/bg-term/src/caps.rs`.
+**Scope:** `crates/tf-term/src/input.rs`, `crates/tf-term/src/kitty.rs` + `b64.rs`,
+`crates/tf-proto/src/lib.rs`, `crates/tf-term/src/caps.rs`.
 **Status:** every finding below was executed, not reasoned about. 36 properties were written,
 compiled against the real crates, and run. **25 pass, 11 fail. 7 distinct panics reproduced.**
 **Author owns only this file.** No core source was modified. All fixes are described, not made.
@@ -17,7 +17,7 @@ levels, and the plan is weighted accordingly.
 |---|---|---|---|
 | Terminal byte stream → `input.rs`, `caps.rs` | Remote SSH host, any process sharing the tty, the emulator itself, `cat` of a hostile file | **Untrusted** | P0 |
 | Page title / URL → `json_get_str` via `T_EVENT` | **Any website** (`document.title` is free-form) | **Untrusted content, trusted transport** | P0 |
-| Frame header + dirty rect → `bg-proto`, `kitty.rs` | Engine main process | Trusted peer (socket is `0600` in a `0700` dir — `apps/cli/src/main.rs:387-401`) | P1, defense-in-depth |
+| Frame header + dirty rect → `tf-proto`, `kitty.rs` | Engine main process | Trusted peer (socket is `0600` in a `0700` dir — `apps/cli/src/main.rs:387-401`) | P1, defense-in-depth |
 | Our own encoder output → terminal | Us | Trusted, but a malformed APC wedges the user's tty | P1 |
 
 Two consequences worth stating plainly. First, the Unix socket is genuinely well-permissioned,
@@ -33,7 +33,7 @@ none of these crashes corrupt the terminal. They still kill the browser mid-sess
 
 ## 2. Confirmed defects
 
-Reproduced with a zero-dependency harness that pulls the real `bg-proto` and `bg-term::input`
+Reproduced with a zero-dependency harness that pulls the real `tf-proto` and `tf-term::input`
 sources in by `#[path]` and copies `Rect` / `bgra_rect_to_rgb` / `itoa` verbatim.
 Run under both profiles: `overflow_checks = true` (debug) and `false` (release).
 
@@ -44,8 +44,8 @@ Run under both profiles: `overflow_checks = true` (debug) and `false` (release).
 | **F04-01** | `kitty.rs:61` | dirty rect exceeds image bounds | `range end index 80 out of range for slice of length 64` | same |
 | **F04-02** | `kitty.rs:56` `(rect.area() * 3) as usize` | `rect.w = rect.h = u32::MAX` | `attempt to multiply with overflow` | `capacity overflow` |
 | **F04-03** | `kitty.rs:60` `y * stride` | `img_w = u32::MAX`, `rect.y = u32::MAX` | `attempt to multiply with overflow` | `range start index 18446744039349813252 out of range` |
-| **F04-04** | `bg-proto/lib.rs:52` `expected_payload` | `width = height = 0xFFFFFFFF` | `attempt to multiply with overflow` | **wraps silently** |
-| **F04-05** | `bg-term/lib.rs:48-49` `Rect::union` | `x + w > u32::MAX` | `attempt to add with overflow` | **wraps; union no longer covers its inputs** |
+| **F04-04** | `tf-proto/lib.rs:52` `expected_payload` | `width = height = 0xFFFFFFFF` | `attempt to multiply with overflow` | **wraps silently** |
+| **F04-05** | `tf-term/lib.rs:48-49` `Rect::union` | `x + w > u32::MAX` | `attempt to add with overflow` | **wraps; union no longer covers its inputs** |
 | **F04-06** | `kitty.rs:177` `itoa` | `i64::MIN` | `attempt to negate with overflow` | returns `"-"` — a digitless number |
 | **F04-07** | `kitty.rs:108` | `rgb.len() != w*h*3`, or `w*h*3` overflowing `usize` | `assert_eq!` panic / multiply overflow | same |
 
@@ -100,14 +100,14 @@ input is silently dead** — the user's browser stops responding to input with n
 
 **F04-11 — `MessageReader` has no length ceiling.** A `u32::MAX` length prefix makes it buffer
 indefinitely: after feeding 128 MiB against a bogus prefix, `buffered() == 134,217,733`.
-Note also that `5 + len` at `bg-proto/lib.rs:87` overflows `usize` on a 32-bit target, which
+Note also that `5 + len` at `tf-proto/lib.rs:87` overflows `usize` on a 32-bit target, which
 would turn the guard into an out-of-bounds slice — **UNVERIFIED**, no 32-bit toolchain installed.
 
 ### 2.3 Semantic defects (no crash, wrong answer)
 
 **F04-12 — `json_get_str` / `json_get_bool` are confused by nested objects.** Both do
 `json.find("\"key\"")` and take the **first** hit anywhere in the text, including inside a nested
-object (`bg-proto/lib.rs:126`, `:159`).
+object (`tf-proto/lib.rs:126`, `:159`).
 
 ```
 {"meta":{"v":"ATTACKER"},"t":"url","v":"https://real"}   -> json_get_str(...,"v") == "ATTACKER"
@@ -140,7 +140,7 @@ terminal, `stats.chunks == 1`, and no `m=0` terminator is ever sent.** A termina
 transmission in flight would be left waiting for a continuation that never arrives.
 
 **F04-16 — escaped surrogate pairs decode to two replacement characters.**
-`{"v":"😀"}` → `"\u{FFFD}\u{FFFD}"` instead of `😀` (`bg-proto/lib.rs:144-148`).
+`{"v":"😀"}` → `"\u{FFFD}\u{FFFD}"` instead of `😀` (`tf-proto/lib.rs:144-148`).
 Latent only: `JSON.stringify` emits astral characters literally in UTF-8, so this cannot fire
 today. It becomes live the instant anyone adds ASCII-safe serialization. BMP escapes are fine
 (`été` → `été`).
@@ -159,17 +159,17 @@ from `tests/` and from any `cargo-fuzz` target. The parsers cannot be fuzzed at 
 visibility changes. Recommended minimal shim, which keeps them private in normal builds:
 
 ```rust
-// crates/bg-term/Cargo.toml
+// crates/tf-term/Cargo.toml
 [features]
 fuzz-internals = []
 
-// crates/bg-term/src/caps.rs — change the three fn signatures to:
+// crates/tf-term/src/caps.rs — change the three fn signatures to:
 #[cfg(not(feature = "fuzz-internals"))] fn parse_da1_has_sixel(reply: &[u8]) -> bool { ... }
 // ...or simply, and more cheaply:
 #[doc(hidden)] pub fn parse_da1_has_sixel(reply: &[u8]) -> bool { ... }
 ```
 
-Separately, `crates/bg-term/src/tty.rs:133` emits a future-compatibility warning:
+Separately, `crates/tf-term/src/tty.rs:133` emits a future-compatibility warning:
 `signal_handler as libc::sighandler_t` needs `as *const () as libc::sighandler_t`. Unrelated to
 fuzzing, but it is in the terminal-restore path — the one place in this codebase that must never
 break — so it is worth a one-line fix.
@@ -234,7 +234,7 @@ stable-aarch64-apple-darwin (active, default)
 1.78-aarch64-apple-darwin
 1.92.0-aarch64-apple-darwin        # no nightly; cargo-fuzz requires -Zsanitizer=address
 
-$ df -h /Users/adeebbashir
+$ df -h $HOME
 /dev/disk3s5   460Gi   428Gi   3.6Gi   100%
 ```
 
@@ -263,12 +263,12 @@ third-party code is proposed.
 
 ## 5. Tier 0 harnesses (verified: these compile and run)
 
-Place `common/mod.rs` in **both** `crates/bg-term/tests/` and `crates/bg-proto/tests/`
+Place `common/mod.rs` in **both** `crates/tf-term/tests/` and `crates/tf-proto/tests/`
 (integration tests cannot share a module across crates), then add the files below.
 Failing properties are marked; they are correct assertions against buggy code and must **not**
 be weakened to make the suite green.
 
-### 5.1 `crates/bg-term/tests/common/mod.rs`
+### 5.1 `crates/tf-term/tests/common/mod.rs`
 
 ```rust
 //! Deterministic PRNG + splitter shared by the property harnesses.
@@ -347,7 +347,7 @@ pub fn b64_decode(input: &[u8]) -> Option<Vec<u8>> {
 }
 ```
 
-### 5.2 `crates/bg-term/tests/prop_input.rs`
+### 5.2 `crates/tf-term/tests/prop_input.rs`
 
 Result: **11 pass, 4 fail** (`p3`, `p4`, `p4b`, `p6` — F04-10, F04-08, F04-09, F04-13).
 
@@ -358,7 +358,7 @@ Result: **11 pass, 4 fail** (`p3`, `p4`, `p4b`, `p6` — F04-10, F04-08, F04-09,
 //! whatever a remote SSH host, a hostile program sharing the tty, or a buggy emulator emits.
 
 mod common;
-use bg_term::input::{Decoder, Event, KeyCode, KeyEventKind, Modifiers};
+use tf_term::input::{Decoder, Event, KeyCode, KeyEventKind, Modifiers};
 use common::Rng;
 
 /// Cap on how many bytes the decoder may hold while waiting for more input.
@@ -585,7 +585,7 @@ fn p13_wheel_and_button_decode_is_exhaustive() {
 }
 ```
 
-### 5.3 `crates/bg-proto/tests/prop_proto.rs`
+### 5.3 `crates/tf-proto/tests/prop_proto.rs`
 
 Result: **8 pass, 4 fail** (`q5`, `q6`, `q8`, `q9` — F04-04, F04-01 precondition, F04-12).
 `q3` is shown tightened from the version I ran; as written here it will also fail (F04-11).
@@ -594,7 +594,7 @@ Result: **8 pass, 4 fail** (`q5`, `q6`, `q8`, `q9` — F04-04, F04-01 preconditi
 //! Property harness for the wire protocol reader, frame header, and hand-rolled JSON.
 
 mod common;
-use bg_proto::{
+use tf_proto::{
     frame_message, json_escape, json_get_bool, json_get_str, FrameHeader, MessageReader,
     FRAME_HEADER_LEN, T_COMMAND, T_EVENT, T_FRAME,
 };
@@ -783,7 +783,7 @@ fn q12_multiple_messages_in_one_chunk_all_survive() {
 }
 ```
 
-### 5.4 `crates/bg-term/tests/prop_kitty.rs`
+### 5.4 `crates/tf-term/tests/prop_kitty.rs`
 
 Result: **6 pass, 3 fail** (`k4`, `k6`, `k7` — F04-15, F04-01, F04-05).
 Note `k3` passes: the APC grammar, the 4096-byte chunk limit, the `m=1`/`m=0` sequencing, and
@@ -796,11 +796,11 @@ base64-quantum alignment at chunk boundaries are all correct. That is worth lock
 //! render wrong -- it can leave the tty in a state the user has to `reset` out of.
 
 mod common;
-use bg_term::kitty::{
+use tf_term::kitty::{
     bgra_rect_to_rgb, bgra_to_rgb, delete_all, delete_image, encode_rgb_frame, support_query,
     wrap_tmux, Placement, MAX_CHUNK,
 };
-use bg_term::{b64, Rect};
+use tf_term::{b64, Rect};
 use common::{b64_decode, Rng};
 
 #[test]
@@ -990,7 +990,7 @@ fn k9_control_sequences_contain_no_stray_terminators() {
 }
 ```
 
-### 5.5 `crates/bg-term/tests/prop_caps.rs` — BLOCKED
+### 5.5 `crates/tf-term/tests/prop_caps.rs` — BLOCKED
 
 **This harness cannot be written until the three parsers are made reachable** (section 2.4).
 Written against the current private signatures it does not compile. The intended body, to add
@@ -998,7 +998,7 @@ once `parse_da1_has_sixel`, `parse_decrqm_supported`, and `parse_two_param_t` ar
 
 ```rust
 mod common;
-use bg_term::caps::{escape_for_display, parse_da1_has_sixel, parse_decrqm_supported,
+use tf_term::caps::{escape_for_display, parse_da1_has_sixel, parse_decrqm_supported,
                     parse_two_param_t};
 use common::Rng;
 
@@ -1082,7 +1082,7 @@ Not runnable on this machine (section 4). These are for the CI job.
 ```toml
 # fuzz/Cargo.toml
 [package]
-name = "blackglass-fuzz"
+name = "terminal-fenster-fuzz"
 version = "0.0.0"
 edition = "2021"
 publish = false
@@ -1093,8 +1093,8 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 arbitrary = { version = "1", features = ["derive"] }
-bg-term  = { path = "../crates/bg-term" }
-bg-proto = { path = "../crates/bg-proto" }
+tf-term  = { path = "../crates/tf-term" }
+tf-proto = { path = "../crates/tf-proto" }
 
 [[bin]] name = "input_decoder" path = "fuzz_targets/input_decoder.rs" test = false doc = false
 [[bin]] name = "proto_reader"  path = "fuzz_targets/proto_reader.rs"  test = false doc = false
@@ -1107,7 +1107,7 @@ bg-proto = { path = "../crates/bg-proto" }
 // Structure-aware: the interesting bug class is chunk-boundary state, not byte content.
 #![no_main]
 use arbitrary::Arbitrary;
-use bg_term::input::Decoder;
+use tf_term::input::Decoder;
 use libfuzzer_sys::fuzz_target;
 
 #[derive(Arbitrary, Debug)]
@@ -1135,7 +1135,7 @@ fuzz_target!(|inp: Input| {
 ```rust
 // fuzz/fuzz_targets/proto_reader.rs
 #![no_main]
-use bg_proto::{FrameHeader, MessageReader, FRAME_HEADER_LEN};
+use tf_proto::{FrameHeader, MessageReader, FRAME_HEADER_LEN};
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {
@@ -1144,7 +1144,7 @@ fuzz_target!(|data: &[u8]| {
     for c in data.chunks(7) {
         r.feed(c);
         while let Some(m) = r.next_message() {
-            if m.type_id == bg_proto::T_FRAME {
+            if m.type_id == tf_proto::T_FRAME {
                 if let Some(h) = FrameHeader::parse(&m.payload) {
                     // Must not overflow, must be bounded, must describe an in-frame rect.
                     let want = (h.width as u128) * (h.height as u128) * 4;
@@ -1164,8 +1164,8 @@ fuzz_target!(|data: &[u8]| {
 // fuzz/fuzz_targets/kitty_encoder.rs
 #![no_main]
 use arbitrary::Arbitrary;
-use bg_term::kitty::{bgra_rect_to_rgb, encode_rgb_frame, Placement, MAX_CHUNK};
-use bg_term::Rect;
+use tf_term::kitty::{bgra_rect_to_rgb, encode_rgb_frame, Placement, MAX_CHUNK};
+use tf_term::Rect;
 use libfuzzer_sys::fuzz_target;
 
 #[derive(Arbitrary, Debug)]
@@ -1197,7 +1197,7 @@ fuzz_target!(|inp: Input| {
 ```rust
 // fuzz/fuzz_targets/json_parser.rs
 #![no_main]
-use bg_proto::{json_escape, json_get_bool, json_get_str};
+use tf_proto::{json_escape, json_get_bool, json_get_str};
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {
@@ -1291,7 +1291,7 @@ Everything above was produced by two scratch crates that only *read* the project
 workspace file was created or modified.
 
 ```
-scratchpad/fuzzcheck/     # #[path]-includes real bg-proto + input.rs, copies Rect/kitty fns
+scratchpad/fuzzcheck/     # #[path]-includes real tf-proto + input.rs, copies Rect/kitty fns
                           # cargo run           -> 7 panics under overflow checks
                           # cargo run --release -> 3 panics + silent wraps
 scratchpad/harnesscheck/  # path-dependency on the real crates; the section 5 harnesses verbatim

@@ -7,7 +7,7 @@
 
 ## Context
 
-BlackGlass must render Chromium-class web content as pixels inside a terminal. The engine
+Terminal-Fenster must render Chromium-class web content as pixels inside a terminal. The engine
 choice determines web compatibility, frame latency, install size, packaging and security
 posture, and it is expensive to reverse. It must be settled by measurement, not preference.
 

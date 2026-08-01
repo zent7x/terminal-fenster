@@ -1,8 +1,7 @@
-# @blackglass/mcp
+# @terminal-fenster/mcp
 
-An MCP server that lets an AI agent drive the BlackGlass terminal browser: a real
-Chromium 150, offscreen-rendered, that a human can be watching live in their terminal at
-the same time.
+An MCP server that lets an AI agent drive an isolated Terminal-Fenster engine: real Chromium 150,
+offscreen-rendered through the same frame and input protocols as the terminal browser.
 
 stdio transport, newline-delimited JSON-RPC, **zero dependencies**.
 
@@ -10,23 +9,21 @@ stdio transport, newline-delimited JSON-RPC, **zero dependencies**.
    MCP client (Claude Code, ...)
         | stdio, JSON-RPC
    [ packages/mcp ]  <-- this package
-        |                          \
-        | unix socket, 0600         \  CDP (page semantics: what is on the page, where)
-        | ACTIONS + frames           \
+        | unix socket, 0600
+        | ACTIONS + frames + in-process CDP proxy
    [ apps/engine/src/main.js ] --> Chromium (sandboxed) offscreen rendering
-        |
-   [ blackglass CLI ] --> the same page, drawn as pixels in a terminal
 ```
 
-## Two channels, on purpose
+## Two logical channels, one private transport
 
 **Actions go over the engine's own unix socket**, as the same `input` commands the Rust
-terminal core sends when a human types. An agent's click and a human's click are the same
-event by the time they reach the page — one input pipeline, one set of bugs, and shared
-control becomes possible rather than a second implementation to keep in sync.
+terminal core sends when a human types. An agent click and an interactive-terminal click are
+the same event by the time they reach Chromium — one input implementation and one set of bugs.
+This release starts a separate agent session; it does not attach to an already-running CLI.
 
 **Observation goes over CDP**, read-only: the computed accessibility tree and, for the one
-element an action targets, its box model.
+element an action targets, its box model. Electron's in-process debugger executes those CDP
+commands inside the engine; requests and results use the same private Unix socket as actions.
 
 ## The model reads text, not pixels
 
@@ -48,6 +45,10 @@ coordinate guessing, no vision tokens. For the page above the snapshot is 1442 b
 project's own earlier analysis put a typical accessibility diff at ~2 KB against ~350 KB
 for a frame (`artifacts/swarm/A03-user-journeys.md`). Screenshots remain available for the
 questions only pixels can answer — did the chart render, did the animation run.
+
+Editable AX values are always rendered as `<redacted:N chars>`. Chromium does not reliably mark
+password fields in its accessibility tree, so Terminal-Fenster treats every textbox/contenteditable
+value as sensitive rather than risking a password appearing in model context.
 
 ### Prior art
 
@@ -82,7 +83,7 @@ clicking something by text on the page.
 | `browser_press_key` | Enter, Tab, Escape, arrows, function keys, characters |
 | `browser_scroll` | Scroll the viewport |
 | `browser_click_xy` | Raw coordinate click — canvas/video escape hatch |
-| `browser_screenshot` | PNG of the exact frame the terminal is drawing |
+| `browser_screenshot` | PNG reconstructed from the engine's exact damage-frame stream |
 | `browser_navigate_back` / `_forward` / `browser_reload` | History |
 | `browser_resize` | Match the viewport to the terminal geometry |
 | `browser_wait_for` | Wait for text, or for a duration |
@@ -91,34 +92,43 @@ clicking something by text on the page.
 
 ## Install
 
-Nothing to install — no dependencies. It needs Node >= 22 (for the global `WebSocket`) and
-the engine at `apps/engine` with its `node_modules` present.
+After `./install.sh`, run:
+
+```bash
+terminal-fenster mcp-config --cursor   # or --claude, or --json
+```
+
+Or wire any MCP client to stdio:
 
 ```jsonc
 {
   "mcpServers": {
-    "blackglass": {
-      "command": "node",
-      "args": ["/absolute/path/to/blackglass/packages/mcp/index.js"]
+    "terminal-fenster": {
+      "command": "terminal-fenster",
+      "args": ["mcp"]
     }
   }
 }
 ```
 
+Nothing else to install — zero npm dependencies. Node ≥ 22 and a materialized Electron
+runtime under `apps/engine` (or the installed `engine/` directory) are required.
+
 ### Environment
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `BLACKGLASS_ENGINE` | `../../apps/engine` | Engine directory |
-| `BLACKGLASS_MCP_WIDTH` / `_HEIGHT` | 1280 / 800 | Initial viewport |
-| `BLACKGLASS_MCP_CDP` | `1` | `0` disables CDP — coordinate-only mode |
-| `BLACKGLASS_MCP_PROFILE` | throwaway temp dir | Persistent browser profile |
-| `BLACKGLASS_MCP_LOG` | — | Mirror stderr diagnostics to a file |
-| `BLACKGLASS_MCP_AUDIT` | `$TMPDIR/blackglass-mcp-audit.jsonl` | Action provenance log |
+| `TERMINAL_FENSTER_ENGINE` | `../../apps/engine` | Engine directory |
+| `TERMINAL_FENSTER_MCP_WIDTH` / `_HEIGHT` | 1280 / 800 | Initial viewport |
+| `TERMINAL_FENSTER_MCP_CDP` | `1` | `0` disables in-process CDP — coordinate-only mode |
+| `TERMINAL_FENSTER_MCP_PROFILE` | throwaway temp dir | Persistent browser profile |
+| `TERMINAL_FENSTER_MCP_LOG` | — | Mirror stderr diagnostics to a file |
+| `TERMINAL_FENSTER_MCP_AUDIT` | per-user 0700 state directory | Action provenance log |
 
 Every action appends a JSONL record (timestamp, actor, tool, target role and name,
 resolved coordinates) to the audit log, so an agent run can be replayed and a disputed
-click attributed — required by `A03-user-journeys.md`.
+click attributed — required by `A03-user-journeys.md`. The file is mode 0600, refuses symlinks,
+redacts URL values/fragments/local paths, and records printable keys by class rather than value.
 
 ## Protocol support
 
@@ -134,61 +144,38 @@ else; diagnostics go to `stderr`.
 
 ## Security
 
-**The engine's stated posture is that it opens no listening port.** Enabling CDP changes
-that: Chromium starts a DevTools listener. Measured on this machine:
+The engine opens no listening port. CDP runs through `webContents.debugger` in-process and
+is proxied as request/response messages over the existing 0600 socket inside a 0700 temporary
+directory. There is no `--remote-debugging-port`, `DevToolsActivePort`, or unauthenticated
+localhost endpoint for another process to attach to. `TERMINAL_FENSTER_MCP_CDP=0` can still disable
+semantic inspection entirely; coordinate tools and screenshots continue to work.
 
-```
-$ lsof -nP -iTCP:56402 -sTCP:LISTEN
-Electron 671 adeebbashir 33u IPv4 ... TCP 127.0.0.1:56402 (LISTEN)
-```
-
-Loopback only, so not reachable off-host — but **unauthenticated**: any process running as
-this user can attach and drive the browser. Current mitigations: ephemeral port read
-race-free from `DevToolsActivePort`, throwaway profile directory, and `BLACKGLASS_MCP_CDP=0`
-to switch it off entirely (semantic tools then return an actionable error and the
-coordinate tools keep working).
-
-### Removing the DevTools port
-
-This is fixable, and the fix belongs in `apps/engine/src/main.js`, which this package does
-not own. Electron can speak CDP **in-process**, with no socket of any kind, via
-`webContents.debugger`. Verified working on Electron 43.2.0 / Chrome 150.0.7871.129:
-
-```js
-win.webContents.debugger.attach('1.3');
-await win.webContents.debugger.sendCommand('Accessibility.enable');
-const ax = await win.webContents.debugger.sendCommand('Accessibility.getFullAXTree', { depth: -1 });
-// -> 8 nodes, roles and names identical to the port-based path
-```
-
-Proxying that through the existing 0600 socket as one new command type would let this
-package drop `--remote-debugging-port` completely and restore the original posture. See the
-E04 report for the proposed command shape.
+Actions are appended to the configured JSONL audit log. Page-derived accessibility text is
+fenced as untrusted content, snapshot refs expire across navigation, and descriptions are
+cross-checked against the chosen element's accessible name before a click is sent.
+Agent sessions receive their initial URL only after the private socket handshake (never in `ps`),
+deny local-file/blob/custom-scheme navigation, and cap inline `data:` URLs at 64 KiB.
 
 ## Known limitations
 
-* **Resize lag (engine-side).** After a `resize`, the CSS viewport changes immediately but
-  the engine does not reliably emit a frame at the new geometry until the page repaints
-  again. Measured: requested 900x700, page reported `innerWidth 900`, latest frame still
-  `1280x800 seq=0`. This package detects the mismatch and warns in `browser_screenshot`,
-  `browser_resize` and `browser_click_xy` rather than letting an agent reason about stale
-  pixels — but the underlying repaint belongs to `main.js`.
 * **One tab.** The engine hosts a single `BrowserWindow`; popups are reported and denied.
+* **Separate session.** MCP does not yet attach to an already-running interactive CLI.
 * **Refs are per-snapshot.** Any real navigation invalidates them by design.
 * **No file uploads or downloads**, no cookie/storage tools yet.
 
 ## Tests
 
 ```bash
-npm test        # protocol conformance -- no browser, CI-safe
+npm test            # damage compositor + protocol conformance, CI-safe
 npm run test:live   # end-to-end against real Chromium
 ```
 
-`test/handshake.js` covers both protocol eras, error codes, and stdout discipline without
-launching a browser. `test/live-browser.js` launches Chromium and asserts against what the
-page actually did — a click is proven by the page's own `document.title` changing, typing
-by the value that comes back in the next snapshot, and stale-ref rejection by a ref from a
-previous document being refused.
+`test/frame-compositor.test.js` proves dirty BGRA rectangles reconstruct the full screenshot
+without wiping untouched pixels. `test/handshake.js` covers both protocol eras, error codes,
+and stdout discipline without launching a browser. `test/live-browser.js` launches Chromium
+and asserts against what the page actually did — a click is proven by the page's own
+`document.title` changing, typing by the redacted value length in the next snapshot, resize by the
+new screenshot geometry, and stale-ref rejection by refusing a ref from an older document.
 
 Latest run on macOS 26.1 / Apple M4, Electron 43.2.0 / Chrome 150.0.7871.129:
-**24/24 protocol checks, 28/28 live checks.**
+**14/14 compositor/discovery/privacy tests, 24/24 protocol checks, 28/28 live checks.**

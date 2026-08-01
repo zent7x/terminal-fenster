@@ -1,4 +1,4 @@
-<!-- BlackGlass fixture: click-targets
+<!-- Terminal-Fenster fixture: click-targets
      Proves: a synthetic mouse click at a documented CSS-pixel coordinate lands on the
      element that occupies that coordinate, and reports the coordinate spaces back.
      Self-contained. No network, no subresources. Opens over file://. -->
@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>BG · click-targets</title>
 <style>
-/* ---------- shared fixture chrome (byte-identical in every BlackGlass fixture) ---------- */
+/* ---------- shared fixture chrome (byte-identical in every Terminal-Fenster fixture) ---------- */
 :root{color-scheme:dark}
 html,body{margin:0;padding:0;background:#0b0b0f;color:#e6e6e6;
   font:14px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;-webkit-font-smoothing:none}
@@ -63,7 +63,7 @@ h1{position:fixed;left:56px;top:1px;margin:0;font:600 13px/24px ui-monospace,Men
 <div class="lbl" style="left:760px;top:432px">layout (760,340) vs painted (780,350)</div>
 
 <script>
-/* ---------- shared fixture harness (byte-identical in every BlackGlass fixture) ---------- */
+/* ---------- shared fixture harness (byte-identical in every Terminal-Fenster fixture) ---------- */
 var __q = new URLSearchParams(location.search);
 window.__bg = {
   id: 'click-targets', proto: 1, ready: false, pass: null,

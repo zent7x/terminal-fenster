@@ -1,4 +1,4 @@
-<!-- BlackGlass fixture: drag-drop
+<!-- Terminal-Fenster fixture: drag-drop
      Proves TWO independent things, because they can fail separately:
        lane 1  native HTML5 drag and drop (draggable=true -> dragstart/dragover/drop).
                Native drag is driven by the OS drag loop, so synthetic mouseDown/Move/Up
@@ -143,7 +143,7 @@ window.__bg = {
   $('nativeSrc').addEventListener('dragstart', function (ev) {
     native.dragstart++;
     ev.dataTransfer.setData('text/plain', PAYLOAD);
-    ev.dataTransfer.setData('application/x-blackglass', PAYLOAD + '/typed');
+    ev.dataTransfer.setData('application/x-terminal-fenster', PAYLOAD + '/typed');
     ev.dataTransfer.effectAllowed = 'copyMove';
     native.effectAllowed = ev.dataTransfer.effectAllowed;
     refresh();

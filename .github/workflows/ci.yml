@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust:
+    name: Rust (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Install Rust quality components
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt,clippy
+          rustup default stable
+      - name: Formatting
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Unit tests
+        run: cargo test --workspace --locked
+      - name: Release build
+        run: cargo build --workspace --release --locked
+      - name: Installed and prebuilt layout checks
+        run: |
+          tools/install-layout-test.sh
+          tools/package-layout-test.sh
+
+  engine:
+    name: Electron runtime
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/engine/package-lock.json
+      - name: Install pinned Electron
+        working-directory: apps/engine
+        run: npm ci
+      - name: Materialize and identify Chromium runtime
+        working-directory: apps/engine
+        run: ./node_modules/.bin/electron --version
+      - name: Frame scheduler unit tests
+        working-directory: apps/engine
+        run: npm test
+      - name: Real-pixel engine integration
+        run: node tests/e2e/input-injection.js
+      - name: Browser fixture matrix
+        run: apps/engine/node_modules/.bin/electron tests/fixtures/verify-fixtures.js
+      - name: Benchmark parser self-test
+        run: node benchmarks/bench.mjs --self-test
+      - name: MCP protocol and damage-compositor tests
+        working-directory: packages/mcp
+        run: npm test
+      - name: MCP live Chromium tools
+        working-directory: packages/mcp
+        run: npm run test:live

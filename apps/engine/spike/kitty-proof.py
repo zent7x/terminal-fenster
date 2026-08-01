@@ -45,7 +45,7 @@ if __name__ == "__main__":
         print(f"missing {png}", file=sys.stderr)
         sys.exit(1)
     size = os.path.getsize(png)
-    print(f"BLACKGLASS KITTY GRAPHICS PROOF -- TERM={os.environ.get('TERM')} "
+    print(f"TERMINAL-FENSTER KITTY GRAPHICS PROOF -- TERM={os.environ.get('TERM')} "
           f"TERM_PROGRAM={os.environ.get('TERM_PROGRAM')}")
     print(f"transmitting {png} ({size} bytes) ...")
     n = emit_png(png)

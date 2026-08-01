@@ -2,7 +2,7 @@
 
 **Mission:** Investigate Chromium extension support: `session.loadExtension`, which Manifest V3
 features work, which Chrome-specific services do not (sync, webstore), and the security
-implications of loading unpacked extensions. State clearly what BlackGlass can and cannot support.
+implications of loading unpacked extensions. State clearly what Terminal-Fenster can and cannot support.
 
 **Owned output:** this file only. No core file was modified. Every change to
 `apps/engine/src/main.js`, `apps/cli/**` or `crates/**` is **specified here as an instruction for
@@ -69,13 +69,13 @@ the session scratchpad, not in the repo, and touches no owned path.
 Harness invocation, for reproduction:
 
 ```
-"/Users/adeebbashir/projects/blackglass/apps/engine/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron" <harness-dir>
+"$REPO/apps/engine/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron" <harness-dir>
 ```
 
 Two environment concessions, both stated plainly because they bound the claims:
 
 - The harness passes `--no-sandbox`. Chromium child processes cannot complete mach bootstrap under
-  the agent Bash sandbox (`bootstrap_look_up … Permission denied`). **Production BlackGlass keeps
+  the agent Bash sandbox (`bootstrap_look_up … Permission denied`). **Production Terminal-Fenster keeps
   the Chromium sandbox ON** (`apps/engine/src/main.js:111`). Extension *loading* is a browser-process
   operation and the renderer results below were reproduced consistently, but "identical behavior
   with `sandbox:true` in the packaged app" is **UNVERIFIED**.
@@ -104,7 +104,7 @@ implements CRX3 signature verification, so there is no publisher identity and no
 Loading is **per-session** and **not remembered**: nothing persists across boots, so the host must
 re-load on every start. Calling it before `app.ready` throws. Loading into a non-persistent
 partition throws `Extensions cannot be loaded in a temporary session` (measured), which means
-**BlackGlass private/incognito sessions structurally cannot carry extensions** — that is a design
+**Terminal-Fenster private/incognito sessions structurally cannot carry extensions** — that is a design
 fact, not a policy choice. The only option is `allowFileAccess`, which additionally permits
 injection into `file://` pages.
 
@@ -178,7 +178,7 @@ the boundary exactly.
 Two traps. First, `webRequest` is *accepted* and then does not work (§8.3) — acceptance is not
 support. Second, `userScripts` is accepted but `chrome.userScripts` never appeared in the
 enumeration, so it is accepted-and-absent too. **Rejection is a warning, not an error**: an
-extension needing `cookies` loads happily and fails at runtime, so BlackGlass must surface these
+extension needing `cookies` loads happily and fails at runtime, so Terminal-Fenster must surface these
 warnings rather than swallow them.
 
 `chrome.storage.sync` deserves its own line because it is the most common silent breakage:
@@ -193,7 +193,7 @@ feature-detection via `if (chrome.storage.sync)` passes and the write then fails
 **Working, including under offscreen rendering.** A `document_start` content script matching
 `<all_urls>` injected into a real `http://127.0.0.1` page inside an `offscreen: true` window and
 its DOM mutation was read back (`data-bg-cs = "ran"`). This is the single most valuable extension
-capability for BlackGlass and it is solid.
+capability for Terminal-Fenster and it is solid.
 
 `file://` injection needs `loadExtension(path, { allowFileAccess: true })`.
 
@@ -250,7 +250,7 @@ page loaded fine.
 
 The consequence is specific and severe: MV3 content blockers ship their filter lists as static
 rulesets. Such an extension will load, report healthy, show its badge, and block **nothing**.
-BlackGlass must detect this rather than let users conclude blocking is on.
+Terminal-Fenster must detect this rather than let users conclude blocking is on.
 
 ### 8.3 `chrome.webRequest` — BROKEN
 
@@ -268,7 +268,7 @@ succeeded and content scripts still ran — so this degrades rather than crashes
 
 Note that Electron's own `session.webRequest` (the module we already control from
 `apps/engine/src/main.js`) is a **separate, working** API and takes precedence over the extension
-one. BlackGlass's first-party blocking should be built on it and does not depend on any of this.
+one. Terminal-Fenster's first-party blocking should be built on it and does not depend on any of this.
 
 ---
 
@@ -284,7 +284,7 @@ polling. **Chrome Sync**: `chrome.storage.sync` throws; no account, no cross-dev
 **sidePanel**, **topSites**: all rejected as unknown permissions (§5). **Enterprise policy**
 (`chrome.storage.managed`) has no policy provider behind it.
 
-Electron states plainly that arbitrary Web Store extensions are a **non-goal**. Any BlackGlass
+Electron states plainly that arbitrary Web Store extensions are a **non-goal**. Any Terminal-Fenster
 roadmap promising "Chrome extensions work" is promising something upstream has declined to build.
 
 ---
@@ -295,7 +295,7 @@ This is where the mission matters most, because the terminal context makes sever
 than in a desktop browser.
 
 **There is no consent step.** Chrome shows an install prompt enumerating requested host
-permissions. `loadExtension()` shows nothing — it loads. If BlackGlass exposes an
+permissions. `loadExtension()` shows nothing — it loads. If Terminal-Fenster exposes an
 `extensions load <dir>` command, the *entire* permission-consent story is ours to build. A
 terminal browser has no puzzle-piece toolbar to fall back on.
 
@@ -326,7 +326,7 @@ all (§2), so a tracking extension cannot follow a user into private browsing.
 **Licensing (rule 4):** Electron is MIT (`node_modules/electron/LICENSE`), so the loading machinery
 is unencumbered. Bundling third-party extensions is a different question — uBlock Origin and
 uBlock Origin Lite are **GPLv3**, which is incompatible with shipping them inside a proprietary
-BlackGlass binary. Loading a user-supplied directory at runtime carries no such obligation.
+Terminal-Fenster binary. Loading a user-supplied directory at runtime carries no such obligation.
 **Load, do not bundle.**
 
 ---
@@ -349,7 +349,7 @@ DNR **static** rulesets from the manifest; extensions in private/non-persistent 
 `proxy`, `privacy`, `sidePanel`, `topSites`, `identity`; and any promise of general Chrome Web
 Store compatibility.
 
-**Honest framing for users:** BlackGlass supports *developer-mode, user-supplied, unpacked
+**Honest framing for users:** Terminal-Fenster supports *developer-mode, user-supplied, unpacked
 extensions* — a useful subset, roughly what Electron built for DevTools extensions plus a working
 DNR blocker. It does not support "Chrome extensions."
 

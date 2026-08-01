@@ -3,7 +3,14 @@
 **Mission:** F03 · **Owner:** F03 agent · **Date:** 2026-07-31
 **Host:** macOS 26.1, Apple M4 (arm64) · **Deliverables:** this file and `artifacts/swarm/F03-sbom.json`
 
-**Scope.** Every dependency BlackGlass has, where it comes from, what license it carries, what integrity guarantee we actually hold over it, and the policy that keeps all of that true over time.
+**Scope.** Every dependency Terminal-Fenster has, where it comes from, what license it carries, what integrity guarantee we actually hold over it, and the policy that keeps all of that true over time.
+
+> **2026-08-01 implementation update:** this remains the historical audit, but several defects it
+> records are now closed. The project consistently uses MIT, ships `LICENSE-MIT`, collects every
+> Cargo dependency license during source and prebuilt installs, and ADR-0002 resolves the FFmpeg
+> question in favor of Electron's checksum-pinned free-codecs artifact. Current release truth is in
+> `RELEASE.md`; its macOS Developer-ID/notarization gate is stricter than the early unsigned-release
+> recommendation in this report.
 
 **Relationship to sibling artifacts.** `A09-threat-model.md` §8 sets supply-chain *policy* (TB6, T23/T-SUP-1). `B10-packaging-updater.md` §3 designs *Electron acquisition* and proves the download chain. This document does not restate either; it supplies what neither has — the complete component inventory, the license inventory, the machine-readable SBOM, and the lockfile/audit mechanics — and it corrects two points in A09 where the ground truth on this host turned out to be different from what was assumed. Those corrections are called out explicitly in §5.3 and §6.4.
 
@@ -11,7 +18,7 @@
 
 ## 0. Measured ground truth
 
-Everything below was produced by running these commands from `/Users/adeebbashir/projects/blackglass` on 2026-07-31. No number in this document is estimated.
+Everything below was produced by running these commands from `$REPO` on 2026-07-31. No number in this document is estimated.
 
 ```
 $ cargo --version              → cargo 1.93.0 (083ac5135 2025-12-15)
@@ -43,9 +50,9 @@ Read that bottom row against the three above it. Our hand-written dependency sur
 ### 1.1 Rust — `cargo tree --locked --all-features`, verbatim
 
 ```
-bg-proto v0.1.0 (/Users/adeebbashir/projects/blackglass/crates/bg-proto)
+tf-proto v0.1.0 ($REPO/crates/tf-proto)
 
-bg-term v0.1.0 (/Users/adeebbashir/projects/blackglass/crates/bg-term)
+tf-term v0.1.0 ($REPO/crates/tf-term)
 ├── flate2 v1.1.9
 │   ├── crc32fast v1.5.0
 │   │   └── cfg-if v1.0.4
@@ -54,20 +61,20 @@ bg-term v0.1.0 (/Users/adeebbashir/projects/blackglass/crates/bg-term)
 │       └── simd-adler32 v0.3.10
 └── libc v0.2.189
 
-blackglass v0.1.0 (/Users/adeebbashir/projects/blackglass/apps/cli)
-├── bg-proto v0.1.0 (/Users/adeebbashir/projects/blackglass/crates/bg-proto)
-├── bg-term v0.1.0 (/Users/adeebbashir/projects/blackglass/crates/bg-term) (*)
+terminal-fenster v0.1.0 ($REPO/apps/cli)
+├── tf-proto v0.1.0 ($REPO/crates/tf-proto)
+├── tf-term v0.1.0 ($REPO/crates/tf-term) (*)
 └── libc v0.2.189
 ```
 
-`bg-proto` has **zero** dependencies — `crates/bg-proto/Cargo.toml` has no `[dependencies]` section at all. The whole third-party Rust surface is two direct crates (`libc`, `flate2`, both declared in `[workspace.dependencies]` at `Cargo.toml:11-13`) pulling five transitives. `flate2` is there for the kitty graphics zlib path; `libc` for raw-mode termios and the tty guard.
+`tf-proto` has **zero** dependencies — `crates/tf-proto/Cargo.toml` has no `[dependencies]` section at all. The whole third-party Rust surface is two direct crates (`libc`, `flate2`, both declared in `[workspace.dependencies]` at `Cargo.toml:11-13`) pulling five transitives. `flate2` is there for the kitty graphics zlib path; `libc` for raw-mode termios and the tty guard.
 
 Notable for a project of this ambition: no `serde`, no `tokio`, no `clap`, no `anyhow`. The wire protocol, the argument parsing, and the async loop are hand-written. That is a deliberate and defensible supply-chain posture and it should be preserved as a stated constraint, not drifted away from by accident.
 
 ### 1.2 npm engine — `npm ls --all` from `apps/engine`, verbatim
 
 ```
-@blackglass/engine@0.1.0 /Users/adeebbashir/projects/blackglass/apps/engine
+@terminal-fenster/engine@0.1.0 $REPO/apps/engine
 └─┬ electron@43.2.0
   ├── @electron-internal/extract-zip@1.0.5
   ├─┬ @electron/get@5.1.0
@@ -147,7 +154,7 @@ Rust licenses were read from each crate's own `Cargo.toml` in `~/.cargo/registry
 | Electron binary | 43.2.0 | `MIT` | `dist/LICENSE` |
 | Chromium | 150.0.7871.129 | `BSD-3-Clause` core | `dist/LICENSES.chromium.html` |
 
-**Every direct and transitive dependency is permissive.** There is no copyleft obligation anywhere in the declared graph, and no license is incompatible with shipping BlackGlass under `MIT OR Apache-2.0`. `sumchecker`'s Apache-2.0 carries a patent grant and a NOTICE requirement, and `@electron-internal/extract-zip`'s BSD-2-Clause requires the copyright notice be reproduced in binary redistributions — both are satisfied by a generated `THIRD-PARTY-NOTICES` file (§2.5), and both are moot if §4.2 removes npm from the shipped product entirely.
+**Every direct and transitive dependency is permissive.** There is no copyleft obligation anywhere in the declared graph, and no license is incompatible with shipping Terminal-Fenster under `MIT OR Apache-2.0`. `sumchecker`'s Apache-2.0 carries a patent grant and a NOTICE requirement, and `@electron-internal/extract-zip`'s BSD-2-Clause requires the copyright notice be reproduced in binary redistributions — both are satisfied by a generated `THIRD-PARTY-NOTICES` file (§2.5), and both are moot if §4.2 removes npm from the shipped product entirely.
 
 ### 2.2 Four first-party licensing defects, in order of severity
 
@@ -163,9 +170,9 @@ Rust licenses were read from each crate's own `Cargo.toml` in `~/.cargo/registry
 
 `dist/LICENSES.chromium.html` is the aggregated attribution file Chromium generates for `about:credits`. A frequency scan of license names inside it returns `Apache License` 3,931 times, `ISC` 986, `GNU General Public` 461, `MIT License` 286, `Mozilla Public License` 90, `GNU Lesser General Public` 82, `zlib` 28.
 
-The GPL and LGPL counts deserve a plain statement rather than alarm or hand-waving. **I did not verify which specific Chromium sub-components those 461 GPL and 82 LGPL mentions attach to, or whether they are dual-license options rather than sole terms. That is UNVERIFIED and it is a real gap.** Chromium's own position is that everything it links into the browser binary is permissively licensed or dual-licensed such that a permissive option applies, and Electron ships under MIT on that basis — but "upstream says so" is a weaker claim than "we checked," and if BlackGlass is ever distributed commercially or bundled by a third party, someone will eventually ask us to have checked.
+The GPL and LGPL counts deserve a plain statement rather than alarm or hand-waving. **I did not verify which specific Chromium sub-components those 461 GPL and 82 LGPL mentions attach to, or whether they are dual-license options rather than sole terms. That is UNVERIFIED and it is a real gap.** Chromium's own position is that everything it links into the browser binary is permissively licensed or dual-licensed such that a permissive option applies, and Electron ships under MIT on that basis — but "upstream says so" is a weaker claim than "we checked," and if Terminal-Fenster is ever distributed commercially or bundled by a third party, someone will eventually ask us to have checked.
 
-The operational obligation is unambiguous regardless of how that resolves: **`LICENSES.chromium.html` must be redistributed with any binary we ship.** It is 19.9 MB. B10 §7 discusses trimming the Electron bundle; this file must be on the do-not-trim list, and `blackglass --licenses` should be able to open it.
+The operational obligation is unambiguous regardless of how that resolves: **`LICENSES.chromium.html` must be redistributed with any binary we ship.** It is 19.9 MB. B10 §7 discusses trimming the Electron bundle; this file must be on the do-not-trim list, and `terminal-fenster --licenses` should be able to open it.
 
 ### 2.4 The unowned exposure: bundled H.264 and HEVC
 
@@ -201,7 +208,7 @@ Per HARD RULE 4, I checked before suggesting reuse: nothing in this repository c
 
 **CycloneDX 1.6 JSON**, written to `artifacts/swarm/F03-sbom.json`.
 
-CycloneDX over SPDX for three specific reasons rather than preference. It has a first-class `dependencies` graph, so the `blackglass → bg-term → flate2 → miniz_oxide` chain survives into the document instead of flattening into a package list. It has `compositions`, which lets the document *declare its own incompleteness* — essential here, because the Chromium subtree genuinely is incomplete and an SBOM that quietly omits 773 components is worse than one that says so. And `purl` identifiers (`pkg:cargo/...`, `pkg:npm/...`, `pkg:generic/...`) are what OSV, Dependency-Track, and Grype key on, so the artifact is directly consumable by a scanner without conversion.
+CycloneDX over SPDX for three specific reasons rather than preference. It has a first-class `dependencies` graph, so the `terminal-fenster → tf-term → flate2 → miniz_oxide` chain survives into the document instead of flattening into a package list. It has `compositions`, which lets the document *declare its own incompleteness* — essential here, because the Chromium subtree genuinely is incomplete and an SBOM that quietly omits 773 components is worse than one that says so. And `purl` identifiers (`pkg:cargo/...`, `pkg:npm/...`, `pkg:generic/...`) are what OSV, Dependency-Track, and Grype key on, so the artifact is directly consumable by a scanner without conversion.
 
 npm 11.6.2 can emit CycloneDX natively — `npm sbom --sbom-format cyclonedx` works and I verified it — but it covers only the 14-package npm subtree. It knows nothing about Cargo, nothing about the Electron *binary* (as opposed to the npm fetcher package), and nothing about Chromium. It is a useful cross-check, not a substitute.
 
@@ -210,8 +217,8 @@ npm 11.6.2 can emit CycloneDX natively — `npm sbom --sbom-format cyclonedx` wo
 33 components, 35 dependency nodes, 37,126 bytes. Generated by a script that parses `Cargo.lock` and `apps/engine/package-lock.json` directly — **no hash in the SBOM was typed by hand.**
 
 - 3 first-party Rust crates + 7 crates.io crates, each with the SHA-256 of its `.crate` tarball taken from `Cargo.lock`.
-- `@blackglass/engine` + 13 npm packages, each with its SHA-512 converted from the lockfile's base64 `integrity` field to hex (CycloneDX requires hex; the conversion round-trips exactly — verified).
-- `@blackglass/mcp`, marked with its zero-dependency status and the license conflict from §2.2a.
+- `@terminal-fenster/engine` + 13 npm packages, each with its SHA-512 converted from the lockfile's base64 `integrity` field to hex (CycloneDX requires hex; the conversion round-trips exactly — verified).
+- `@terminal-fenster/mcp`, marked with its zero-dependency status and the license conflict from §2.2a.
 - The **Electron binary** as a distinct `platform` component with the real SHA-256, its size, its ABI, and properties recording that it has no npm provenance, no GPG signature, and an ad-hoc code signature.
 - **Chromium 150.0.7871.129** as a `framework` component, with the 773-component count and an explicit incompleteness marker.
 - `libffmpeg` with its codec inventory and the §2.4 patent note.
@@ -236,7 +243,7 @@ The generator is deliberately a standalone script with no dependencies, so it ca
 ### 4.1 The finding that outranks everything else in this document
 
 ```
-$ git rev-parse --show-toplevel   → /Users/adeebbashir/projects/blackglass
+$ git rev-parse --show-toplevel   → $REPO
 $ git ls-files | wc -l            → 0
 $ git log --oneline -5            → fatal: your current branch 'main' does not have any commits yet
 $ cat .gitignore                  → cat: .gitignore: No such file or directory
@@ -274,7 +281,7 @@ The consequence is that engine acquisition **must** be an explicit, separately-g
 
 ### 4.3 Delete the stray root `package.json`
 
-`/Users/adeebbashir/projects/blackglass/package.json` contains, in full:
+`$REPO/package.json` contains, in full:
 
 ```json
 {"name":"qtest","version":"1.0.0","main":"safestore.js"}
@@ -462,7 +469,7 @@ $ spctl -a -t exec -vv node_modules/electron/dist/Electron.app
 
 Confirmed independently. The stock npm Electron bundle is ad-hoc, linker-signed, with no sealed resources — `spctl` rejects it and `codesign --verify` fails. It cannot be shipped as-is to anyone whose environment assesses bundles (Gatekeeper, MDM, EDR, a corporate build gate). B10 §5 owns the re-signing and notarization procedure. F03's contribution is to record it as a **supply-chain** item and not only a packaging one: an ad-hoc signature means the binary carries no cryptographic statement of origin at rest, so after extraction the SHA-256 pin is the *only* thing tying those bytes to Electron. If the extracted tree is ever modified in place — by an installer, an antivirus quarantine-and-restore, or a well-meaning `chmod -R` — nothing detects it.
 
-Recommendation: `blackglass setup` should record the SHA-256 of the extracted `Electron Framework` binary alongside the zip hash, and `blackglass doctor` should re-check it. That is cheap (one hash of one file) and it converts a one-time install-gate into a standing invariant.
+Recommendation: `terminal-fenster setup` should record the SHA-256 of the extracted `Electron Framework` binary alongside the zip hash, and `terminal-fenster doctor` should re-check it. That is cheap (one hash of one file) and it converts a one-time install-gate into a standing invariant.
 
 ---
 

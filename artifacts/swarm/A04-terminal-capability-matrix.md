@@ -6,8 +6,8 @@
 
 Reproduction harness written during this mission (keep these, they are the regression suite):
 
-- `/private/tmp/claude-501/-Users-adeebbashir/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/a04_probe.py` — capability probe (opens `/dev/tty` directly, raw mode, 17 queries)
-- `/private/tmp/claude-501/-Users-adeebbashir/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/a04_bench.py` — kitty-graphics throughput benchmark
+- `/private/tmp/claude-501/-Users-builder/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/a04_probe.py` — capability probe (opens `/dev/tty` directly, raw mode, 17 queries)
+- `/private/tmp/claude-501/-Users-builder/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/a04_bench.py` — kitty-graphics throughput benchmark
 - Raw results: `out-appleterm.json`, `out-iterm2.json` in the same directory
 
 ---
@@ -30,7 +30,7 @@ Reproduction harness written during this mission (keep these, they are the regre
 ## 1. Kitty Graphics Protocol — complete grammar
 
 Primary source: <https://sw.kovidgoyal.net/kitty/graphics-protocol/> (kitty 0.48.2, 2026-07-30).
-Protocol documentation is published by Kovid Goyal; kitty itself is **GPL-3.0**. The *protocol* is an open specification explicitly intended for third-party implementation ("We intend that any terminal emulator that wishes to support it can do so"). **Do not copy kitty source into BlackGlass** — implement from the spec text only. Ghostty (**MIT**, `LICENSE` line 1–3 of the checkout) is the safe reference implementation to read.
+Protocol documentation is published by Kovid Goyal; kitty itself is **GPL-3.0**. The *protocol* is an open specification explicitly intended for third-party implementation ("We intend that any terminal emulator that wishes to support it can do so"). **Do not copy kitty source into Terminal-Fenster** — implement from the spec text only. Ghostty (**MIT**, `LICENSE` line 1–3 of the checkout) is the safe reference implementation to read.
 
 ### 1.1 Envelope
 
@@ -254,7 +254,7 @@ Only `d=i/I/r/R/n/N` can delete virtual placements; `a,c,p,q,x,y,z` never affect
 
 `a=f` (load frame), `a=a` (control: `s=1` stop, `s=2` run-and-wait, `s=3` loop; `v=` loop count; `c=` set current frame; `z=` gap ms, default 40 ms, root frame 0), `a=c` (compose rect from frame `r=` onto frame `c=`).
 
-**Ghostty returns `ERROR: unimplemented action` for all three** `[SOURCE: src/terminal/kitty/graphics_exec.zig, commit 4d605bf]`. Since Ghostty is a primary target, BlackGlass must drive its own frame loop with `a=T`/`a=p` and never depend on terminal-side animation.
+**Ghostty returns `ERROR: unimplemented action` for all three** `[SOURCE: src/terminal/kitty/graphics_exec.zig, commit 4d605bf]`. Since Ghostty is a primary target, Terminal-Fenster must drive its own frame loop with `a=T`/`a=p` and never depend on terminal-side animation.
 
 ### 1.10 Storage quotas
 
@@ -281,7 +281,7 @@ Terminals evict *placement-less* images first under pressure. Combine with `N=1`
 
 > **CONTRADICTION — READ THIS.** The community table at <https://terminfo.dev/extensions/kitty-graphics-protocol> currently lists **"Terminal.app — Yes"**. That is **wrong**. Direct byte-level probing of Apple Terminal 465 on this machine returned *no* APC response, only the DA1 reply. Trust the probe, not the table. Any capability database should be treated as a hint and confirmed at runtime.
 
-**Version-gating rule for BlackGlass:** never gate on `TERM_PROGRAM`/version strings. Always run the §1.4 handshake. Version strings lie (Apple Terminal advertises `xterm-256color`), and a terminal multiplexer in between changes everything.
+**Version-gating rule for Terminal-Fenster:** never gate on `TERM_PROGRAM`/version strings. Always run the §1.4 handshake. Version strings lie (Apple Terminal advertises `xterm-256color`), and a terminal multiplexer in between changes everything.
 
 ---
 
@@ -472,7 +472,7 @@ Read the iTerm2 column again. `TIOCGWINSZ` says the text area is **1120 × 850**
 
 Three terminals, three different conventions. **Never mix a `TIOCGWINSZ` value with a `CSI 14 t` value in the same calculation.**
 
-### 5.4 The algorithm BlackGlass must use
+### 5.4 The algorithm Terminal-Fenster must use
 
 ```
 1. rows, cols        := TIOCGWINSZ.ws_row / ws_col     (always trustworthy)
@@ -528,7 +528,7 @@ allow-passthrough   OPTIONS_TABLE_CHOICE, scope = WINDOW|PANE, default_num = 0
   on  (1) — allowed if the pane is visible
   all (2) — allowed even if the pane is invisible
 ```
-So: **off by default.** BlackGlass must instruct users to `tmux set -g allow-passthrough on` (or `all`), and must detect the `TMUX` env var and degrade gracefully when passthrough is off — with `allow-passthrough off` the sequence is silently dropped, producing a blank screen with no error.
+So: **off by default.** Terminal-Fenster must instruct users to `tmux set -g allow-passthrough on` (or `all`), and must detect the `TMUX` env var and degrade gracefully when passthrough is off — with `allow-passthrough off` the sequence is silently dropped, producing a blank screen with no error.
 
 **Buffer limit:** `INPUT_BUF_DEFAULT_SIZE = 1048576` (1 MiB) `[SOURCE: tmux.h:3419]`. A single passthrough DCS must stay under this. With kitty's 4096-byte base64 chunks each wrapped individually you are nowhere near it — **wrap each 4096-byte chunk in its own `ESC P tmux;` envelope**, do not accumulate.
 
@@ -604,7 +604,7 @@ The empirical Ghostty column is missing. Cause: several concurrent agents were d
 
 To close the gap, on an idle machine:
 ```sh
-SP=/private/tmp/claude-501/-Users-adeebbashir/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad
+SP=/private/tmp/claude-501/-Users-builder/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad
 pkill -f 'Ghostty.app/Contents/MacOS/ghostty'; sleep 2
 open -a Ghostty; sleep 5
 osascript -e 'tell application "Ghostty"
@@ -662,7 +662,7 @@ Concretely:
 | Artifact | License | Use |
 |---|---|---|
 | kitty graphics **protocol spec** | published open specification, explicitly invites third-party implementation | **Implement from the prose.** Safe. |
-| kitty **source** (kovidgoyal/kitty) | **GPL-3.0** | **Do not read for implementation, do not copy.** Incompatible with a proprietary/permissive BlackGlass. |
+| kitty **source** (kovidgoyal/kitty) | **GPL-3.0** | **Do not read for implementation, do not copy.** Incompatible with a proprietary/permissive Terminal-Fenster. |
 | **Ghostty** source | **MIT** (`Copyright (c) 2024 Mitchell Hashimoto, Ghostty contributors`) | Safe to read and to adapt with attribution. Best reference implementation. |
 | **tmux** source | ISC/BSD | Safe to read; only behavioural facts used here. |
 | **xterm** `ctlseqs` | permissive (MIT-style, Thomas Dickey) | Safe reference for Sixel/XTSMGRAPHICS/CSI-t. |

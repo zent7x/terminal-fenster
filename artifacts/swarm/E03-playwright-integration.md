@@ -1,10 +1,10 @@
-# E03 — Playwright attachment to a running BlackGlass session
+# E03 — Playwright attachment to a running Terminal-Fenster session
 
 **Mission:** determine exactly how Playwright can attach to our running visible session.
 **Status:** answered and empirically verified end-to-end on this machine.
 **Author:** swarm agent E03. **Date:** 2026-07-31.
 **Files written:** this file only. No repo source was modified. All experiments ran in
-`/private/tmp/claude-501/-Users-adeebbashir/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/e03/`.
+`/private/tmp/claude-501/-Users-builder/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/e03/`.
 
 ---
 
@@ -170,7 +170,7 @@ That is the verbatim error string from #39008. With `ELECTRON_RUN_AS_NODE=1` set
 hands argv to **Node's** option parser, which has never heard of a Chromium switch and
 rejects it. Without that variable, Chromium's parser handles it fine.
 
-**Actionable consequence for BlackGlass:** if `ELECTRON_RUN_AS_NODE` is ever present in the
+**Actionable consequence for Terminal-Fenster:** if `ELECTRON_RUN_AS_NODE` is ever present in the
 environment the Rust core inherits, engine startup breaks — with or without CDP. `Command`
 in `apps/cli/src/main.rs:402` inherits the parent environment. Explicitly clearing that
 variable at the spawn site is a cheap, permanent immunisation.
@@ -225,7 +225,7 @@ Notable confirmations:
 2. **`context.newPage()` fails** — `Target.createTarget` → "Not supported". **Playwright
    cannot open tabs.** Every page it drives must already have been created by our engine.
 
-Both are inherent to Electron, not to our code, and neither is fatal: BlackGlass's tab
+Both are inherent to Electron, not to our code, and neither is fatal: Terminal-Fenster's tab
 lifecycle is owned by the Rust core by design, so Playwright driving pages the core created
 is the correct division of labour anyway. Tests that need a new tab must ask the core for
 one over our type-10 command channel, then re-enumerate `context.pages()`.
@@ -253,7 +253,7 @@ holding a size it negotiated from the real cell grid; it would start receiving f
 different geometry with no `resize` command having been sent. Depending on how the encoder
 trusts the negotiated size, that is a corrupted render or worse.
 
-Mitigation, cheapest first: document `setViewportSize()` as forbidden in BlackGlass tests
+Mitigation, cheapest first: document `setViewportSize()` as forbidden in Terminal-Fenster tests
 (the frame header already carries authoritative width/height at
 `apps/engine/src/main.js:106-108`, so the core *can* be made to trust the header and
 re-assert). A test-lint rule banning the call is close to free.
@@ -300,7 +300,7 @@ Verified working against our OSR config. Requires `npm i -D playwright-core` (~1
 browser download).
 
 ```js
-// tests/e2e/attach.mjs — drive a *running* BlackGlass engine over CDP.
+// tests/e2e/attach.mjs — drive a *running* Terminal-Fenster engine over CDP.
 import { chromium } from 'playwright-core';
 import { readFileSync } from 'node:fs';
 
@@ -363,7 +363,7 @@ requires no engine edit at all — the commander may prefer that, as it keeps CD
 outside the engine source.
 
 **9.2 CLI (`apps/cli/src/main.rs:402-411`).** Add `--remote-debugging-port=0` plus
-`--user-data-dir=<dir>` behind a `--devtools` / `BLACKGLASS_CDP` opt-in, then read the port
+`--user-data-dir=<dir>` behind a `--devtools` / `TERMINAL_FENSTER_CDP` opt-in, then read the port
 from `<dir>/DevToolsActivePort`. Verified working:
 
 ```
@@ -381,7 +381,7 @@ the file is the only way to recover an ephemeral port. Second, fixed ports colli
 this very mission my first run failed with `bind() failed: Address already in use (48)` /
 `Cannot start http server for devtools` because another agent's Electron already held 9333**,
 and my `curl` silently received *their* browser's `/json/version` (`cdptest/1.0.0` in the
-User-Agent gave it away). A fixed default port would let one BlackGlass session hijack
+User-Agent gave it away). A fixed default port would let one Terminal-Fenster session hijack
 another's automation. The `DevToolsActivePort` file also gives the CLI a reliable readiness
 signal.
 
@@ -409,7 +409,7 @@ signal.
 
 **Assumed / not verified:**
 
-- Behaviour against a **packaged** BlackGlass app. Everything here used unpackaged
+- Behaviour against a **packaged** Terminal-Fenster app. Everything here used unpackaged
   `node_modules/.bin/electron`. Electron fuses (notably `EnableNodeCliInspectArguments`) can
   change CLI-argument handling in packaged builds; #39008 may yet bite there. Re-test at
   packaging time (relevant to B10).
@@ -431,9 +431,9 @@ the command line. False for 43.2.0 unpackaged; the real trigger is `ELECTRON_RUN
 ## 11. Reproduction
 
 ```bash
-cd /private/tmp/claude-501/-Users-adeebbashir/.../scratchpad/e03
+cd /private/tmp/claude-501/-Users-builder/.../scratchpad/e03
 npm install playwright-core
-ELECTRON=/Users/adeebbashir/projects/blackglass/apps/engine/node_modules/.bin/electron
+ELECTRON=$REPO/apps/engine/node_modules/.bin/electron
 "$ELECTRON" --remote-debugging-port=9416 ./osr-app.js &   # offscreen, same webPreferences as the engine
 curl -s http://127.0.0.1:9416/json/version
 curl -s http://127.0.0.1:9416/json/list

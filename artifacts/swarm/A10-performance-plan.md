@@ -1,4 +1,4 @@
-# A10 — BlackGlass Performance Measurement Plan
+# A10 — Terminal-Fenster Performance Measurement Plan
 
 **Status:** Implementation spec, ready to build
 **Date:** 2026-07-31
@@ -62,7 +62,7 @@ Three consequences that the whole plan is built around:
 
 ## 1. Clock discipline (the foundation)
 
-Every timestamp in BlackGlass, in every language, in every process, must be on **one** timeline. Cross-process latency arithmetic is otherwise meaningless.
+Every timestamp in Terminal-Fenster, in every language, in every process, must be on **one** timeline. Cross-process latency arithmetic is otherwise meaningless.
 
 ### 1.1 The chosen clock
 
@@ -345,7 +345,7 @@ Every subcommand writes `manifest.json` containing: git SHA, `rustc -Vv`, `node 
 | *t5a* | Terminal acknowledged ingest | Rust TUI | on reading the ACK reply, §3.5 |
 | *t5b* | Photons | external | offline capture, §3.6 |
 
-**Controllable latency := t4 − t0.** This is the number BlackGlass owns, the number we regress against, and the number we publish. Everything past t4 is the terminal's and the compositor's.
+**Controllable latency := t4 − t0.** This is the number Terminal-Fenster owns, the number we regress against, and the number we publish. Everything past t4 is the terminal's and the compositor's.
 
 ### 3.2 Why this is honest and what it hides
 
@@ -467,13 +467,13 @@ The honest ceiling: `photon ≤ t5b_observed`, quantized to the capture interval
 
 ### 3.7 Synthetic input injection (mandatory for reproducibility)
 
-Do **not** benchmark with a human pressing keys. The harness opens a PTY pair (`posix_openpt` / `grantpt` / `unlockpt` / `ptsname`), runs BlackGlass on the slave, and writes input bytes to the master at a controlled rate. t0 is then the TUI's `read()` return, and the harness *also* knows exactly when it wrote the byte, giving a free sanity check on PTY input latency:
+Do **not** benchmark with a human pressing keys. The harness opens a PTY pair (`posix_openpt` / `grantpt` / `unlockpt` / `ptsname`), runs Terminal-Fenster on the slave, and writes input bytes to the master at a controlled rate. t0 is then the TUI's `read()` return, and the harness *also* knows exactly when it wrote the byte, giving a free sanity check on PTY input latency:
 
 ```rust
 let m = unsafe { libc::posix_openpt(libc::O_RDWR | libc::O_NOCTTY) };
 unsafe { libc::grantpt(m); libc::unlockpt(m); }
 let slave_name = unsafe { std::ffi::CStr::from_ptr(libc::ptsname(m)) };
-// spawn blackglass with stdin/stdout/stderr = open(slave_name), setsid, TIOCSCTTY
+// spawn terminal-fenster with stdin/stdout/stderr = open(slave_name), setsid, TIOCSCTTY
 // then: write(m, b"j", 1) at a controlled cadence; record inject_ns
 ```
 
@@ -533,8 +533,8 @@ Two viewports minimum: **1440×900** (ADR-0001's, 5 184 000 B/frame) and **720×
 
 ### 5.1 Definitions
 
-- **Cold start** — no BlackGlass process running; Chromium's on-disk caches (code cache, GPU shader cache, HTTP cache) purged; the target page has never been loaded. Ends at **first pixel present**.
-- **Warm start** — a BlackGlass engine process is already resident; measure `new BrowserWindow` → first pixel of a page that is already in cache.
+- **Cold start** — no Terminal-Fenster process running; Chromium's on-disk caches (code cache, GPU shader cache, HTTP cache) purged; the target page has never been loaded. Ends at **first pixel present**.
+- **Warm start** — a Terminal-Fenster engine process is already resident; measure `new BrowserWindow` → first pixel of a page that is already in cache.
 - **First pixel** — the first `WriteEnd` whose payload contains non-background pixels for the target page. Not `did-finish-load`, not the first `paint` (which is often a blank white frame — count it separately as `first_paint` and report both).
 
 ### 5.2 The zero-instrumentation spawn-time trick
@@ -564,17 +564,17 @@ Cold start is then `first_pixel_ns − proc_start_ns(main_pid)`, plus a per-chil
 # bench/cold-start.sh — n cold starts with caches purged. Run under `caffeinate -dimsu`.
 set -euo pipefail
 N=${1:-30}
-APPSUP="$HOME/Library/Application Support/blackglass"
-CACHE="$HOME/Library/Caches/blackglass"
+APPSUP="$HOME/Library/Application Support/terminal-fenster"
+CACHE="$HOME/Library/Caches/terminal-fenster"
 for i in $(seq 1 $N); do
-  pkill -f 'blackglass|Electron' 2>/dev/null || true
+  pkill -f 'terminal-fenster|Electron' 2>/dev/null || true
   sleep 1
   rm -rf "$APPSUP/Cache" "$APPSUP/Code Cache" "$APPSUP/GPUCache" "$CACHE"
   sync
   # `purge` drops the unified buffer cache; on macOS 26 it may require sudo — check and
   # record whether it ran, because a warm UBC and a cold UBC are different experiments.
   /usr/sbin/purge 2>/dev/null && P=1 || P=0
-  BG_TRACE=1 BG_RUN="cold-$i" ./target/release/blackglass --url "$URL" --exit-after-first-pixel
+  BG_TRACE=1 BG_RUN="cold-$i" ./target/release/terminal-fenster --url "$URL" --exit-after-first-pixel
   echo "{\"run\":$i,\"purged\":$P}" >> cold-meta.jsonl
 done
 ```
@@ -589,7 +589,7 @@ Cold start is only meaningful relative to something. Measure, on the same machin
 
 ## 6. Idle cost
 
-The claim to be proven: *a static page costs approximately zero CPU.* This is the claim most likely to be false in a browser (Chromium has timers, GC, compositor heartbeats, network keep-alives) and it is the one that determines whether BlackGlass is usable in a background tmux pane.
+The claim to be proven: *a static page costs approximately zero CPU.* This is the claim most likely to be false in a browser (Chromium has timers, GC, compositor heartbeats, network keep-alives) and it is the one that determines whether Terminal-Fenster is usable in a background tmux pane.
 
 ### 6.1 Method: `proc_pid_rusage` deltas, not sampling
 
@@ -629,13 +629,13 @@ The harness:
 | Metric | Budget | Rationale |
 |---|---|---|
 | Total tree `cpu_fraction` over 120 s idle | **< 0.5 %** of one core | ~0.05 % of the 10-core machine; invisible in `top` |
-| BlackGlass Rust TUI process alone | **< 0.05 %** | it should be blocked in `poll()` |
+| Terminal-Fenster Rust TUI process alone | **< 0.05 %** | it should be blocked in `poll()` |
 | `write()` syscalls during idle | **0** after quiescence | any output on a static page is a bug |
 | `ri_pkg_idle_wkups` per second, whole tree | **< 20/s** | above this, battery impact becomes user-visible |
 
 A single-run cross-check that requires no harness at all:
 ```sh
-/usr/bin/time -l ./target/release/blackglass --url ... --idle-then-exit 120
+/usr/bin/time -l ./target/release/terminal-fenster --url ... --idle-then-exit 120
 # -> "instructions retired", "cycles elapsed", "peak memory footprint" [measured: works, no sudo]
 ```
 
@@ -643,7 +643,7 @@ A single-run cross-check that requires no harness at all:
 
 `powermetrics` gives per-process energy impact and is the *right* tool, but it **requires sudo** *[measured: "powermetrics must be invoked as the superuser"]*, which makes it unusable in unattended CI. Do not put it on the critical path. If a human wants a one-off energy number:
 ```sh
-sudo powermetrics -n 12 -i 10000 --samplers tasks --show-process-energy | grep -i blackglass
+sudo powermetrics -n 12 -i 10000 --samplers tasks --show-process-energy | grep -i terminal-fenster
 ```
 `proc_pid_rusage`'s `ri_billed_energy` / `ri_serviced_energy` fields are populated without sudo *[measured: 51 461 863 on a live shell]* and are the sudo-free proxy — but **their units are UNVERIFIED** (nanojoules is the common assumption; do not publish absolute energy figures from this field, only ratios between conditions measured identically).
 

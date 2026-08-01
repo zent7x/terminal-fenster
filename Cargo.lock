@@ -9,27 +9,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
-name = "bg-proto"
-version = "0.1.0"
-
-[[package]]
-name = "bg-term"
-version = "0.1.0"
-dependencies = [
- "flate2",
- "libc",
-]
-
-[[package]]
-name = "blackglass"
-version = "0.1.0"
-dependencies = [
- "bg-proto",
- "bg-term",
- "libc",
-]
-
-[[package]]
 name = "cfg-if"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -75,3 +54,24 @@ name = "simd-adler32"
 version = "0.3.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a219298ac11a56ea9a6d2120044824d6f01aeb034955e7af7bc16858527deea"
+
+[[package]]
+name = "terminal-fenster"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "tf-proto",
+ "tf-term",
+]
+
+[[package]]
+name = "tf-proto"
+version = "0.1.0"
+
+[[package]]
+name = "tf-term"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "libc",
+]

@@ -24,7 +24,7 @@ now settled affirmatively. Headline consequences (full detail folded into
   already proves the typing damage path.
 - Side finding: native `<select>` dropdowns are **not** composited into the OSR frame
   (`diffBelowSelect 0`) — they render as a separate Chromium widget and would be invisible
-  in BlackGlass. Needs a product decision (intercept and render our own menu). Logged for the
+  in Terminal-Fenster. Needs a product decision (intercept and render our own menu). Logged for the
   roadmap, out of scope for this spike.
 
 The design rationale and expectations below are retained unchanged for provenance; where a
@@ -166,7 +166,7 @@ stays on-screen and the frame is 1440×900.
 
 `TextureInfo.widgetType` is `'popup' | 'frame'` (`electron.d.ts:23723-23725`), which means
 Chromium renders select dropdowns as a **separate widget**. If that widget is never composited
-into our frame, every dropdown on the web is invisible in BlackGlass — a P0-class usability
+into our frame, every dropdown on the web is invisible in Terminal-Fenster — a P0-class usability
 failure hiding behind a working-looking browser.
 
 Tested without screenshots (the machine is at a lock screen): keep the last full BGRA frame,
@@ -900,7 +900,7 @@ app.whenReady().then(async () => {
 
   // <select> renders as a SEPARATE Chromium widget (TextureInfo.widgetType can be 'popup').
   // If that widget is never composited into our frame, every dropdown on the web is
-  // invisible in BlackGlass. Detected without screenshots by diffing the bitmap region
+  // invisible in Terminal-Fenster. Detected without screenshots by diffing the bitmap region
   // directly below the select, before and after the click.
   await stage('popup-select-dropdown', {
     ms: 6000,
@@ -1012,7 +1012,7 @@ Chromium child processes fail under the agent Bash sandbox with
 **harness** sandbox disabled. Chromium's own sandbox stays on (`sandbox: true` in `mkWin`).
 
 ```bash
-cd /Users/adeebbashir/projects/blackglass/apps/engine
+cd $REPO/apps/engine
 
 # 1) the shipping path -- this is the one that matters
 ./node_modules/.bin/electron spike/b02-capability-probe.js | tee spike/out/b02-bitmap.log

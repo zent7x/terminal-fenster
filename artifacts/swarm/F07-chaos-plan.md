@@ -15,8 +15,8 @@ identified; three of them (**D1, D2, D4**) leave the user with a destroyed termi
 
 ## 0. Executive summary
 
-BlackGlass's terminal restoration is genuinely well engineered for the failure modes it
-anticipates. `crates/bg-term/src/tty.rs` wires `restore_raw()` to normal drop, early return,
+Terminal-Fenster's terminal restoration is genuinely well engineered for the failure modes it
+anticipates. `crates/tf-term/src/tty.rs` wires `restore_raw()` to normal drop, early return,
 panic hook, and four signals, and `Cargo.toml` deliberately pins `panic = "unwind"` so the hook
 actually runs. Engine death, socket EOF, truncated frames, and hostile page titles are all
 handled correctly today, and I verified each by reading the code path end to end.
@@ -27,7 +27,7 @@ The gaps are all in the paths nobody wired up:
 |---|--------|--------------------|
 | **D1** | `SIGKILL` leaves raw mode + mouse tracking + alt screen; no recovery subcommand exists | **NO** |
 | **D2** | `SIGSTOP`/`SIGTSTP` freeze the process holding the tty; `ISIG` is off so ctrl+c and ctrl+z do nothing — the user's only exit is `kill -9`, i.e. D1 | **NO** |
-| **D3** | `blackglass doctor` looks like it repairs a broken terminal but restores raw termios, half-fixing it | **NO** (makes D1 worse) |
+| **D3** | `terminal-fenster doctor` looks like it repairs a broken terminal but restores raw termios, half-fixing it | **NO** (makes D1 worse) |
 | **D4** | `MessageReader` accepts an unbounded `u32` length; a corrupt length allocates without limit → Rust alloc abort → **no unwind, no restore** | **NO** |
 | **D5** | Engine is orphaned when the CLI is `SIGKILL`ed — a headless Chromium tree keeps burning CPU | tty n/a |
 | **D6** | No `SIGWINCH` handling anywhere; CLI never sends `{"t":"resize"}` | yes (functional break only) |
@@ -36,7 +36,7 @@ The gaps are all in the paths nobody wired up:
 | **D9** | Diagnostics are written into the alt screen immediately before it is discarded — the user never sees why the browser vanished | yes (UX) |
 
 **The single most actionable item is D1 + D3 together.** There is currently no way for a user
-whose terminal has been destroyed to repair it with this tool. `blackglass reset` must be added,
+whose terminal has been destroyed to repair it with this tool. `terminal-fenster reset` must be added,
 and it must construct a sane termios from scratch rather than reusing the saved-termios path,
 because after a `SIGKILL` there is no saved state to reuse.
 
@@ -64,7 +64,7 @@ TERM-OK(session) :=
                          AND c_oflag & OPOST != 0
   (2) MODES-RESTORED:    every token of RESTORE_SEQ appears in the output tail
   (3) NO-ORPHANS:        pgrep -f 'bg-socket=' returns nothing
-  (4) NO-LITTER:         the session's /tmp/blackglass-<pid>-<nanos>/ directory is gone
+  (4) NO-LITTER:         the session's /tmp/terminal-fenster-<pid>-<nanos>/ directory is gone
 ```
 
 Clause (1) is the one that actually matters to a human: it is exactly the difference between a
@@ -72,7 +72,7 @@ shell that echoes what you type and one where you must blind-type `reset`. A pty
 cooked mode, `TtyGuard::acquire` saves that (`tty.rs:92-99`), and `restore_raw` writes it back
 via `tcsetattr` (`tty.rs:61-64`). So comparing against the pre-spawn snapshot is a sound test.
 
-Clause (2)'s token list is not invented — it is `RESTORE_SEQ` at `crates/bg-term/src/tty.rs:27-40`:
+Clause (2)'s token list is not invented — it is `RESTORE_SEQ` at `crates/tf-term/src/tty.rs:27-40`:
 
 ```
 \x1b[<u  \x1b[?1006l  \x1b[?1016l  \x1b[?1003l  \x1b[?1002l  \x1b[?1000l
@@ -103,7 +103,7 @@ the 98%-full disk constraint. The repo already establishes this pattern:
 This is the key enabler for the corruption experiments, and it needs **zero changes to
 `apps/cli` or `apps/engine`**.
 
-`locate_engine()` (`apps/cli/src/main.rs:319-350`) honours `$BLACKGLASS_ENGINE` and only requires
+`locate_engine()` (`apps/cli/src/main.rs:319-350`) honours `$TERMINAL_FENSTER_ENGINE` and only requires
 that `<dir>/node_modules/.bin/electron` exists and is executable. `Session::start`
 (`main.rs:370-385`) then derives `engine_root` by walking up three parents and requires
 `<engine_root>/src/main.js` to exist — it never reads it, it only stats it. The child is spawned
@@ -124,15 +124,15 @@ mkdir -p "$FAKE/node_modules/.bin" "$FAKE/src"
 touch "$FAKE/src/main.js"                 # only stat()'d by Session::start, never read
 cp artifacts/swarm/chaos/fake_engine.py "$FAKE/node_modules/.bin/electron"
 chmod +x "$FAKE/node_modules/.bin/electron"
-export BLACKGLASS_ENGINE="$FAKE"
+export TERMINAL_FENSTER_ENGINE="$FAKE"
 ```
 
 ### 1.4 Bounded runs
 
-`BLACKGLASS_EXIT_AFTER_MS` (`main.rs:48-50`) exits through the identical shutdown path as
-`ctrl+q`, and `BLACKGLASS_LOG` (`main.rs:32-41`) writes diagnostics to a file rather than stdout
+`TERMINAL_FENSTER_EXIT_AFTER_MS` (`main.rs:48-50`) exits through the identical shutdown path as
+`ctrl+q`, and `TERMINAL_FENSTER_LOG` (`main.rs:32-41`) writes diagnostics to a file rather than stdout
 — because stdout is the graphics channel and a stray log line would corrupt an image
-mid-transmission. Both are used throughout. Every experiment below sets `BLACKGLASS_LOG` so that
+mid-transmission. Both are used throughout. Every experiment below sets `TERMINAL_FENSTER_LOG` so that
 failures are diagnosable from CI artifacts alone.
 
 ---
@@ -151,7 +151,7 @@ analytical core of the mission's critical focus; the experiments in §4 are its 
 | Rust panic | panic hook (`tty.rs:126-129`) + `panic = "unwind"` (`Cargo.toml`) | yes | ✅ |
 | `SIGINT` / `SIGTERM` / `SIGHUP` / `SIGQUIT` | `signal_handler` (`tty.rs:67-75`), restores then re-raises with `SIG_DFL` so exit status is still 128+N | yes | ✅ |
 | Viewport undeterminable | `drop(guard)` **before** `eprintln!` (`main.rs:246-250`) — correct ordering | yes | ✅ |
-| `BLACKGLASS_EXIT_AFTER_MS` elapsed | `main.rs:465-473` → normal return | yes | ✅ |
+| `TERMINAL_FENSTER_EXIT_AFTER_MS` elapsed | `main.rs:465-473` → normal return | yes | ✅ |
 | **`SIGKILL`** | uncatchable by definition | **no** | ❌ **D1** |
 | **`SIGSTOP` / `SIGTSTP`** | uncatchable / not in the handled set | **no** (frozen) | ❌ **D2** |
 | **Allocation failure (OOM)** | Rust's alloc error handler **aborts**; abort does not unwind, so the panic hook never runs | **no** | ❌ **D4** |
@@ -195,7 +195,7 @@ The user must blind-type `stty sane` or `reset` with no echo and no working ctrl
 This is not exotic. It is the *expected* end state of every route in D2, of a hung SSH session,
 and of any user who gets impatient with a frozen render.
 
-**Fix:** add a `blackglass reset` subcommand. Critically, it must **not** go through
+**Fix:** add a `terminal-fenster reset` subcommand. Critically, it must **not** go through
 `TtyGuard`. See D3 for why.
 
 ### D2 — `SIGSTOP`/`SIGTSTP` is a trap that funnels users into D1
@@ -226,7 +226,7 @@ and re-enable input protocols, then force a full repaint). Separately, bound the
 the poll loop stays live — write in chunks and re-poll stdin between chunks, or move rendering to
 a thread with a bounded handoff.
 
-### D3 — `blackglass doctor` half-repairs a destroyed terminal
+### D3 — `terminal-fenster doctor` half-repairs a destroyed terminal
 
 **Severity: high.** This is the trap that makes D1 worse, because `doctor` is exactly what a
 user will reach for.
@@ -240,7 +240,7 @@ and the alt screen — and then calls `tcsetattr(fd, TCSADRAIN, saved)`, restori
 Net effect: the mouse stops spraying and the image disappears, so it *looks* like it worked, but
 there is still no echo and no line editing. The user concludes the tool cannot fix it.
 
-**Fix:** `blackglass reset` must construct a cooked termios from first principles, not reuse
+**Fix:** `terminal-fenster reset` must construct a cooked termios from first principles, not reuse
 `SAVED_TERMIOS`:
 
 ```
@@ -257,12 +257,12 @@ tcsetattr(fd, TCSANOW, &t)      // TCSANOW, not TCSADRAIN: the output queue may 
 `TCSADRAIN` is right for the normal path (it lets queued graphics finish) but wrong for repair,
 where the queue may be exactly what is stuck.
 
-`blackglass reset` should also be safe to run when nothing is wrong, and should print one line
+`terminal-fenster reset` should also be safe to run when nothing is wrong, and should print one line
 of confirmation *after* restoring, so the user gets echo-confirmation that it worked.
 
 ### D4 — unbounded frame length → allocation abort → no restore
 
-**Severity: critical.** `MessageReader::next_message` (`crates/bg-proto/src/lib.rs:81-93`) reads
+**Severity: critical.** `MessageReader::next_message` (`crates/tf-proto/src/lib.rs:81-93`) reads
 a `u32` length prefix with **no upper bound**:
 
 ```rust
@@ -289,7 +289,7 @@ Note the asymmetry: the *engine's* reader (`apps/engine/src/main.js:266-286`) ha
 unbounded-length shape. It is less exposed because commands are small and the CLI is the trusted
 side, but it should be capped for symmetry.
 
-**Fix:** cap the length in `bg-proto`. A frame is `w*h*4 + 32`; the largest plausible display
+**Fix:** cap the length in `tf-proto`. A frame is `w*h*4 + 32`; the largest plausible display
 today is well under 64 MiB. Introduce `MAX_MESSAGE_LEN` (suggest 64 MiB), and on violation return
 a distinct `Err`/poison state so the caller can tear down cleanly through the *normal* path — the
 one that restores the terminal — rather than dying in the allocator.
@@ -310,12 +310,12 @@ responsive. If the renderer is wedged in a long task, or the engine is itself st
 close event is not processed and a headless Chromium tree survives with no parent and no
 terminal.
 
-The socket directory `/tmp/blackglass-<pid>-<nanos>/` (`main.rs:393-394`) is also leaked on
+The socket directory `/tmp/terminal-fenster-<pid>-<nanos>/` (`main.rs:393-394`) is also leaked on
 `SIGKILL`, accumulating across crashes.
 
 **Fix:** two independent belts. (a) In the engine, add a periodic liveness check on the parent
-pid (`process.ppid` becoming 1, or a heartbeat timeout) and self-exit. (b) `blackglass reset`
-should also reap: scan `/tmp/blackglass-*`, and `pgrep -f 'bg-socket=<that path>'`, kill and
+pid (`process.ppid` becoming 1, or a heartbeat timeout) and self-exit. (b) `terminal-fenster reset`
+should also reap: scan `/tmp/terminal-fenster-*`, and `pgrep -f 'bg-socket=<that path>'`, kill and
 clean.
 
 ### D6 — no resize handling at all
@@ -370,7 +370,7 @@ moment it is needed).
 
 ### D8 — unchecked multiplication in `expected_payload()`
 
-**Severity: medium.** `FrameHeader::expected_payload` (`crates/bg-proto/src/lib.rs:51-53`) is
+**Severity: medium.** `FrameHeader::expected_payload` (`crates/tf-proto/src/lib.rs:51-53`) is
 `self.width as usize * self.height as usize * 4`. `[profile.release]` in `Cargo.toml` does not
 set `overflow-checks`, so release builds wrap silently. I verified the arithmetic:
 
@@ -389,7 +389,7 @@ The system survives this only because `Renderer::present` early-returns on `self
 (`main.rs:849`). That guard is load-bearing and its load-bearing role is undocumented.
 
 A wrap to a small *non-zero* multiple of 4 is worse: `rgb` is non-empty and short, `present`
-proceeds, and `kitty::encode_rgb_frame` hits its `assert_eq!` at `crates/bg-term/src/kitty.rs:108`
+proceeds, and `kitty::encode_rgb_frame` hits its `assert_eq!` at `crates/tf-term/src/kitty.rs:108`
 → panic. The panic hook restores the terminal, so `TERM-OK` holds, but the browser dies. In debug
 builds the multiply itself panics first.
 
@@ -429,10 +429,10 @@ return a `Result<i32, String>` and let `cmd_open` print after `drop(guard)`.
 Common preamble for every experiment:
 
 ```bash
-cd /Users/adeebbashir/projects/blackglass
-export BLACKGLASS_LOG=/tmp/bg-chaos/$EXPERIMENT.log
+cd $REPO
+export TERMINAL_FENSTER_LOG=/tmp/bg-chaos/$EXPERIMENT.log
 export RUST_BACKTRACE=1
-cargo build --release            # binary: target/release/blackglass
+cargo build --release            # binary: target/release/terminal-fenster
 ```
 
 Every experiment ends with the `TERM-OK` predicate from §1.1. Where an experiment is expected to
@@ -448,11 +448,11 @@ is in flight. Targeting the engine by its socket argument is precise and avoids 
 unrelated Electron:
 
 ```bash
-target/release/blackglass open https://example.com &
+target/release/terminal-fenster open https://example.com &
 CLI=$!
 sleep 2
 # The engine is the only process carrying our socket path on its argv.
-pkill -9 -f "bg-socket=.*blackglass-${CLI}-"
+pkill -9 -f "bg-socket=.*terminal-fenster-${CLI}-"
 ```
 
 To hit *mid-frame* rather than between frames, kill in a loop over a 60fps page so the kill lands
@@ -491,10 +491,10 @@ before it.
 **Induce.** Distinct from C01: the engine survives, so there is no EOF.
 
 ```bash
-target/release/blackglass open https://example.com &
+target/release/terminal-fenster open https://example.com &
 sleep 2
 # Kill only the renderer child, leaving the Electron main process alive.
-pkill -9 -f 'type=renderer.*blackglass'
+pkill -9 -f 'type=renderer.*terminal-fenster'
 ```
 
 **Expected.** Engine emits `{"t":"crash",...}` (`main.js:125-127`); `Status::crashed` is set.
@@ -512,9 +512,9 @@ pkill -9 -f 'type=renderer.*blackglass'
 **Induce.**
 
 ```bash
-target/release/blackglass open https://example.com &
+target/release/terminal-fenster open https://example.com &
 sleep 2
-rm -f /tmp/blackglass-*/engine.sock
+rm -f /tmp/terminal-fenster-*/engine.sock
 sleep 3
 ```
 
@@ -523,7 +523,7 @@ connection. This experiment exists to assert that benign event is benign, and to
 "cleanup" change from introducing a spurious teardown.
 
 **Pass criterion.** Frames keep arriving (`status.frames` still climbing in
-`$BLACKGLASS_LOG`); session survives to a clean `ctrl+q`; `TERM-OK` holds. Note that
+`$TERMINAL_FENSTER_LOG`); session survives to a clean `ctrl+q`; `TERM-OK` holds. Note that
 `Session::shutdown`'s `remove_file` will then fail harmlessly (`let _`, `main.rs:676`). ✅
 
 ---
@@ -534,9 +534,9 @@ connection. This experiment exists to assert that benign event is benign, and to
 to force an RST rather than an orderly FIN.
 
 ```bash
-BLACKGLASS_ENGINE=/tmp/bg-fake-engine \
+TERMINAL_FENSTER_ENGINE=/tmp/bg-fake-engine \
 BG_FAKE_MODE=abort_after_frames=10 \
-  target/release/blackglass open about:blank
+  target/release/terminal-fenster open about:blank
 ```
 
 **Expected.** `read` returns either `Ok(0)` or `ECONNRESET`. Both are handled — the latter by the
@@ -633,7 +633,7 @@ cat > /tmp/hostile.html <<'EOF'
 <html><head><title>PWN&#x1b;[2J&#x1b;[?1049l&#x1b;]0;owned&#x07;&#x9b;31m</title></head>
 <body>x</body></html>
 EOF
-target/release/blackglass open /tmp/hostile.html
+target/release/terminal-fenster open /tmp/hostile.html
 ```
 
 Extend with: OSC 52 clipboard write, `\x1b]0;` title-set, DCS introducer, `\x9b` (single-byte C1
@@ -742,7 +742,7 @@ unreachable in production, so this useful diagnostic is dead code from the user'
 ```bash
 python3 artifacts/swarm/chaos/pty_runner.py \
     --drain-bytes-per-sec 50000 \
-    --cmd 'target/release/blackglass open https://example.com/repaint-60fps' \
+    --cmd 'target/release/terminal-fenster open https://example.com/repaint-60fps' \
     --run-for 60 --then-send-ctrl-q
 ```
 
@@ -776,7 +776,7 @@ that drives a user to `kill -9`.
 ```bash
 for SIG in INT TERM HUP QUIT USR1 PIPE TSTP STOP KILL; do
   python3 artifacts/swarm/chaos/pty_runner.py \
-      --cmd 'target/release/blackglass open https://example.com' \
+      --cmd 'target/release/terminal-fenster open https://example.com' \
       --signal-at 3 --signal "$SIG" --expect-term-ok auto
 done
 ```
@@ -790,7 +790,7 @@ done
 | `USR1` | default disposition terminates; **not** handled | ❌ documents the gap — either handle or accept |
 | `TSTP` | *should* restore, stop, and re-init on `CONT` | ❌ **`xfail` — D2** |
 | `STOP` → `CONT` | *should* re-init on `CONT` | ❌ **`xfail` — D2** |
-| `KILL` | unrecoverable in-process | ❌ **`xfail` — D1**; asserts `blackglass reset` repairs it once it exists |
+| `KILL` | unrecoverable in-process | ❌ **`xfail` — D1**; asserts `terminal-fenster reset` repairs it once it exists |
 
 The `KILL` row is the most important single assertion in this document. Today it fails, and there
 is no command that makes it pass. That is the gap D1 describes.
@@ -807,7 +807,7 @@ Failure before `TtyGuard` exists, or between acquire and the first frame, is a d
 
 | Case | Induce | Expected | Criterion |
 |---|---|---|---|
-| Engine binary missing | `BLACKGLASS_ENGINE=/nonexistent` | clean error, exit 1 | terminal never entered raw mode; message visible on the main screen ✅ (`main.rs:364-369`, `278-282`) |
+| Engine binary missing | `TERMINAL_FENSTER_ENGINE=/nonexistent` | clean error, exit 1 | terminal never entered raw mode; message visible on the main screen ✅ (`main.rs:364-369`, `278-282`) |
 | `src/main.js` missing | fake dir without `src/main.js` | clean error (`main.rs:380-385`) | ✅ |
 | Engine never connects | fake engine that sleeps forever | 30 s timeout then clean error (`main.rs:415-425`) | `TERM-OK`; **but 30 s of a raw-mode terminal with no feedback** — recommend a progress indicator and a shorter default |
 | Engine connects then exits immediately | fake engine: connect, `exit(0)` | EOF handled | `TERM-OK` ✅ |
@@ -818,7 +818,7 @@ Failure before `TtyGuard` exists, or between acquire and the first frame, is a d
 The last row is worth the commander's attention: `RESTORE_SEQ` uses `\x1b_Ga=d,d=A` — delete
 *all* images (`tty.rs:36`). That is the right call for a single session (it guarantees nothing
 lingers over the shell) but it is destructive to any concurrent user of the terminal's image
-store, including a second BlackGlass or an unrelated image viewer in another tmux pane.
+store, including a second Terminal-Fenster or an unrelated image viewer in another tmux pane.
 
 ---
 
@@ -828,7 +828,7 @@ Not strictly chaos, but they change the restoration story and belong in the same
 
 | Case | Induce | Criterion |
 |---|---|---|
-| tmux without passthrough | `tmux new -d; tmux send-keys 'blackglass open …'` | detected (`mux_label`, `main.rs:189-197`) and either wrapped via `kitty::wrap_tmux` (`kitty.rs:241-250`) or degraded to Unicode — **never** raw graphics into a tmux that will truncate the DCS |
+| tmux without passthrough | `tmux new -d; tmux send-keys 'terminal-fenster open …'` | detected (`mux_label`, `main.rs:189-197`) and either wrapped via `kitty::wrap_tmux` (`kitty.rs:241-250`) or degraded to Unicode — **never** raw graphics into a tmux that will truncate the DCS |
 | tmux pane killed mid-session | `tmux kill-pane` | `SIGHUP` → handler → restore; no orphan engine |
 | SSH connection dropped | `ss`/`pkill` the ssh client | `SIGHUP` → restore; engine exits on socket close |
 | SSH with high latency | `dnctl`/`pfctl` 300 ms delay | same class as C11; assert responsiveness |
@@ -898,7 +898,7 @@ macOS-specific and relevant here: Mach port exhaustion. The environment already 
 a Mach-namespace symptom. Sample `lsmp -p "$ENGINE_PID" | wc -l` every 5 min; a monotonically
 climbing port count is a leak even when RSS looks flat.
 
-Also record from `$BLACKGLASS_LOG`: cumulative frames, fps, `last_wire_bytes`, `last_encode_ms`,
+Also record from `$TERMINAL_FENSTER_LOG`: cumulative frames, fps, `last_wire_bytes`, `last_encode_ms`,
 and (once reachable) engine `stats.produced/sent/coalesced`.
 
 ### 5.5 The metric most likely to be forgotten: the terminal emulator's own memory
@@ -925,8 +925,8 @@ other metric in §5.4 and it is exactly the kind of thing an 8-hour soak exists 
 ```bash
 GHOSTTY_PID=$(pgrep -x ghostty | head -1)
 ps -o rss= -p "$GHOSTTY_PID"                    # baseline
-BLACKGLASS_EXIT_AFTER_MS=600000 \
-  target/release/blackglass open https://example.com/repaint-60fps
+TERMINAL_FENSTER_EXIT_AFTER_MS=600000 \
+  target/release/terminal-fenster open https://example.com/repaint-60fps
 ps -o rss= -p "$GHOSTTY_PID"                    # after ~36,000 frames
 ```
 
@@ -988,7 +988,7 @@ Suggested location `artifacts/swarm/chaos/` (F07-owned; **no core files touched*
 
 ```
 --cmd STR                 command to run on the pty slave
---run-for SEC             wall-clock bound (pair with BLACKGLASS_EXIT_AFTER_MS)
+--run-for SEC             wall-clock bound (pair with TERMINAL_FENSTER_EXIT_AFTER_MS)
 --signal SIG --signal-at SEC
 --drain-bytes-per-sec N   throttle the master read rate (C11)
 --resize-storm N          C09
@@ -999,14 +999,14 @@ Suggested location `artifacts/swarm/chaos/` (F07-owned; **no core files touched*
 
 Core: `pty.openpty()`; snapshot `tcgetattr(slave)`; spawn with the slave as stdin/stdout/stderr in
 a new session; drive; on exit re-read `tcgetattr(slave)` and diff `c_lflag`/`c_oflag`; scan the
-recorded stream for the `RESTORE_SEQ` tokens; `pgrep -f 'bg-socket='`; check `/tmp/blackglass-*`.
+recorded stream for the `RESTORE_SEQ` tokens; `pgrep -f 'bg-socket='`; check `/tmp/terminal-fenster-*`.
 
 Emits one JSON object per run so results aggregate mechanically —
 matching `tests/e2e/input-injection-results.json`, which already establishes this convention.
 
 ### `fake_engine.py` — adversarial engine
 
-Installed at `$BLACKGLASS_ENGINE/node_modules/.bin/electron` per §1.3. Parses `--bg-socket=`,
+Installed at `$TERMINAL_FENSTER_ENGINE/node_modules/.bin/electron` per §1.3. Parses `--bg-socket=`,
 connects, sends a plausible `{"t":"ready"}`, then behaves per `$BG_FAKE_MODE`: `normal`,
 `truncate_pixels=F`, `bogus_length=N`, `geometry=W,H`, `abort_after_frames=N`,
 `never_connect`, `connect_then_exit`, `flood`, `hostile_title`. Records every command it
@@ -1032,7 +1032,7 @@ have no Chromium dependency and run anywhere — which makes them the natural PR
 ```
 
 **PR gate (~3 min, no Chromium):** `cargo test --workspace` (currently **96 tests**: 12 in
-`bg-proto`, 70 in `bg-term`, 14 in `apps/cli` — verified by running it), plus C04–C08, C12, C13
+`tf-proto`, 70 in `tf-term`, 14 in `apps/cli` — verified by running it), plus C04–C08, C12, C13
 against the fake engine under a pty.
 
 **Nightly (~90 min, self-hosted macOS with a real terminal):** all experiments + 60-minute soak.
@@ -1063,8 +1063,8 @@ Ordered by (terminal survives?) × (likelihood) ÷ (effort).
 
 | # | Fix | Defect | Effort | Terminal-lethal |
 |---|---|---|---|:--:|
-| 1 | `blackglass reset` — sane termios from scratch, not `SAVED_TERMIOS` | D1, D3 | S | **yes** |
-| 2 | Cap message length in `bg-proto` (`MAX_MESSAGE_LEN`) | D4 | S | **yes** |
+| 1 | `terminal-fenster reset` — sane termios from scratch, not `SAVED_TERMIOS` | D1, D3 | S | **yes** |
+| 2 | Cap message length in `tf-proto` (`MAX_MESSAGE_LEN`) | D4 | S | **yes** |
 | 3 | `SIGTSTP`/`SIGCONT` handlers | D2 | S | **yes** |
 | 4 | Non-blocking / chunked stdout so `ctrl+q` always lands | D2b | M | indirectly |
 | 5 | `SIGWINCH` + resize plumbing (incl. `PointerMap`) | D6 | M | no |

@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "electronVersion": "43.2.0",
+  "chromiumVersion": "150.0.7871.129",
+  "codecPolicy": "free-codecs-only",
+  "releaseBaseUrl": "https://github.com/electron/electron/releases/download/v43.2.0",
+  "artifacts": {
+    "darwin-arm64": {
+      "electron": {
+        "file": "electron-v43.2.0-darwin-arm64.zip",
+        "sha256": "ad4a0ae3c37ee05aa06c7e2ed0627608389790f0505a2b0d20319efbe33ffe28"
+      },
+      "ffmpeg": {
+        "file": "ffmpeg-v43.2.0-darwin-arm64.zip",
+        "sha256": "6d4b9158bfc442288833ecffa1bd240bf10c60e7f37ab32872e97ee773d23fc3",
+        "member": "libffmpeg.dylib",
+        "destination": "Electron.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Libraries/libffmpeg.dylib"
+      },
+      "runtime": "Electron.app/Contents/MacOS/Electron"
+    },
+    "darwin-x64": {
+      "electron": {
+        "file": "electron-v43.2.0-darwin-x64.zip",
+        "sha256": "1349ff423539cfe2b3edf1b14111e618db234d9ba761cbe97ea549edcb2e7a98"
+      },
+      "ffmpeg": {
+        "file": "ffmpeg-v43.2.0-darwin-x64.zip",
+        "sha256": "5e8fe6cc4646cdca666382ab3cae5c009aff068e7cef8e1b9f6da9f491618e38",
+        "member": "libffmpeg.dylib",
+        "destination": "Electron.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Libraries/libffmpeg.dylib"
+      },
+      "runtime": "Electron.app/Contents/MacOS/Electron"
+    },
+    "linux-arm64": {
+      "electron": {
+        "file": "electron-v43.2.0-linux-arm64.zip",
+        "sha256": "50e1cdefbf8590e0d89b0276314a99c7b98e8eed732204c6f1a1c2a38376ed87"
+      },
+      "ffmpeg": {
+        "file": "ffmpeg-v43.2.0-linux-arm64.zip",
+        "sha256": "bc2c251e2d921ce79aab58b160fc85f0120e6aafcef9ed0ea8beb0a0c3169200",
+        "member": "libffmpeg.so",
+        "destination": "libffmpeg.so"
+      },
+      "runtime": "electron"
+    },
+    "linux-x64": {
+      "electron": {
+        "file": "electron-v43.2.0-linux-x64.zip",
+        "sha256": "f77ca6ed67bbc68702b69b56ad499bca6ae090705ade7d04f0ac545e409dec68"
+      },
+      "ffmpeg": {
+        "file": "ffmpeg-v43.2.0-linux-x64.zip",
+        "sha256": "fb3499800abf7d508bb15f98e61fb9573e5b9ce3a66d3d4be5ea6b5e9fcf9852",
+        "member": "libffmpeg.so",
+        "destination": "libffmpeg.so"
+      },
+      "runtime": "electron"
+    }
+  }
+}

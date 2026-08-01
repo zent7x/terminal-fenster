@@ -55,7 +55,7 @@ function check(name, pass, detail) {
   check('initialize returns a result', !!(init && init.result), init && init.error ? JSON.stringify(init.error) : '');
   check('initialize echoes the requested protocol version', init && init.result && init.result.protocolVersion === '2025-06-18', init && init.result && init.result.protocolVersion);
   check('initialize declares the tools capability', !!(init && init.result && init.result.capabilities && init.result.capabilities.tools));
-  check('initialize reports serverInfo', !!(init && init.result && init.result.serverInfo && init.result.serverInfo.name === 'blackglass'), init && init.result && JSON.stringify(init.result.serverInfo));
+  check('initialize reports serverInfo', !!(init && init.result && init.result.serverInfo && init.result.serverInfo.name === 'terminal-fenster'), init && init.result && JSON.stringify(init.result.serverInfo));
   check('notifications/initialized produces no response', legacy.messages.filter((m) => m.id === undefined || m.id === null).length === 0);
 
   const list = legacy.messages.find((m) => m.id === 2);
@@ -67,7 +67,7 @@ function check(name, pass, detail) {
   check('legacy results carry no modern resultType field', list && list.result && list.result.resultType === undefined);
   check('stdout is pure JSON-RPC (every line parses)', legacy.messages.length === legacy.raw.trim().split('\n').filter((l) => l.trim()).length);
   check('no message contains an embedded newline', legacy.raw.trim().split('\n').every((l) => { try { JSON.parse(l); return true; } catch { return false; } }));
-  check('diagnostics went to stderr, not stdout', legacy.stderr.includes('blackglass-mcp'));
+  check('diagnostics went to stderr, not stdout', legacy.stderr.includes('terminal-fenster-mcp'));
 
   if (Array.isArray(tools)) console.log('\ntools: ' + tools.map((t) => t.name).join(', ') + '\n');
 
@@ -105,6 +105,16 @@ function check(name, pass, detail) {
 
   const unknown = modern.messages.find((m) => m.id === 'd4');
   check('unknown method -> -32601', !!(unknown && unknown.error && unknown.error.code === -32601), unknown && unknown.error && unknown.error.message);
+
+  const caps = await runSession([
+    { jsonrpc: '2.0', id: 'c1', method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '1' } } },
+    { jsonrpc: '2.0', id: 'c2', method: 'resources/list', params: {} },
+    { jsonrpc: '2.0', id: 'c3', method: 'prompts/list', params: {} },
+  ]);
+  const resList = caps.messages.find((m) => m.id === 'c2');
+  const prmList = caps.messages.find((m) => m.id === 'c3');
+  check('resources/list returns an array', !!(resList && resList.result && Array.isArray(resList.result.resources)));
+  check('prompts/list returns an array', !!(prmList && prmList.result && Array.isArray(prmList.result.prompts)));
 
   // ---- tool-level error handling ---------------------------------------------------
   const toolErr = await runSession([

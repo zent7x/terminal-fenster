@@ -3,7 +3,7 @@
 **Status:** design spec + measured audit, ready to build
 **Date:** 2026-07-31
 **Host:** macOS 26.1, Apple M4, zsh 5.9 / bash 3.2.57 (`/bin/zsh`, `/bin/bash` as shipped)
-**Code audited at:** `crates/bg-term/src/tty.rs`, `apps/cli/src/main.rs`, `apps/engine/src/main.js`, `crates/bg-proto/src/lib.rs`
+**Code audited at:** `crates/tf-term/src/tty.rs`, `apps/cli/src/main.rs`, `apps/engine/src/main.js`, `crates/tf-proto/src/lib.rs`
 **Evidence convention (matching A09/A10):** *[measured]* = produced on this machine during this session, with the program shown. *[code]* = read directly out of the repo at the cited `file:line`. *[doc]* = primary-source documented. **UNVERIFIED** = believed but not demonstrated here.
 
 **Disk at time of writing: 6.4 GiB free of 460 GiB (99% full)** *[measured]* `df -h`. Nothing in this document requires a build larger than a few hundred KiB.
@@ -76,7 +76,7 @@ This is the mission's pointed question, so I measured it rather than reasoned ab
 ```
 shell: /bin/zsh
   shell at prompt        : ECHO=0 ICANON=0 ISIG=1 OPOST=1 ICRNL=1
-  while blackglass runs  : ECHO=0 ICANON=0 ISIG=0 OPOST=0 ICRNL=0
+  while terminal-fenster runs  : ECHO=0 ICANON=0 ISIG=0 OPOST=0 ICRNL=0
   SIGKILLed job pid=21425
   after job killed       : ECHO=0 ICANON=0 ISIG=0 OPOST=0 ICRNL=1
   termios repaired by shell : NO
@@ -97,7 +97,7 @@ shell: /bin/bash
 Read carefully, because the naive reading is wrong in both directions:
 
 - `ECHO=0 ICANON=0` is **not** damage. Both shells sit at their prompt with echo and canonical mode off, because `zle`/`readline` do their own echoing and line editing. The baseline row proves it. A test that asserts `ECHO=1` after recovery is testing the wrong thing — I wrote that test first and it gave a false failure.
-- The **real** termios damage under `zsh` is `ISIG=0` and `OPOST=0`: **Ctrl-C no longer interrupts anything, and every newline is a bare LF so all output marches diagonally down the screen.** `bash` restores both; `zsh` restores neither. So the severity of a BlackGlass SIGKILL depends on the user's shell, and the more common one is the worse one.
+- The **real** termios damage under `zsh` is `ISIG=0` and `OPOST=0`: **Ctrl-C no longer interrupts anything, and every newline is a bare LF so all output marches diagonally down the screen.** `bash` restores both; `zsh` restores neither. So the severity of a Terminal-Fenster SIGKILL depends on the user's shell, and the more common one is the worse one.
 - **Neither shell ever restores the escape-sequence state.** Alternate screen, mouse reporting, hidden cursor, and any lingering kitty image are not `termios` — no shell will ever touch them, on any platform, ever. This is the durable damage and it is 100% reproducible.
 - The one piece of good news: **blind commands do still execute** in both shells *[measured]*. The user is not locked out; they are flying blind.
 
@@ -120,9 +120,9 @@ printf '\033[<u\033[?1006l\033[?1016l\033[?1003l\033[?1002l\033[?1000l\033[?1004
 
 Note that plain `reset` — the folklore answer — is *worse* than this: it does not pop the kitty keyboard stack and does not delete kitty images, so a stale page bitmap can remain painted over the user's prompt. `stty sane` alone fixes none of the visual state.
 
-**Therefore we must ship this as a command.** `blackglass reset` should write `tty::RESTORE_SEQ` and apply a sane termios, so the documented recovery is six characters the user can type blind instead of a 130-character escape soup they must copy from a README they cannot currently see. It reuses the existing constant, so it cannot drift from the real restore path.
+**Therefore we must ship this as a command.** `terminal-fenster reset` should write `tty::RESTORE_SEQ` and apply a sane termios, so the documented recovery is six characters the user can type blind instead of a 130-character escape soup they must copy from a README they cannot currently see. It reuses the existing constant, so it cannot drift from the real restore path.
 
-But shipping `blackglass reset` is the *fallback*. §3 removes the need for it in the common case.
+But shipping `terminal-fenster reset` is the *fallback*. §3 removes the need for it in the common case.
 
 ### 2.5 The failure modes that were not on the list
 
@@ -199,7 +199,7 @@ Covers: `SIGKILL` of the CLI, `SIGSEGV`/`SIGBUS`/`SIGABRT`/`SIGILL`, double pani
 
 Does not cover: `kill -9` aimed at the whole process group *if* `setsid()` failed; the terminal emulator itself being killed (nothing can help, and nothing needs to); a wedged nanny (it does nothing but block in `read`, so there is nothing to wedge). If the tty has gone away the nanny's `write` returns `EIO` and it must ignore the error and exit.
 
-One caveat to state honestly: the prototypes are **C**, not Rust, and they model `TtyGuard`'s exact syscall sequence rather than calling it. What is proven is the **OS mechanism** — fd inheritance across `fork`, pipe-EOF delivery after `SIGKILL`, and `write`/`tcsetattr` on an inherited tty fd from a different session. Porting that to `bg-term` is mechanical, but it is not yet done and must not be reported as done. `fork()` in a Rust process is only async-signal-safe in the child until `exec`; the child here must therefore touch nothing but `read`, `write`, `tcsetattr`, `kill`, `setsid`, `signal`, `_exit` — no allocation, no `String`, no `println!`. Pre-format everything before the fork.
+One caveat to state honestly: the prototypes are **C**, not Rust, and they model `TtyGuard`'s exact syscall sequence rather than calling it. What is proven is the **OS mechanism** — fd inheritance across `fork`, pipe-EOF delivery after `SIGKILL`, and `write`/`tcsetattr` on an inherited tty fd from a different session. Porting that to `tf-term` is mechanical, but it is not yet done and must not be reported as done. `fork()` in a Rust process is only async-signal-safe in the child until `exec`; the child here must therefore touch nothing but `read`, `write`, `tcsetattr`, `kill`, `setsid`, `signal`, `_exit` — no allocation, no `String`, no `println!`. Pre-format everything before the fork.
 
 ---
 
@@ -301,13 +301,13 @@ The last two rows are the ones to hold the line on. "Restore everything" sounds 
 
 ## 8. Diagnostic bundle
 
-**The bundle is itself an attack surface, and that shapes its design.** Users `cat` diagnostic bundles, and the bundle is full of attacker-controlled strings — page titles, URLs, crash reasons, console text. A09 §1 establishes that a title can carry `OSC 52` and poison the clipboard. A bundle that faithfully records raw bytes is a stored-escape-injection vector that fires later, in a shell, outside BlackGlass, after the browser is closed. **Every string must be sanitised at write time, not at display time** — reuse `unicode::sanitize_for_terminal` *[code]* `main.rs:829`, and additionally assert no `0x1B` survives (§10 T8).
+**The bundle is itself an attack surface, and that shapes its design.** Users `cat` diagnostic bundles, and the bundle is full of attacker-controlled strings — page titles, URLs, crash reasons, console text. A09 §1 establishes that a title can carry `OSC 52` and poison the clipboard. A bundle that faithfully records raw bytes is a stored-escape-injection vector that fires later, in a shell, outside Terminal-Fenster, after the browser is closed. **Every string must be sanitised at write time, not at display time** — reuse `unicode::sanitize_for_terminal` *[code]* `main.rs:829`, and additionally assert no `0x1B` survives (§10 T8).
 
-**Contents** (`$TMPDIR/blackglass-diag-<unix_ms>/`, then `tar.gz`):
+**Contents** (`$TMPDIR/terminal-fenster-diag-<unix_ms>/`, then `tar.gz`):
 
-- `env.json` — BlackGlass version, Electron/Chromium versions (already reported in the `ready` event *[code]* `main.js:273-279`), OS build, arch, `TERM`, `TERM_PROGRAM`+version, tmux/screen, ssh, shell.
+- `env.json` — Terminal-Fenster version, Electron/Chromium versions (already reported in the `ready` event *[code]* `main.js:273-279`), OS build, arch, `TERM`, `TERM_PROGRAM`+version, tmux/screen, ssh, shell.
 - `capabilities.json` — the full `caps::Capabilities`, including `raw_replies`, which is already collected and already escaped for display *[code]* `caps.rs:233` `escape_for_display`. This is the single highest-value artefact for terminal bugs and it costs nothing; it is what makes A04's matrix reproducible on a user's machine.
-- `timeline.jsonl` — last N protocol events with timestamps. `log_line` already writes exactly this shape to `$BLACKGLASS_LOG` *[code]* `main.rs:32-41`; make it a ring buffer in memory so a bundle is possible without the user having set the env var in advance.
+- `timeline.jsonl` — last N protocol events with timestamps. `log_line` already writes exactly this shape to `$TERMINAL_FENSTER_LOG` *[code]* `main.rs:32-41`; make it a ring buffer in memory so a bundle is possible without the user having set the env var in advance.
 - `frames.json` — frame count, fps history, wire bytes, encode ms, plus the engine's `produced`/`sent`/`coalesced` *[code]* `main.js:50`. The gap between `produced` and `sent` is the single number that separates "engine is slow" from "terminal is slow" — A10's headline finding is that the PTY write is the bottleneck, so this distinction is the first thing any performance bug report needs.
 - `crash.json` — reason, exitCode, restart history with timestamps and backoff state, watchdog state transitions.
 - `engine-sample.txt` — **for hangs only**: `sample <pid> 3 -f`. A10 verified `sample`/`spindump` work headless with no sudo on own-uid targets *[measured, A10]*. A stack of the wedged process is worth more than everything else combined.
@@ -321,7 +321,7 @@ The last two rows are the ones to hold the line on. "Restore everything" sounds 
 
 ## 9. Protocol additions
 
-For the commander; `bg-proto` and both endpoints are core-owned, so this is a description, not a patch. No new message *types* are needed — everything fits inside the existing `T_EVENT` / `T_COMMAND` JSON on the existing framing *[code]* `bg-proto/src/lib.rs:11-13`.
+For the commander; `tf-proto` and both endpoints are core-owned, so this is a description, not a patch. No new message *types* are needed — everything fits inside the existing `T_EVENT` / `T_COMMAND` JSON on the existing framing *[code]* `tf-proto/src/lib.rs:11-13`.
 
 | Direction | Message | Purpose |
 |---|---|---|
@@ -333,7 +333,7 @@ For the commander; `bg-proto` and both endpoints are core-owned, so this is a de
 | core → engine | `{"t":"restoreHistory","entries":[...],"index":N}` | session restore |
 | core → engine | `{"t":"getScroll"}` → `{"t":"scroll","x":X,"y":Y}` | 2 Hz sampling |
 
-One protocol-level hardening note while this is open: `MessageReader::feed` appends to an unbounded `Vec` *[code]* `bg-proto/src/lib.rs:72-74`, and `next_message` trusts a 32-bit length. A confused or hostile engine can request a 4 GiB allocation. A `MAX_MESSAGE_LEN` (largest plausible frame: 2482×851×4 ≈ 8.45 MB, so 32 MiB is generous) turning an oversized length into a hard error is a five-line change that converts a potential OOM into a clean, diagnosable failure. Out of scope for B08 but it belongs to the same "fail loudly, never silently" family.
+One protocol-level hardening note while this is open: `MessageReader::feed` appends to an unbounded `Vec` *[code]* `tf-proto/src/lib.rs:72-74`, and `next_message` trusts a 32-bit length. A confused or hostile engine can request a 4 GiB allocation. A `MAX_MESSAGE_LEN` (largest plausible frame: 2482×851×4 ≈ 8.45 MB, so 32 MiB is generous) turning an oversized length into a hard error is a five-line change that converts a potential OOM into a clean, diagnosable failure. Out of scope for B08 but it belongs to the same "fail loudly, never silently" family.
 
 ---
 
@@ -367,14 +367,14 @@ I own none of these files, so per the ownership rule these are described for the
 
 | # | File | Change | Why | Size |
 |---|---|---|---|---|
-| **C1** | `crates/bg-term/src/tty.rs` | Fork a restore nanny in `acquire`; `'K'` handshake on clean drop | Only thing that survives `SIGKILL`/`SIGSEGV`/abort. Mechanism proven, §3.2 | ~80 lines |
+| **C1** | `crates/tf-term/src/tty.rs` | Fork a restore nanny in `acquire`; `'K'` handshake on clean drop | Only thing that survives `SIGKILL`/`SIGSEGV`/abort. Mechanism proven, §3.2 | ~80 lines |
 | **C2** | `apps/cli/src/main.rs:272-274` | `drop(guard)` **before** `session.shutdown()`; move `eprint_restore` text after the drop | Today teardown blocks up to 1.5 s with the tty wrecked, and the error message is written into the alt screen and discarded (§2.3) | 3 lines |
-| **C3** | `apps/cli/src/main.rs` | Add `blackglass reset` writing `tty::RESTORE_SEQ` + sane termios | The documented blind recovery; measured to fully restore both shells (§2.4). Reuses the constant so it cannot drift | ~15 lines |
+| **C3** | `apps/cli/src/main.rs` | Add `terminal-fenster reset` writing `tty::RESTORE_SEQ` + sane termios | The documented blind recovery; measured to fully restore both shells (§2.4). Reuses the constant so it cannot drift | ~15 lines |
 | **C4** | `apps/cli/src/main.rs:790-791` | Repaint the status bar on a ~250 ms timer, independent of `dirty` | Without it the status bar cannot draw during a hang, so no watchdog or crash state is ever visible (§2.1). **Prerequisite for §4–6** | ~5 lines |
 | **C5** | `apps/cli/src/main.rs` | Read `Status.crashed`; watchdog + restart state machine | The crash event is plumbed and then discarded (§0 row 6) | ~200 lines |
 | **C6** | `apps/engine/src/main.js` | `win.on('unresponsive'/'responsive')`, `app.on('child-process-gone')`, `ping`→`pong`, history/scroll commands | L2 liveness + session capture (§4.2, §9) | ~30 lines |
 | **C7** | `apps/cli/src/main.rs` | `pre_exec(setsid)` on the engine `Command`; kill by process group | `Child::kill` signals one pid; Chromium is a tree (§6 step 2) | ~10 lines |
-| **C8** | `crates/bg-term/src/tty.rs` | `sigaction` + `SA_ONSTACK` chaining for SIGSEGV/BUS/ILL/FPE/ABRT | Defence in depth behind C1. **Lower priority if C1 lands** — and note it degrades Rust's stack-overflow message (§2.5) | ~40 lines |
+| **C8** | `crates/tf-term/src/tty.rs` | `sigaction` + `SA_ONSTACK` chaining for SIGSEGV/BUS/ILL/FPE/ABRT | Defence in depth behind C1. **Lower priority if C1 lands** — and note it degrades Rust's stack-overflow message (§2.5) | ~40 lines |
 
 Dependency order: **C4 → C2 → C1 → C3 → C5 → C6 → C7 → C8.** C4 first because nothing else is observable without it; C1 early because it makes C8 optional and de-risks every subsequent change by guaranteeing the terminal comes back while the crash paths are still being written.
 
@@ -391,4 +391,4 @@ Dependency order: **C4 → C2 → C1 → C3 → C5 → C6 → C7 → C8.** C4 fi
 
 ---
 
-*Prototypes and raw output for every *[measured]* claim: `/private/tmp/claude-501/-Users-adeebbashir/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/` — `nanny.c`, `nanny2.c`, `wreck.c`, `fgtest.py`, `forkcost.c`.*
+*Prototypes and raw output for every *[measured]* claim: `/private/tmp/claude-501/-Users-builder/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/` — `nanny.c`, `nanny2.c`, `wreck.c`, `fgtest.py`, `forkcost.c`.*

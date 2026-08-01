@@ -92,7 +92,7 @@ From A06 §2.5–2.6, on a terminal without the kitty keyboard protocol:
 - On macOS, Option is a compose key by default in both Ghostty and Apple Terminal, so the Alt
   modifier is usually unobservable (A06 §2.7).
 
-Our own decoder confirms the collapse: `crates/bg-term/src/input.rs:223-228` maps `0x01..=0x1a`
+Our own decoder confirms the collapse: `crates/tf-term/src/input.rs:223-228` maps `0x01..=0x1a`
 straight to `KeyCode::Char` + `ctrl`, with no shift information available to recover.
 
 Measured terminal support (A04): **Ghostty 1.3.1 — kitty keyboard YES. Apple Terminal 465 — NO.**
@@ -107,7 +107,7 @@ Measured terminal support (A04): **Ghostty 1.3.1 — kitty keyboard YES. Apple T
    encoding terms and work identically on every terminal. This is why vim-style browsers use
    them, and the reason is not aesthetic.
 3. **The user must be told when their own binding will do the wrong thing.** Users will copy
-   `ctrl+shift+t` out of a blog post. `blackglass doctor --keys` reports which bindings this
+   `ctrl+shift+t` out of a blog post. `terminal-fenster doctor --keys` reports which bindings this
    terminal cannot deliver *as written* (§15) — distinguishing a harmless alias from a chord that
    silently triggers a different action. Implemented and tested in `power_proto.rs`, and it caught
    two defects in this document's own default keymap before it shipped.
@@ -130,7 +130,7 @@ interface that hides its mode is a trap.
 
 | Mode | Keys go to | Entered by | Left by |
 |---|---|---|---|
-| **normal** | BlackGlass | default; `Escape` from anywhere | — |
+| **normal** | Terminal-Fenster | default; `Escape` from anywhere | — |
 | **insert** | the page | focusing an editable after a user action (§4.3); `i` | `Escape`, or focus leaving the editable |
 | **hint** | hint label buffer | `f` / `F` / `y f` … | label completed, `Escape`, or invalidation (§8) |
 | **palette** | palette query buffer | `:` / `ctrl+p` | `Enter` (run), `Escape` (cancel) |
@@ -193,7 +193,7 @@ considered focused. Chromium suppresses focus event dispatch for an unfocused do
    active tab" models the truth precisely. Enable on activate, disable on deactivate.
 3. It survives navigation (measured), so it is set once per tab rather than re-armed per page.
 
-**This finding is larger than D07.** Until it lands, every BlackGlass page renders `:focus` and
+**This finding is larger than D07.** Until it lands, every Terminal-Fenster page renders `:focus` and
 `:focus-visible` incorrectly, autofocused search boxes never fire their focus handlers, and any
 page whose JS waits on a focus event stalls. The commander should treat it as an engine bug with
 a D07 dependency, not a D07 feature.
@@ -769,7 +769,7 @@ deliberateness:
    press `f`. Actions with no binding show a dimmed `unbound` that opens the config at the right
    line.
 
-5. **`blackglass doctor --keys`** reports what is silently broken (§15).
+5. **`terminal-fenster doctor --keys`** reports what is silently broken (§15).
 
 **First-run.** On first launch, one line: `Press ? for keys, : for the command palette.` If the
 terminal reports no kitty keyboard support, add A06 §2.7's advice about
@@ -799,7 +799,7 @@ them in an editor — impossible.
 
 ### 12.2 Format
 
-`$BLACKGLASS_CONFIG_DIR/quickmarks`, tab-separated, one per line, `#` comments:
+`$TERMINAL_FENSTER_CONFIG_DIR/quickmarks`, tab-separated, one per line, `#` comments:
 
 ```
 # name        url
@@ -836,7 +836,7 @@ kind of thing that costs someone an afternoon.
 ### 12.4 Profiles
 
 Quickmarks are global by default, because they are keybindings and muscle memory should not change
-when the profile does. A profile may add `$BLACKGLASS_CONFIG_DIR/quickmarks.<profile>`, merged
+when the profile does. A profile may add `$TERMINAL_FENSTER_CONFIG_DIR/quickmarks.<profile>`, merged
 over the global set. Private sessions read but never write, mirroring B09 §14's rule for
 bookmarks.
 
@@ -847,8 +847,8 @@ bookmarks.
 ### 13.1 The decision: a strict TOML subset, hand-parsed
 
 The workspace declares exactly two dependencies — `libc` and `flate2` (`Cargo.toml:10-12`) — and
-`bg-proto` hand-rolls its JSON reader with the comment that "a full JSON parser is a dependency and
-an attack surface we do not need here" (`crates/bg-proto/src/lib.rs:122-124`). Adding `serde` +
+`tf-proto` hand-rolls its JSON reader with the comment that "a full JSON parser is a dependency and
+an attack surface we do not need here" (`crates/tf-proto/src/lib.rs:122-124`). Adding `serde` +
 `toml` for a config file would pull in roughly a dozen transitive crates and contradict a posture
 the codebase has already argued for in writing.
 
@@ -865,14 +865,14 @@ not a wrong parse.
 ### 13.2 Location
 
 ```
-$BLACKGLASS_CONFIG          # explicit file, wins over everything
-$XDG_CONFIG_HOME/blackglass/config.toml
-~/.config/blackglass/config.toml           # default
+$TERMINAL_FENSTER_CONFIG          # explicit file, wins over everything
+$XDG_CONFIG_HOME/terminal-fenster/config.toml
+~/.config/terminal-fenster/config.toml           # default
 ```
 
 Plus `quickmarks` in the same directory.
 
-This deliberately **differs from B09's data root** (`~/Library/Application Support/BlackGlass`).
+This deliberately **differs from B09's data root** (`~/Library/Application Support/Terminal-Fenster`).
 Config is user-authored, hand-edited and dotfile-managed; data is machine state. Terminal users
 keep the former in `~/.config` and expect to symlink it — Ghostty and kitty both read
 `~/.config/<app>/`, and `~/.config/ghostty` exists on this machine. Making a terminal-native tool
@@ -890,13 +890,13 @@ assert_eq!(c.str("keys.normal.f"), Some("hint.follow"));   // the good line stil
 ```
 
 Errors surface in the status band on startup (`config: 1 problem — run :doctor`) and in full from
-`blackglass doctor`. A browser that refuses to start because of a typo in a keybinding is a
+`terminal-fenster doctor`. A browser that refuses to start because of a typo in a keybinding is a
 browser the user cannot use to look up what they typed wrong.
 
 ### 13.4 The default config, in full
 
 ```toml
-# ~/.config/blackglass/config.toml
+# ~/.config/terminal-fenster/config.toml
 # Every value here is the default. Delete anything you do not change.
 
 [general]
@@ -1067,7 +1067,7 @@ important exception that a quickmark never overrides an explicit config binding 
 
 ---
 
-## 15. `blackglass doctor --keys`
+## 15. `terminal-fenster doctor --keys`
 
 ### 15.1 An alias is not automatically a defect
 
@@ -1097,7 +1097,7 @@ to `KeyCode::Enter`, so `ctrl+j` (LF, `0x0A`) is folded into Enter before the ke
 Real diagnostics, produced by the tested implementation:
 
 ```
-$ blackglass doctor --keys
+$ terminal-fenster doctor --keys
 terminal: Apple Terminal 465 — kitty keyboard: NO
 
 2 bindings will not do what you meant on this terminal:
@@ -1256,7 +1256,7 @@ already exist.
 
 ## 20. Licenses
 
-Rule 4 check. **No third-party code is copied into BlackGlass by this design.**
+Rule 4 check. **No third-party code is copied into Terminal-Fenster by this design.**
 
 | Project | License | Checked | Use here |
 |---|---|---|---|
@@ -1276,7 +1276,7 @@ code, and every claim about it here was verified by running it (§1.2) rather th
 
 1. **Turn on `Emulation.setFocusEmulationEnabled` for the active tab.** This is a standalone
    engine bug fix worth more than everything else in this document: without it, `:focus`,
-   `:focus-visible`, autofocus and every focus handler on the web are wrong in BlackGlass today,
+   `:focus-visible`, autofocus and every focus handler on the web are wrong in Terminal-Fenster today,
    and nobody would connect the symptom to the cause. ~10 lines. Enable on tab activate, disable
    on deactivate.
 2. **Measure U8** — whether a permanently attached debugger moves the 60 fps baseline. Everything

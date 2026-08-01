@@ -1,0 +1,6 @@
+[package]
+name = "tf-proto"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Wire protocol between the Terminal-Fenster terminal core and the Chromium engine host"

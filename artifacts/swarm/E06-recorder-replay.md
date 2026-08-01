@@ -15,9 +15,9 @@ below is anchored to these exact bytes:
 | File | lines | md5 |
 |---|---:|---|
 | `apps/cli/src/main.rs` | 1039 | `bceb2a511097d93ea17ac90b94fcb077` |
-| `crates/bg-proto/src/lib.rs` | 284 | `edbb4c0b2e74e960857f2fc687210fe4` |
+| `crates/tf-proto/src/lib.rs` | 284 | `edbb4c0b2e74e960857f2fc687210fe4` |
 | `apps/engine/src/main.js` | 309 | `1520d7ab86e4c69e76508bd6d6bab2ce` |
-| `crates/bg-term/src/input.rs` | 768 | `6500d2a886652e8eeac65ff64c38c479` |
+| `crates/tf-term/src/input.rs` | 768 | `6500d2a886652e8eeac65ff64c38c479` |
 
 **File ownership.** I wrote only this file. Every change described for `apps/engine/src/main.js`,
 `apps/cli/`, and `crates/` is described for the commander in §12, not made by me.
@@ -34,9 +34,9 @@ written, in any form, at any point.** The recorder holds a three-state secrecy l
 (`PUBLIC` / `SECRET` / `UNKNOWN`) and treats `UNKNOWN` as `SECRET`, so the failure mode of every
 race, every missed event, and every unparsed frame is *over-redaction*, never disclosure. The
 exported script is **JSONL with one flat object per line**, which the existing minimal JSON helpers
-in `bg-proto` can parse with three added numeric getters and no new dependency. Replay resolves
+in `tf-proto` can parse with three added numeric getters and no new dependency. Replay resolves
 secrets by *reference* (`{{secret:NAME}}` → env var or Keychain at replay time) and synchronises on
-**explicit waits** — including a frame-quiescence wait that BlackGlass can offer and a normal browser
+**explicit waits** — including a frame-quiescence wait that Terminal-Fenster can offer and a normal browser
 cannot, because we already own the paint stream.
 
 **Single most actionable recommendation** (expanded in §12.1): **`apps/engine/src/main.js` never
@@ -62,15 +62,15 @@ Read directly from the pinned tree.
 | Typed text is already serialised as a `text` field on the wire | `apps/cli/src/main.rs:595`, `:647` — `{"t":"input","kind":"key","action":"press","keyCode":"…","text":"…"}` |
 | The engine forwards `text` character-by-character into the page | `apps/engine/src/main.js:210-219` — `type:'char'` per code point |
 | Engine emits `title` / `url` / `loading` / `loadError` / `crash` / `popup` events | `apps/engine/src/main.js:117-132` |
-| Frames carry a seq + geometry + dirty rect | `crates/bg-proto/src/lib.rs:19-30` `FrameHeader` |
-| The core's JSON reader handles **flat objects only** | `crates/bg-proto/src/lib.rs:120-170` — `json_get_str`, `json_get_bool`; no arrays, no nesting, no numbers |
+| Frames carry a seq + geometry + dirty rect | `crates/tf-proto/src/lib.rs:19-30` `FrameHeader` |
+| The core's JSON reader handles **flat objects only** | `crates/tf-proto/src/lib.rs:120-170` — `json_get_str`, `json_get_bool`; no arrays, no nesting, no numbers |
 | There is **no** recorder, no CDP attach, and no `session`/`webRequest` use in the engine | `apps/engine/src/main.js` — require list is `{ app, BrowserWindow }` at `:17` |
 | No `LICENSE` file exists at the repo root | `ls LICENSE*` → no matches; `Cargo.toml` declares `license = "MIT OR Apache-2.0"` |
 
 Two consequences shape the whole design. First, **`send` at `:436` is a perfect tap** — a recorder
 placed there sees 100% of actions with zero risk of missing a path, because there is no other path.
 Second, **the flat-object constraint is a real constraint**, not a stylistic one: a nested JSON
-script format would force a full JSON parser into the core, which `bg-proto:122-124` explicitly
+script format would force a full JSON parser into the core, which `tf-proto:122-124` explicitly
 argues against. §6 therefore specifies a format that stays flat.
 
 ---
@@ -506,7 +506,7 @@ username is half a credential.
 ## 6. The recording format
 
 **`.bgscript` — JSONL, one flat JSON object per line.** No nesting, no arrays. This is not
-aesthetics: `crates/bg-proto/src/lib.rs:120-170` provides `json_get_str` / `json_get_bool` for flat
+aesthetics: `crates/tf-proto/src/lib.rs:120-170` provides `json_get_str` / `json_get_bool` for flat
 objects and argues (`:122-124`) against pulling in a real JSON parser. A flat-per-line format is
 parseable by adding `json_get_u64` / `json_get_i64` / `json_get_f64` alongside them — three small
 functions, no new dependency, consistent with a workspace whose only deps are `libc` and `flate2`.
@@ -517,7 +517,7 @@ Line 1 is always a header:
 {"op":"meta","v":1,"created":"2026-07-31T22:00:00Z","page_w":1280,"page_h":800,"engine":"electron-43.2.0","chrome":"150.0.7871.129","redaction":"v1","frames":false}
 ```
 
-`page_w`/`page_h` are mandatory and come from `FrameHeader` (`bg-proto:19-30`). A script recorded at
+`page_w`/`page_h` are mandatory and come from `FrameHeader` (`tf-proto:19-30`). A script recorded at
 one viewport and replayed at another will click the wrong things; replay **must** resize to the
 recorded geometry (`{"t":"resize"}`, `main.js:232-238`) and refuse to proceed if it cannot.
 
@@ -569,7 +569,7 @@ and a timeout is a hard failure with the condition named.
 | `quiet` | **no paint with dirty area > 0.5% of the viewport for 200 ms** | `FrameHeader.dirty_*` |
 
 `quiet` is the interesting one and it is ours for free. We already receive a dirty rect on every
-frame (`bg-proto:24-27`), so "the page has stopped changing" is directly observable without asking
+frame (`tf-proto:24-27`), so "the page has stopped changing" is directly observable without asking
 the page anything, without a network heuristic, and without CDP. It subsumes most of what people use
 `networkidle` for and it is robust against pages that keep a socket open forever. E02 measured
 `did-finish-load` firing 855 ms before network idle on a trivial local fixture, which is precisely
@@ -591,8 +591,8 @@ stability and will not pretend otherwise **`[UNVERIFIED]`**.
 
 ### 7.3 Secret resolution
 
-`{{secret:NAME}}` resolves at replay, in order: `BLACKGLASS_SECRET_<NAME>` env var, then macOS
-Keychain item `blackglass/<NAME>`, then — only if a tty is attached and `--interactive` was passed —
+`{{secret:NAME}}` resolves at replay, in order: `TERMINAL_FENSTER_SECRET_<NAME>` env var, then macOS
+Keychain item `terminal-fenster/<NAME>`, then — only if a tty is attached and `--interactive` was passed —
 a prompt with terminal echo disabled. If none resolve, replay **fails**; it does not proceed with an
 empty string, because submitting a login form with a blank password is an authentication attempt that
 can trip lockout counters.
@@ -661,7 +661,7 @@ could not be tested this way.
   guard against the §3.1 deadlock, which is silent and therefore needs a test.
 - **Focus regression:** assert `document.hasFocus()` is `true` after engine startup. One line, and it
   pins §12.1 so the fix cannot silently regress.
-- **URL sanitiser:** table-driven unit tests in `bg-proto` style; userinfo, fragment, param, path.
+- **URL sanitiser:** table-driven unit tests in `tf-proto` style; userinfo, fragment, param, path.
 
 All of these run headless and need no graphics-capable terminal, matching the existing e2e harness's
 design (`tests/e2e/input-injection.js:5-7`).
@@ -728,9 +728,9 @@ bad regression in a product whose entire premise is *not* leaving the terminal.
 ### 12.3 Core changes
 
 - Recorder tap at `apps/cli/src/main.rs:436` (`send`) with the latch fed from the new focus event.
-- `crates/bg-proto`: add `json_get_u64` / `json_get_i64` / `json_get_f64` beside the existing flat
+- `crates/tf-proto`: add `json_get_u64` / `json_get_i64` / `json_get_f64` beside the existing flat
   helpers (`:120-170`) — enough to parse `.bgscript`, no new dependency.
-- URL sanitiser (§5.8) belongs in `bg-proto` next to the escaping helpers, so the recorder, the
+- URL sanitiser (§5.8) belongs in `tf-proto` next to the escaping helpers, so the recorder, the
   status line, and the replay reporter all use one implementation.
 
 ---

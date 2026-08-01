@@ -1,11 +1,11 @@
 # B07 — Frame Scheduler Design
 
-**Mission:** Specify the exact frame-scheduling algorithm for the BlackGlass engine→core path:
+**Mission:** Specify the exact frame-scheduling algorithm for the Terminal-Fenster engine→core path:
 visibility-aware pacing, frame coalescing, dirty-region accumulation across dropped frames,
 idle throttling, and dropped-frame accounting — with the invariants that make it correct.
 
 **Owned output:** this file only. All changes to core files (`apps/engine/src/main.js`,
-`apps/cli/src/main.rs`, `crates/bg-proto/src/lib.rs`) are **specified here as instructions for
+`apps/cli/src/main.rs`, `crates/tf-proto/src/lib.rs`) are **specified here as instructions for
 the commander**, not applied. See §10.
 
 **Status of the current code:** coalescing is implemented and correct as far as it goes, but it
@@ -24,13 +24,13 @@ All line references are to the repo at the time of writing.
 | Coalescing model: 1 in-flight + 1 pending, newest wins | `apps/engine/src/main.js:42-99` | `writeInFlight`, `pendingFrame` |
 | Coalesce counter incremented on overwrite | `main.js:96` | `stats.coalesced++` |
 | Dirty rect **discarded** on coalesce | `main.js:96-97` | old header thrown away |
-| 32-byte frame header carries `seq,w,h,dirtyX,dirtyY,dirtyW,dirtyH,format` | `main.js:87-95`, `bg-proto/src/lib.rs:19-30` | u32 BE ×8 |
+| 32-byte frame header carries `seq,w,h,dirtyX,dirtyY,dirtyW,dirtyH,format` | `main.js:87-95`, `tf-proto/src/lib.rs:19-30` | u32 BE ×8 |
 | `image.toBitmap()` returns the **full** framebuffer (BGRA, non-strided) | `main.js:86`, ADR-0001 | w·h·4 bytes |
 | Consumer currently **ignores** dirty rect, re-encodes full frame | `apps/cli/src/main.rs:770-822` | `encode_rgb_frame(... page_w, page_h ...)` |
 | `setFrameRate(60)` set once at window creation | `main.js:115` | fixed 60 |
 | `setFrameRate` accepts **only 1–240** (CPU/`toBitmap` path) | `electron/electron.d.ts:18399-18402` | source floor = 1 fps, not 0 |
-| Focus reporting `?1004h` enabled | `crates/bg-term/src/tty.rs:152` | visibility signal present |
-| `FocusGained`/`FocusLost` decoded | `crates/bg-term/src/input.rs:106-107,271-274` | events exist |
+| Focus reporting `?1004h` enabled | `crates/tf-term/src/tty.rs:152` | visibility signal present |
+| `FocusGained`/`FocusLost` decoded | `crates/tf-term/src/input.rs:106-107,271-274` | events exist |
 | Focus events **dropped**, never forwarded to engine | `apps/cli/src/main.rs:639` | `Event::FocusGained \| FocusLost ... => false` |
 | Consumer poll wakes every 16 ms even when idle | `apps/cli/src/main.rs:461` | `poll(..., 16)` |
 | PTY write is the dominant cost; damage-tracking is "the primary optimization lever" | A10 §0.1, §4.1 `damage_area_ratio` | — |
@@ -346,7 +346,7 @@ Three pacing states, driven by focus and recent activity:
   stops requesting BeginFrames on its own, so wakeups are already near zero and `RATE_IDLE`
   mostly bounds pathological rAF/animation loops rather than helping static pages — see §8.
 
-The **signal source** is the terminal, not the browser: BlackGlass is a single view, so
+The **signal source** is the terminal, not the browser: Terminal-Fenster is a single view, so
 "visibility" means "is the terminal that shows us focused." `?1004h` is already enabled
 (`tty.rs:152`) and focus events already decode (`input.rs:106-107`); they are simply dropped
 today (`main.rs:639`). §10.2 forwards them.
@@ -398,7 +398,7 @@ stale region. Expected win tracks `1 − damage_area_ratio`; A10 calls damage tr
 optimization lever."
 
 Mode B requires coordinated changes I do **not** own: the payload semantics (header stays the
-32-byte `bg-proto` layout; only the payload length/meaning changes to `dirty.w·dirty.h·4`), the
+32-byte `tf-proto` layout; only the payload length/meaning changes to `dirty.w·dirty.h·4`), the
 consumer's retained-canvas composite (`Renderer` in `main.rs`), and the kitty encoder's ability
 to update a sub-region. I specify the contract in §10.3 and recommend landing the **union fix
 (§10.1) first and independently**, so the scheduler is already correct when Mode B arrives.
@@ -452,7 +452,7 @@ to matter. Not v1.
    frame (defense-in-depth, ties to A09 threat model — never index out of bounds on
    attacker-influenced geometry).
 
-### 10.3 `crates/bg-proto/src/lib.rs` — Mode B payload semantics (later)
+### 10.3 `crates/tf-proto/src/lib.rs` — Mode B payload semantics (later)
 
 Header layout is unchanged (§1). For Mode B, define the payload length as
 `dirty_w · dirty_h · 4` (a patch) rather than `width · height · 4` (full frame), selected by a new

@@ -19,7 +19,7 @@ offscreen terminal browser is an invisible deadlock.** That is not a design opin
 measured. A download whose `will-download` handler does not call `setSavePath()` **synchronously**
 produced *no* `done` event for 20 seconds and then resolved `cancelled` with an empty save path
 (§3.1, probe D) — Electron had raised an `NSSavePanel` that nobody could see or dismiss. So the
-architecture is forced: **BlackGlass must pre-empt every native dialog before Chromium can raise
+architecture is forced: **Terminal-Fenster must pre-empt every native dialog before Chromium can raise
 it, convert it into a protocol event, render it as terminal text over the resident page image, and
 send the answer back.** Three different mechanisms are required because Electron exposes three
 different levels of control — `session` events for downloads, `session` handlers for permissions,
@@ -49,8 +49,8 @@ Read directly from the tree.
 | Engine registers **no** `will-download` listener | `apps/engine/src/main.js` — `session` is never imported; the require list is `{ app, BrowserWindow }` at `:17` |
 | Engine registers **no** permission handler | same; no `setPermissionRequestHandler` / `setPermissionCheckHandler` anywhere in the 309-line file |
 | Engine **does** already deny popups and report them | `apps/engine/src/main.js:129-132` — `setWindowOpenHandler` returns `{action:'deny'}` and emits `{t:'popup',url}` |
-| Wire framing is `[u8 type][u32 BE len][payload]`; `1`=frame, `2`=event, `10`=command | `crates/bg-proto/src/lib.rs:11-13`, encoder at `:97-103` |
-| Events are flat JSON with a `t` discriminator, parsed by hand | `crates/bg-proto/src/lib.rs:125-170`; `Status::apply_event` at `apps/cli/src/main.rs:783` |
+| Wire framing is `[u8 type][u32 BE len][payload]`; `1`=frame, `2`=event, `10`=command | `crates/tf-proto/src/lib.rs:11-13`, encoder at `:97-103` |
+| Events are flat JSON with a `t` discriminator, parsed by hand | `crates/tf-proto/src/lib.rs:125-170`; `Status::apply_event` at `apps/cli/src/main.rs:783` |
 | Exactly **one** bottom row is chrome; the page occupies the rest | `apps/cli/src/main.rs:254` — `page_h = vp_h - cell_h` |
 | Status bar is drawn to the last row each present, reverse-video, from sanitized text | `apps/cli/src/main.rs:883-897` |
 | Page-derived strings are already sanitized before touching the tty | `apps/cli/src/main.rs:887-888` via `unicode::sanitize_for_terminal(_, 40/60)` |
@@ -71,7 +71,7 @@ and §13 describe the changes for the commander to make.
 Four Electron programs, each launched as:
 
 ```
-cd /Users/adeebbashir/projects/blackglass/apps/engine
+cd $REPO/apps/engine
 ./node_modules/electron/dist/Electron.app/Contents/MacOS/Electron <probe>.js
 ```
 
@@ -89,7 +89,7 @@ travel a different path through Chromium's download stack and would not have bee
 | C | `probe-d05c.js` | honest download path; user-activation gate; quarantine |
 | D | `probe-d05d.js` | `/private/tmp` control; the no-`setSavePath` deadlock |
 
-Scratchpad root: `/private/tmp/claude-501/-Users-adeebbashir/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/`.
+Scratchpad root: `/private/tmp/claude-501/-Users-builder/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/`.
 
 ### 2.2 The eight findings that drive the design
 
@@ -133,8 +133,8 @@ Probe B armed CDP download behaviour *and* set a save path. The result is the na
 bug — a successful-looking lie:
 
 ```
-PROBE:{"k":"savePathAfterSet","v":".../d05tmp/dl/blackglass-probe.bin"}
-PROBE:{"k":"downloadDone","v":{"state":"completed","savePath":".../dl/blackglass-probe.bin","exists":false}}
+PROBE:{"k":"savePathAfterSet","v":".../d05tmp/dl/terminal-fenster-probe.bin"}
+PROBE:{"k":"downloadDone","v":{"state":"completed","savePath":".../dl/terminal-fenster-probe.bin","exists":false}}
 PROBE:{"k":"cdpEvent","v":{"method":"Browser.downloadProgress","params":{
         "filePath":".../d05tmp/cdpdl/7c10e3d3-4111-4ef0-b431-11b5f9d2b4c5","state":"completed"}}}
 ```
@@ -150,7 +150,7 @@ $ cat .../cdpdl/7c10e...      → hello world
 ```
 
 Since §4 requires CDP for the file chooser, and CDP is therefore attached anyway, this is a live
-trap for whoever implements both. **BlackGlass must never call `Browser.setDownloadBehavior`.**
+trap for whoever implements both. **Terminal-Fenster must never call `Browser.setDownloadBehavior`.**
 Download control belongs entirely to the `session` layer.
 
 With CDP download behaviour *not* set (probe C), everything works as documented:
@@ -192,7 +192,7 @@ treated as hostile — see §11.1.
 ### 3.3 Proposed engine → core events
 
 Additive; no change to framing. All are `T_EVENT` (type 2) JSON, matching the existing flat-object
-convention that `crates/bg-proto/src/lib.rs:125` can parse.
+convention that `crates/tf-proto/src/lib.rs:125` can parse.
 
 ```jsonc
 // on 'will-download', BEFORE calling setSavePath()
@@ -372,7 +372,7 @@ PROBE:{"ms":9827,"k":"chooserAfterGestureClick","v":1}     ← executeJavaScript
 PROBE:{"ms":11029,"k":"chooserAfterSynthClick","v":{"count":2, …}}  ← sendInputEvent mouseDown/Up
 ```
 
-This is good news twice over. It means BlackGlass's real input path (`sendInputEvent`) *does*
+This is good news twice over. It means Terminal-Fenster's real input path (`sendInputEvent`) *does*
 create the activation needed to open a chooser, so the feature works for users. And it means a page
 cannot spam file choosers without a click — the platform already enforces that. **Do not add a rate
 limiter for choosers; Chromium's activation gate is the correct one and a second one would only
@@ -402,7 +402,7 @@ const { result } = await dbg.sendCommand('Runtime.callFunctionOn', {
 ```
 
 Treat the returned `accept` as a **display hint and a default filter only**. It is page-controlled,
-so it must never be the thing that decides what BlackGlass is allowed to read (§11.2).
+so it must never be the thing that decides what Terminal-Fenster is allowed to read (§11.2).
 
 ### 4.6 Answering the chooser
 
@@ -482,7 +482,7 @@ Chromium wants to know the current state without prompting — including from `n
 and from internal checks before a feature runs. Electron's own docs are explicit that you need both
 (`electron.d.ts:13238-13241`, `:13251-13254`).
 
-The asymmetry matters for BlackGlass: the *request* handler can be async (its `callback` may be
+The asymmetry matters for Terminal-Fenster: the *request* handler can be async (its `callback` may be
 invoked later, which is exactly what a round-trip to the terminal needs), but the **check handler
 must return a boolean immediately** and therefore can only consult an in-memory decision cache.
 It can never prompt.
@@ -535,7 +535,7 @@ handler to fire — it will not, absent a user gesture.
 ### 5.3 The default policy
 
 The correct default for a terminal browser is stricter than for a desktop browser, because the
-consequences of a mistake are worse: BlackGlass is frequently driven over SSH (A07), where "share
+consequences of a mistake are worse: Terminal-Fenster is frequently driven over SSH (A07), where "share
 your camera" means a camera in a datacentre, and "share your location" means the geolocation of a
 server.
 
@@ -685,7 +685,7 @@ Two separable things share the word. §5 covers the *permission*. This covers *d
 notification once granted.
 
 Electron delivers web `Notification`s to the OS notification centre. On a headless or SSH host that
-is either invisible or, worse, appears on the wrong machine's desktop. BlackGlass should render
+is either invisible or, worse, appears on the wrong machine's desktop. Terminal-Fenster should render
 them in the terminal instead.
 
 There is no `session` hook for web notifications. The available levers are CDP —
@@ -784,16 +784,16 @@ PROBE:{"k":"QUARANTINE_ANSWER","v":{"allXattrs":"com.apple.provenance: ",
 `/private/tmp` is special-cased:
 
 ```
-PROBE:{"k":"defaultDownloadPath","v":"/Users/adeebbashir/Downloads"}
-PROBE:{"k":"CONTROL_blackglass-probe-CONTROL.bin","v":{
-        "path":"/Users/adeebbashir/Downloads/blackglass-probe-CONTROL.bin",
+PROBE:{"k":"defaultDownloadPath","v":"$HOME/Downloads"}
+PROBE:{"k":"CONTROL_terminal-fenster-probe-CONTROL.bin","v":{
+        "path":"$HOME/Downloads/terminal-fenster-probe-CONTROL.bin",
         "exists":true,"allXattrs":"com.apple.provenance: ","quarantine":"ABSENT"}}
 ```
 
 Re-checked from the shell after the process exited, to rule out a reporting artefact:
 
 ```
-$ xattr -l ~/Downloads/blackglass-probe-CONTROL.bin
+$ xattr -l ~/Downloads/terminal-fenster-probe-CONTROL.bin
 com.apple.provenance:
 ```
 
@@ -813,7 +813,7 @@ quarantine API is simply not called.
 The only xattr present is `com.apple.provenance`, which macOS applies automatically to files written
 by non-App-Store binaries. **It is not Gatekeeper's quarantine and confers none of its protection.**
 
-**Therefore: applying `com.apple.quarantine` is BlackGlass's job.** A browser that downloads an
+**Therefore: applying `com.apple.quarantine` is Terminal-Fenster's job.** A browser that downloads an
 installer to `~/Downloads` without quarantining it has stripped a platform safety control that every
 other macOS browser on the machine applies (§8.2 shows Safari and Chrome both doing it). That is a
 genuine security regression shipped under the word "browser", and it is the single most important
@@ -875,8 +875,8 @@ Writing the attribute works and round-trips byte-exactly (probe C):
 
 ```
 PROBE:{"k":"manualQuarantineApplied","v":{
-  "wrote":   "0181;6a6cd605;BlackGlass;233F0BDB-0BE6-406B-80C9-7283BBCE1C1D",
-  "readBack":"0181;6a6cd605;BlackGlass;233F0BDB-0BE6-406B-80C9-7283BBCE1C1D",
+  "wrote":   "0181;6a6cd605;Terminal-Fenster;233F0BDB-0BE6-406B-80C9-7283BBCE1C1D",
+  "readBack":"0181;6a6cd605;Terminal-Fenster;233F0BDB-0BE6-406B-80C9-7283BBCE1C1D",
   "matches": true}}
 ```
 
@@ -910,7 +910,7 @@ so there is no window in which a fully-written, unquarantined file exists at a p
 open. Renaming preserves xattrs within a volume. **`[UNVERIFIED]`** across volumes; if the staging
 directory and `~/Downloads` can be on different filesystems, re-apply after the copy and verify.
 
-Agent name should be `BlackGlass` (it is what the Gatekeeper dialog shows the user); the UUID should
+Agent name should be `Terminal-Fenster` (it is what the Gatekeeper dialog shows the user); the UUID should
 be a fresh v4 per download.
 
 ### 8.4 A negative result that prevents a bogus test
@@ -984,7 +984,7 @@ sanitisation. §12 depends on this shape.
 ## 10. Protocol additions, consolidated
 
 Nothing here changes framing; every message is a flat JSON object with a `t` field, parseable by
-the existing hand-rolled reader (`crates/bg-proto/src/lib.rs:125`). **This is the complete list of
+the existing hand-rolled reader (`crates/tf-proto/src/lib.rs:125`). **This is the complete list of
 what the commander would add to `apps/engine/src/main.js`.**
 
 | Direction | `t` | Payload | Trigger |
@@ -1100,7 +1100,7 @@ or a headless assertion, so it all runs in CI.
     the F1 regression test* — if someone deletes the `setSavePath` call, this goes from 5 s to a
     20 s timeout and fails.
 11. After `done`, `xattr -p com.apple.quarantine <path>` **exits 0 and matches**
-    `^[0-9a-f]{4};[0-9a-f]+;BlackGlass;[0-9A-F-]{36}$`. Do **not** assert on `spctl` (§8.4).
+    `^[0-9a-f]{4};[0-9a-f]+;Terminal-Fenster;[0-9A-F-]{36}$`. Do **not** assert on `spctl` (§8.4).
 12. `Page.setInterceptFileChooserDialog` is armed only after `did-finish-load`, and a synthesized
     `mouseDown`/`mouseUp` on a file input produces `Page.fileChooserOpened` within 2 s (F4 + F5).
 13. `DOM.setFileInputFiles` with `files: []` resolves the chooser and leaves `input.files.length === 0`.
@@ -1144,7 +1144,7 @@ Steps 1–3 change no protocol, need no terminal UI, and could go in today.
   read back what the system produced. Whether the value affects whether Gatekeeper prompts on first
   open is untested — that requires a GUI login, and this machine is at a lock screen.
 - **Whether writing the `LSQuarantineEvent` DB row is required, or whether LaunchServices creates it.**
-  The schema is confirmed; the write path is not. If BlackGlass writes only the xattr, Finder may
+  The schema is confirmed; the write path is not. If Terminal-Fenster writes only the xattr, Finder may
   show "downloaded from (unknown)".
 - **`selectDirectory` chooser mode.** A `webkitdirectory` input existed in the fixture but was never
   clicked in the run that logged modes. Only `selectSingle` and `selectMultiple` were observed.

@@ -22,11 +22,11 @@
       ]
     },
     "component": {
-      "bom-ref": "pkg:generic/blackglass@0.1.0",
+      "bom-ref": "pkg:generic/terminal-fenster@0.1.0",
       "type": "application",
-      "name": "blackglass",
+      "name": "terminal-fenster",
       "version": "0.1.0",
-      "purl": "pkg:generic/blackglass@0.1.0",
+      "purl": "pkg:generic/terminal-fenster@0.1.0",
       "description": "A Chromium-class browser that renders as pixels inside terminal emulators",
       "licenses": [
         {
@@ -34,26 +34,26 @@
         }
       ],
       "supplier": {
-        "name": "BlackGlass project"
+        "name": "Terminal-Fenster project"
       },
       "externalReferences": [
         {
           "type": "vcs",
-          "url": "https://github.com/zent7x/blackglass"
+          "url": "https://github.com/zent7x/terminal-fenster"
         }
       ]
     },
     "properties": [
       {
-        "name": "blackglass:host",
+        "name": "terminal-fenster:host",
         "value": "macOS 26.1, Apple M4 (arm64)"
       },
       {
-        "name": "blackglass:generated-for",
+        "name": "terminal-fenster:generated-for",
         "value": "artifacts/swarm/F03-supply-chain.md"
       },
       {
-        "name": "blackglass:git-state",
+        "name": "terminal-fenster:git-state",
         "value": "repository has ZERO commits and ZERO tracked files as of generation; no lockfile is under version control yet"
       }
     ]
@@ -73,15 +73,15 @@
       ],
       "properties": [
         {
-          "name": "blackglass:ecosystem",
+          "name": "terminal-fenster:ecosystem",
           "value": "cargo"
         },
         {
-          "name": "blackglass:origin",
+          "name": "terminal-fenster:origin",
           "value": "crates.io"
         },
         {
-          "name": "blackglass:source",
+          "name": "terminal-fenster:source",
           "value": "registry+https://github.com/rust-lang/crates.io-index"
         }
       ],
@@ -99,11 +99,11 @@
       ]
     },
     {
-      "bom-ref": "pkg:cargo/bg-proto@0.1.0",
+      "bom-ref": "pkg:cargo/tf-proto@0.1.0",
       "type": "library",
-      "name": "bg-proto",
+      "name": "tf-proto",
       "version": "0.1.0",
-      "purl": "pkg:cargo/bg-proto@0.1.0",
+      "purl": "pkg:cargo/tf-proto@0.1.0",
       "scope": "required",
       "licenses": [
         {
@@ -112,28 +112,28 @@
       ],
       "properties": [
         {
-          "name": "blackglass:ecosystem",
+          "name": "terminal-fenster:ecosystem",
           "value": "cargo"
         },
         {
-          "name": "blackglass:origin",
+          "name": "terminal-fenster:origin",
           "value": "first-party"
         },
         {
-          "name": "blackglass:path",
-          "value": "crates/bg-proto"
+          "name": "terminal-fenster:path",
+          "value": "crates/tf-proto"
         }
       ],
       "supplier": {
-        "name": "BlackGlass project"
+        "name": "Terminal-Fenster project"
       }
     },
     {
-      "bom-ref": "pkg:cargo/bg-term@0.1.0",
+      "bom-ref": "pkg:cargo/tf-term@0.1.0",
       "type": "library",
-      "name": "bg-term",
+      "name": "tf-term",
       "version": "0.1.0",
-      "purl": "pkg:cargo/bg-term@0.1.0",
+      "purl": "pkg:cargo/tf-term@0.1.0",
       "scope": "required",
       "licenses": [
         {
@@ -142,28 +142,28 @@
       ],
       "properties": [
         {
-          "name": "blackglass:ecosystem",
+          "name": "terminal-fenster:ecosystem",
           "value": "cargo"
         },
         {
-          "name": "blackglass:origin",
+          "name": "terminal-fenster:origin",
           "value": "first-party"
         },
         {
-          "name": "blackglass:path",
-          "value": "crates/bg-term"
+          "name": "terminal-fenster:path",
+          "value": "crates/tf-term"
         }
       ],
       "supplier": {
-        "name": "BlackGlass project"
+        "name": "Terminal-Fenster project"
       }
     },
     {
-      "bom-ref": "pkg:cargo/blackglass@0.1.0",
+      "bom-ref": "pkg:cargo/terminal-fenster@0.1.0",
       "type": "application",
-      "name": "blackglass",
+      "name": "terminal-fenster",
       "version": "0.1.0",
-      "purl": "pkg:cargo/blackglass@0.1.0",
+      "purl": "pkg:cargo/terminal-fenster@0.1.0",
       "scope": "required",
       "licenses": [
         {
@@ -172,20 +172,20 @@
       ],
       "properties": [
         {
-          "name": "blackglass:ecosystem",
+          "name": "terminal-fenster:ecosystem",
           "value": "cargo"
         },
         {
-          "name": "blackglass:origin",
+          "name": "terminal-fenster:origin",
           "value": "first-party"
         },
         {
-          "name": "blackglass:path",
+          "name": "terminal-fenster:path",
           "value": "apps/cli"
         }
       ],
       "supplier": {
-        "name": "BlackGlass project"
+        "name": "Terminal-Fenster project"
       }
     },
     {
@@ -202,15 +202,15 @@
       ],
       "properties": [
         {
-          "name": "blackglass:ecosystem",
+          "name": "terminal-fenster:ecosystem",
           "value": "cargo"
         },
         {
-          "name": "blackglass:origin",
+          "name": "terminal-fenster:origin",
           "value": "crates.io"
         },
         {
-          "name": "blackglass:source",
+          "name": "terminal-fenster:source",
           "value": "registry+https://github.com/rust-lang/crates.io-index"
         }
       ],
@@ -241,15 +241,15 @@
       ],
       "properties": [
         {
-          "name": "blackglass:ecosystem",
+          "name": "terminal-fenster:ecosystem",
           "value": "cargo"
         },
         {
-          "name": "blackglass:origin",
+          "name": "terminal-fenster:origin",
           "value": "crates.io"
         },
         {
-          "name": "blackglass:source",
+          "name": "terminal-fenster:source",
           "value": "registry+https://github.com/rust-lang/crates.io-index"
         }
       ],
@@ -280,15 +280,15 @@
       ],
       "properties": [
         {
-          "name": "blackglass:ecosystem",
+          "name": "terminal-fenster:ecosystem",
           "value": "cargo"
         },
         {
-          "name": "blackglass:origin",
+          "name": "terminal-fenster:origin",
           "value": "crates.io"
         },
         {
-          "name": "blackglass:source",
+          "name": "terminal-fenster:source",
           "value": "registry+https://github.com/rust-lang/crates.io-index"
         }
       ],
@@ -319,15 +319,15 @@
       ],
       "properties": [
         {
-          "name": "blackglass:ecosystem",
+          "name": "terminal-fenster:ecosystem",
           "value": "cargo"
         },
         {
-          "name": "blackglass:origin",
+          "name": "terminal-fenster:origin",
           "value": "crates.io"
         },
         {
-          "name": "blackglass:source",
+          "name": "terminal-fenster:source",
           "value": "registry+https://github.com/rust-lang/crates.io-index"
         }
       ],
@@ -358,15 +358,15 @@
       ],
       "properties": [
         {
-          "name": "blackglass:ecosystem",
+          "name": "terminal-fenster:ecosystem",
           "value": "cargo"
         },
         {
-          "name": "blackglass:origin",
+          "name": "terminal-fenster:origin",
           "value": "crates.io"
         },
         {
-          "name": "blackglass:source",
+          "name": "terminal-fenster:source",
           "value": "registry+https://github.com/rust-lang/crates.io-index"
         }
       ],
@@ -397,15 +397,15 @@
       ],
       "properties": [
         {
-          "name": "blackglass:ecosystem",
+          "name": "terminal-fenster:ecosystem",
           "value": "cargo"
         },
         {
-          "name": "blackglass:origin",
+          "name": "terminal-fenster:origin",
           "value": "crates.io"
         },
         {
-          "name": "blackglass:source",
+          "name": "terminal-fenster:source",
           "value": "registry+https://github.com/rust-lang/crates.io-index"
         }
       ],
@@ -423,36 +423,36 @@
       ]
     },
     {
-      "bom-ref": "pkg:npm/%40blackglass/engine@0.1.0",
+      "bom-ref": "pkg:npm/%40terminal-fenster/engine@0.1.0",
       "type": "application",
-      "name": "@blackglass/engine",
+      "name": "@terminal-fenster/engine",
       "version": "0.1.0",
-      "purl": "pkg:npm/%40blackglass/engine@0.1.0",
+      "purl": "pkg:npm/%40terminal-fenster/engine@0.1.0",
       "scope": "required",
-      "description": "Chromium offscreen rendering engine host for BlackGlass",
+      "description": "Chromium offscreen rendering engine host for Terminal-Fenster",
       "licenses": [
         {
           "expression": "MIT OR Apache-2.0"
         }
       ],
       "supplier": {
-        "name": "BlackGlass project"
+        "name": "Terminal-Fenster project"
       },
       "properties": [
         {
-          "name": "blackglass:ecosystem",
+          "name": "terminal-fenster:ecosystem",
           "value": "npm"
         },
         {
-          "name": "blackglass:origin",
+          "name": "terminal-fenster:origin",
           "value": "first-party"
         },
         {
-          "name": "blackglass:path",
+          "name": "terminal-fenster:path",
           "value": "apps/engine"
         },
         {
-          "name": "blackglass:license-status",
+          "name": "terminal-fenster:license-status",
           "value": "DECLARED-NOWHERE: package.json carries no license field"
         }
       ]
@@ -471,11 +471,11 @@
       ],
       "properties": [
         {
-          "name": "blackglass:ecosystem",
+          "name": "terminal-fenster:ecosystem",
           "value": "npm"
         },
         {
-          "name": "blackglass:origin",
+          "name": "terminal-fenster:origin",
           "value": "registry.npmjs.org"
         }
       ],
@@ -506,11 +506,11 @@
       ],
       "properties": [
         {
-          "name": "blackglass:ecosystem",
+          "name": "terminal-fenster:ecosystem",
           "value": "npm"
         },
         {
-          "name": "blackglass:origin",
+          "name": "terminal-fenster:origin",
           "value": "registry.npmjs.org"
         }
       ],
@@ -541,11 +541,11 @@
       ],
       "properties": [
         {
-          "name": "blackglass:ecosystem",
+          "name": "terminal-fenster:ecosystem",
           "value": "npm"
         },
         {
-          "name": "blackglass:origin",
+          "name": "terminal-fenster:origin",
           "value": "registry.npmjs.org"
         }
       ],
@@ -576,11 +576,11 @@
       ],
       "properties": [
         {
-          "name": "blackglass:ecosystem",
+          "name": "terminal-fenster:ecosystem",
           "value": "npm"
         },
         {
-          "name": "blackglass:origin",
+          "name": "terminal-fenster:origin",
           "value": "registry.npmjs.org"
         }
       ],
@@ -611,11 +611,11 @@
       ],
       "properties": [
         {
-          "name": "blackglass:ecosystem",
+          "name": "terminal-fenster:ecosystem",
           "value": "npm"
         },
         {
-          "name": "blackglass:origin",
+          "name": "terminal-fenster:origin",
           "value": "registry.npmjs.org"
         }
       ],
@@ -646,11 +646,11 @@
       ],
       "properties": [
         {
-          "name": "blackglass:ecosystem",
+          "name": "terminal-fenster:ecosystem",
           "value": "npm"
         },
         {
-          "name": "blackglass:origin",
+          "name": "terminal-fenster:origin",
           "value": "registry.npmjs.org"
         }
       ],
@@ -681,11 +681,11 @@
       ],
       "properties": [
         {
-          "name": "blackglass:ecosystem",
+          "name": "terminal-fenster:ecosystem",
           "value": "npm"
         },
         {
-          "name": "blackglass:origin",
+          "name": "terminal-fenster:origin",
           "value": "registry.npmjs.org"
         }
       ],
@@ -716,11 +716,11 @@
       ],
       "properties": [
         {
-          "name": "blackglass:ecosystem",
+          "name": "terminal-fenster:ecosystem",
           "value": "npm"
         },
         {
-          "name": "blackglass:origin",
+          "name": "terminal-fenster:origin",
           "value": "registry.npmjs.org"
         }
       ],
@@ -751,11 +751,11 @@
       ],
       "properties": [
         {
-          "name": "blackglass:ecosystem",
+          "name": "terminal-fenster:ecosystem",
           "value": "npm"
         },
         {
-          "name": "blackglass:origin",
+          "name": "terminal-fenster:origin",
           "value": "registry.npmjs.org"
         }
       ],
@@ -786,11 +786,11 @@
       ],
       "properties": [
         {
-          "name": "blackglass:ecosystem",
+          "name": "terminal-fenster:ecosystem",
           "value": "npm"
         },
         {
-          "name": "blackglass:origin",
+          "name": "terminal-fenster:origin",
           "value": "registry.npmjs.org"
         }
       ],
@@ -821,11 +821,11 @@
       ],
       "properties": [
         {
-          "name": "blackglass:ecosystem",
+          "name": "terminal-fenster:ecosystem",
           "value": "npm"
         },
         {
-          "name": "blackglass:origin",
+          "name": "terminal-fenster:origin",
           "value": "registry.npmjs.org"
         }
       ],
@@ -856,11 +856,11 @@
       ],
       "properties": [
         {
-          "name": "blackglass:ecosystem",
+          "name": "terminal-fenster:ecosystem",
           "value": "npm"
         },
         {
-          "name": "blackglass:origin",
+          "name": "terminal-fenster:origin",
           "value": "registry.npmjs.org"
         }
       ],
@@ -891,11 +891,11 @@
       ],
       "properties": [
         {
-          "name": "blackglass:ecosystem",
+          "name": "terminal-fenster:ecosystem",
           "value": "npm"
         },
         {
-          "name": "blackglass:origin",
+          "name": "terminal-fenster:origin",
           "value": "registry.npmjs.org"
         }
       ],
@@ -913,40 +913,40 @@
       ]
     },
     {
-      "bom-ref": "pkg:npm/%40blackglass/mcp@0.1.0",
+      "bom-ref": "pkg:npm/%40terminal-fenster/mcp@0.1.0",
       "type": "application",
-      "name": "@blackglass/mcp",
+      "name": "@terminal-fenster/mcp",
       "version": "0.1.0",
-      "purl": "pkg:npm/%40blackglass/mcp@0.1.0",
+      "purl": "pkg:npm/%40terminal-fenster/mcp@0.1.0",
       "scope": "required",
-      "description": "MCP server exposing the BlackGlass terminal browser to AI agents over stdio",
+      "description": "MCP server exposing the Terminal-Fenster terminal browser to AI agents over stdio",
       "licenses": [
         {
           "expression": "NONE"
         }
       ],
       "supplier": {
-        "name": "BlackGlass project"
+        "name": "Terminal-Fenster project"
       },
       "properties": [
         {
-          "name": "blackglass:ecosystem",
+          "name": "terminal-fenster:ecosystem",
           "value": "npm"
         },
         {
-          "name": "blackglass:origin",
+          "name": "terminal-fenster:origin",
           "value": "first-party"
         },
         {
-          "name": "blackglass:path",
+          "name": "terminal-fenster:path",
           "value": "packages/mcp"
         },
         {
-          "name": "blackglass:runtime-deps",
+          "name": "terminal-fenster:runtime-deps",
           "value": "0 (node builtins only: child_process, fs, net, os, path, zlib)"
         },
         {
-          "name": "blackglass:license-status",
+          "name": "terminal-fenster:license-status",
           "value": "CONFLICT: declares \"UNLICENSED\" while the Rust workspace declares \"MIT OR Apache-2.0\""
         }
       ]
@@ -975,35 +975,35 @@
       ],
       "properties": [
         {
-          "name": "blackglass:ecosystem",
+          "name": "terminal-fenster:ecosystem",
           "value": "github-releases"
         },
         {
-          "name": "blackglass:bytes",
+          "name": "terminal-fenster:bytes",
           "value": "122090802"
         },
         {
-          "name": "blackglass:electron-abi",
+          "name": "terminal-fenster:electron-abi",
           "value": "148"
         },
         {
-          "name": "blackglass:installed-bytes",
+          "name": "terminal-fenster:installed-bytes",
           "value": "~276 MiB extracted (309 MiB node_modules tree)"
         },
         {
-          "name": "blackglass:npm-provenance",
+          "name": "terminal-fenster:npm-provenance",
           "value": "NONE - electron@43.2.0 has no Sigstore attestation on registry.npmjs.org"
         },
         {
-          "name": "blackglass:gpg-signature",
+          "name": "terminal-fenster:gpg-signature",
           "value": "NONE - SHASUMS256.txt is not GPG-signed"
         },
         {
-          "name": "blackglass:codesign",
+          "name": "terminal-fenster:codesign",
           "value": "adhoc, linker-signed; Sealed Resources=none; spctl REJECTS the bundle"
         },
         {
-          "name": "blackglass:verified-on-host",
+          "name": "terminal-fenster:verified-on-host",
           "value": "SHA-256 recomputed 2026-07-31 and matched node_modules/electron/checksums.json"
         }
       ],
@@ -1036,23 +1036,23 @@
       ],
       "properties": [
         {
-          "name": "blackglass:evidence",
+          "name": "terminal-fenster:evidence",
           "value": "LC_ALL=C grep -a -o 'Chrome/[0-9.]*' on Electron Framework -> Chrome/150.0.7871.129"
         },
         {
-          "name": "blackglass:binary-bytes",
+          "name": "terminal-fenster:binary-bytes",
           "value": "192532256"
         },
         {
-          "name": "blackglass:bundled-third-party-count",
+          "name": "terminal-fenster:bundled-third-party-count",
           "value": "773 entries in dist/LICENSES.chromium.html (19,956,019 bytes)"
         },
         {
-          "name": "blackglass:notice-file",
+          "name": "terminal-fenster:notice-file",
           "value": "dist/LICENSES.chromium.html MUST be redistributed with any binary we ship"
         },
         {
-          "name": "blackglass:sbom-completeness",
+          "name": "terminal-fenster:sbom-completeness",
           "value": "INCOMPLETE - the 773 inner components are not individually enumerated here"
         }
       ],
@@ -1080,19 +1080,19 @@
       ],
       "properties": [
         {
-          "name": "blackglass:path",
+          "name": "terminal-fenster:path",
           "value": "Electron.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Libraries/libffmpeg.dylib"
         },
         {
-          "name": "blackglass:bytes",
+          "name": "terminal-fenster:bytes",
           "value": "2230784"
         },
         {
-          "name": "blackglass:codecs-found",
+          "name": "terminal-fenster:codecs-found",
           "value": "h264, hevc, flac, opus, theora, vorbis (strings on the shipped dylib)"
         },
         {
-          "name": "blackglass:patent-note",
+          "name": "terminal-fenster:patent-note",
           "value": "H.264/HEVC are patent-encumbered; Electron publishes a free-codecs-only ffmpeg artifact (ffmpeg-v43.2.0-darwin-arm64.zip, sha256 6d4b9158bfc442288833ecffa1bd240bf10c60e7f37ab32872e97ee773d23fc3) as a drop-in replacement"
         }
       ]
@@ -1111,11 +1111,11 @@
       ],
       "properties": [
         {
-          "name": "blackglass:phase",
+          "name": "terminal-fenster:phase",
           "value": "build-time only, not shipped"
         },
         {
-          "name": "blackglass:note",
+          "name": "terminal-fenster:note",
           "value": "rustc 1.93.0 (254b59607 2026-01-19); cargo 1.93.0; workspace rust-version = 1.80"
         }
       ]
@@ -1134,11 +1134,11 @@
       ],
       "properties": [
         {
-          "name": "blackglass:phase",
+          "name": "terminal-fenster:phase",
           "value": "build-time only, not shipped"
         },
         {
-          "name": "blackglass:note",
+          "name": "terminal-fenster:note",
           "value": "host Node; packages/mcp declares engines.node >=22; electron requires >=22.12.0"
         }
       ]
@@ -1157,11 +1157,11 @@
       ],
       "properties": [
         {
-          "name": "blackglass:phase",
+          "name": "terminal-fenster:phase",
           "value": "build-time only, not shipped"
         },
         {
-          "name": "blackglass:note",
+          "name": "terminal-fenster:note",
           "value": "past the 9.5.0 minimum for provenance verification"
         }
       ]
@@ -1180,11 +1180,11 @@
       ],
       "properties": [
         {
-          "name": "blackglass:phase",
+          "name": "terminal-fenster:phase",
           "value": "build-time only, not shipped"
         },
         {
-          "name": "blackglass:note",
+          "name": "terminal-fenster:note",
           "value": "benchmarks/probes/Makefile only; not used to build shipped artifacts"
         }
       ]
@@ -1203,11 +1203,11 @@
       ],
       "properties": [
         {
-          "name": "blackglass:phase",
+          "name": "terminal-fenster:phase",
           "value": "build-time only, not shipped"
         },
         {
-          "name": "blackglass:note",
+          "name": "terminal-fenster:note",
           "value": "benchmarks/a07 and apps/engine/spike probe scripts only; not a runtime dependency"
         }
       ]
@@ -1219,21 +1219,21 @@
       "dependsOn": []
     },
     {
-      "ref": "pkg:cargo/bg-proto@0.1.0",
+      "ref": "pkg:cargo/tf-proto@0.1.0",
       "dependsOn": []
     },
     {
-      "ref": "pkg:cargo/bg-term@0.1.0",
+      "ref": "pkg:cargo/tf-term@0.1.0",
       "dependsOn": [
         "pkg:cargo/flate2@1.1.9",
         "pkg:cargo/libc@0.2.189"
       ]
     },
     {
-      "ref": "pkg:cargo/blackglass@0.1.0",
+      "ref": "pkg:cargo/terminal-fenster@0.1.0",
       "dependsOn": [
-        "pkg:cargo/bg-proto@0.1.0",
-        "pkg:cargo/bg-term@0.1.0",
+        "pkg:cargo/tf-proto@0.1.0",
+        "pkg:cargo/tf-term@0.1.0",
         "pkg:cargo/libc@0.2.189"
       ]
     },
@@ -1340,13 +1340,13 @@
       "dependsOn": []
     },
     {
-      "ref": "pkg:npm/%40blackglass/engine@0.1.0",
+      "ref": "pkg:npm/%40terminal-fenster/engine@0.1.0",
       "dependsOn": [
         "pkg:npm/electron@43.2.0"
       ]
     },
     {
-      "ref": "pkg:npm/%40blackglass/mcp@0.1.0",
+      "ref": "pkg:npm/%40terminal-fenster/mcp@0.1.0",
       "dependsOn": []
     },
     {
@@ -1394,11 +1394,11 @@
       "dependsOn": []
     },
     {
-      "ref": "pkg:generic/blackglass@0.1.0",
+      "ref": "pkg:generic/terminal-fenster@0.1.0",
       "dependsOn": [
-        "pkg:cargo/blackglass@0.1.0",
-        "pkg:npm/%40blackglass/engine@0.1.0",
-        "pkg:npm/%40blackglass/mcp@0.1.0"
+        "pkg:cargo/terminal-fenster@0.1.0",
+        "pkg:npm/%40terminal-fenster/engine@0.1.0",
+        "pkg:npm/%40terminal-fenster/mcp@0.1.0"
       ]
     }
   ],
@@ -1406,10 +1406,10 @@
     {
       "aggregate": "complete",
       "assemblies": [
-        "pkg:generic/blackglass@0.1.0",
-        "pkg:npm/%40blackglass/engine@0.1.0",
-        "pkg:npm/%40blackglass/mcp@0.1.0",
-        "pkg:cargo/blackglass@0.1.0"
+        "pkg:generic/terminal-fenster@0.1.0",
+        "pkg:npm/%40terminal-fenster/engine@0.1.0",
+        "pkg:npm/%40terminal-fenster/mcp@0.1.0",
+        "pkg:cargo/terminal-fenster@0.1.0"
       ]
     },
     {

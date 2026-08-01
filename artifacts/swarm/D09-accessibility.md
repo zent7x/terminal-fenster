@@ -53,7 +53,7 @@ Four measured results shape the design, and each contradicts the obvious approac
    based**. (F9, §7.4)
 
 **Single most actionable recommendation:** implement the engine-side extractor and the
-§4 layout algorithm behind `blackglass open --text`, and gate it on the §9 golden-fixture
+§4 layout algorithm behind `terminal-fenster open --text`, and gate it on the §9 golden-fixture
 tests. The reference implementation already runs; it produced every worked example in §4.12.
 
 ---
@@ -66,7 +66,7 @@ Eight probes were run against the engine's own Electron binary. They live in the
 scratchpad (ephemeral):
 
 ```
-/private/tmp/claude-501/-Users-adeebbashir-projects/<session>/scratchpad/
+/private/tmp/claude-501/-Users-builder/<session>/scratchpad/
     ax-probe.js    capability + first tree + big-tree cost
     ax-probe3.js   invalidation, lean APIs, focus, scroll  (watchdog-guarded)
     ax-probe4.js   iframes, depth param, geometry cost
@@ -83,7 +83,7 @@ Invocation (the Chromium sandbox must be disabled *at the agent-shell level*; th
 sandbox itself stays on inside the probe, matching `main.js:111`):
 
 ```bash
-cd /Users/adeebbashir/projects/blackglass
+cd $REPO
 ./apps/engine/node_modules/.bin/electron <probe>.js --out=<result>.json
 ```
 
@@ -385,7 +385,7 @@ light. At the minimal grey that clears 3:1 (`#5e5e5e`, ratio 3.03), even body te
 ### F10 — MEDIUM: text mode must set both foreground *and* background on every cell it owns
 
 We cannot know the user's terminal theme. `caps.rs` does not currently query OSC 10/11
-(`crates/bg-term/src/caps.rs:128-193` probes kitty graphics, DA1, kitty keyboard, `CSI 14 t`,
+(`crates/tf-term/src/caps.rs:128-193` probes kitty graphics, DA1, kitty keyboard, `CSI 14 t`,
 `CSI 16 t`, and DECRQM 1016 — no colour query). Without knowing the background, no contrast
 claim we make is true.
 
@@ -410,7 +410,7 @@ over SSH at 1 Mbps costs 14 s before the first character appears.
 The honest costs of this decision, stated plainly:
 
 - The layout algorithm lands in JavaScript in `apps/engine/`, away from the Unicode machinery
-  in `crates/bg-term/src/unicode.rs`. Width measurement gets implemented twice. **Mitigation:**
+  in `crates/tf-term/src/unicode.rs`. Width measurement gets implemented twice. **Mitigation:**
   §9 defines golden fixtures as plain text files, so both implementations can be tested
   against identical expected output, and a divergence is a test failure rather than a
   mystery.
@@ -423,7 +423,7 @@ The honest costs of this decision, stated plainly:
 ### 3.2 Wire protocol additions (described, not implemented — commander owns these files)
 
 The existing framing is unchanged: `[u8 type][u32 BE len][payload]`, types 1/2/10 per
-`crates/bg-proto/src/lib.rs:11-13`. Text mode needs no new type ids — it is one new command
+`crates/tf-proto/src/lib.rs:11-13`. Text mode needs no new type ids — it is one new command
 and one new event kind, both JSON.
 
 **Core → engine, `T_COMMAND` (10):**
@@ -457,8 +457,8 @@ Each line's `s` is a run list `[styleId, text]`. `styleId` indexes a small enum
 near the measured 627–969 B/viewport instead of inlining colour strings.
 
 **Why not a new binary type:** the payload is small, low-rate, and benefits enormously from
-being readable in logs — exactly the asymmetry `bg-proto` already documents at
-`crates/bg-proto/src/lib.rs:7-9`. Consistency with the existing design beats novelty.
+being readable in logs — exactly the asymmetry `tf-proto` already documents at
+`crates/tf-proto/src/lib.rs:7-9`. Consistency with the existing design beats novelty.
 
 ### 3.3 Acquisition and invalidation policy
 
@@ -714,7 +714,7 @@ under incremental re-layout, which matters far more here than optical evenness.
 ```
 
 This is the East Asian Width table reduced to the ranges that matter. **It must agree
-byte-for-byte with `crates/bg-term/src/unicode.rs`'s notion of width** — §9 has the shared
+byte-for-byte with `crates/tf-term/src/unicode.rs`'s notion of width** — §9 has the shared
 fixture. A zero-width cluster attaches to the preceding cell and never starts a line.
 
 **Atoms.** Split each run at spaces, keeping spaces as separate atoms. Widget tokens are
@@ -952,7 +952,7 @@ Both fixtures at both widths satisfy I1 (no line exceeds `cols`).
 
 ## 5. Screen-reader-friendly structured output
 
-A blind user is not running BlackGlass to look at a picture of a browser. They are running a
+A blind user is not running Terminal-Fenster to look at a picture of a browser. They are running a
 screen reader over a terminal, and our output is what it speaks. Two consequences drive every
 choice here: **the reader linearises, so the text must already be linear and unambiguous**,
 and **the reader announces changes, so we must not churn the screen**.
@@ -962,8 +962,8 @@ and **the reader announces changes, so we must not churn the screen**.
 | Sink | Use | Shape |
 |---|---|---|
 | **Live TTY** (`--text`) | interactive, screen reader attached | §4 output + §7 styling, damage-tracked |
-| **Dump** (`blackglass text <url>`) | pipe to a file, `grep`, an LLM, a braille display | §4 output, plain, no escape sequences, LF-terminated, UTF-8 |
-| **Tree** (`blackglass a11y <url>`) | debugging, conformance auditing, agents | §5.2 |
+| **Dump** (`terminal-fenster text <url>`) | pipe to a file, `grep`, an LLM, a braille display | §4 output, plain, no escape sequences, LF-terminated, UTF-8 |
+| **Tree** (`terminal-fenster a11y <url>`) | debugging, conformance auditing, agents | §5.2 |
 
 The dump sink is the one that must never regress: it is `cat`-able, diff-able, and is the
 golden-fixture format in §9. When stdout is not a TTY, `--text` must produce exactly the dump
@@ -1021,7 +1021,7 @@ Screen readers announce what changes. Uncontrolled repainting makes them unusabl
   ≥500 ms.
 - **Focus changes are announced by moving the terminal cursor** to the focused run's first
   cell. This is the mechanism screen readers already track, it costs ~8 bytes, and it works
-  without the reader knowing anything about BlackGlass.
+  without the reader knowing anything about Terminal-Fenster.
 - **Loading state** goes to the status band as text (`loading…` → `done`), never as a spinner.
   An animating spinner in a live region is a screen-reader denial-of-service.
 - **The alternate screen buffer must not be used in dump mode**, so output survives in the
@@ -1105,7 +1105,7 @@ technically accessible and practically unusable.
 
 - **A06 §2.8 ESC ambiguity.** `Esc` is both our universal "back out" key and the lead byte of
   every CSI sequence. The keymap must consume `Esc` only via `input.rs`'s
-  `flush_pending_escape()` path (`crates/bg-term/src/input.rs:148`), never on the raw byte.
+  `flush_pending_escape()` path (`crates/tf-term/src/input.rs:148`), never on the raw byte.
 - **D04 F1 (CRITICAL).** Terminal query replies on stdin are currently decoded as keystrokes.
   Text mode adds OSC 10/11 queries (F10), which makes that bug *more* likely to fire. D09
   depends on D04's fix; it does not work around it.
@@ -1322,7 +1322,7 @@ returns fresh data; an iframe page yields exactly one `RootWebArea`; `depth:1` r
 nodes than `depth:3`.
 
 **T11 — width table agreement.** The same UTF-8 corpus measured by the engine's JS width
-function and by `crates/bg-term/src/unicode.rs`; any disagreement is a build failure. This is
+function and by `crates/tf-term/src/unicode.rs`; any disagreement is a build failure. This is
 the guard on the §3.1 duplication cost.
 
 ---
@@ -1350,7 +1350,7 @@ Marked plainly rather than glossed.
   this spec depends on iTerm2 specifics.
 - **Screen-reader behaviour end-to-end.** I specified the announcement model from the WCAG
   criteria and from how readers consume terminal output; I did not run VoiceOver against
-  BlackGlass, and the machine is at a lock screen so I could not. §5.3 is design, not
+  Terminal-Fenster, and the machine is at a lock screen so I could not. §5.3 is design, not
   measurement, and should be validated with a real VoiceOver session before it is called done.
 - **CJK line breaking (§4.7).** Space-only break opportunities are correct for Han but wrong
   for kana-with-particles and ignore the line-start/end prohibition classes. The measured
@@ -1367,7 +1367,7 @@ Marked plainly rather than glossed.
 
 Ordered by value per unit of risk.
 
-1. **Build the engine-side extractor + §4 layout behind `blackglass open --text`.** This is
+1. **Build the engine-side extractor + §4 layout behind `terminal-fenster open --text`.** This is
    the whole deliverable and the reference implementation already runs. Layout goes in the
    engine, not the core (F8); only laid-out lines cross the socket.
 2. **Adopt T1 and T4 before writing the extractor.** The block-classification rule (F6) is the
@@ -1385,7 +1385,7 @@ Ordered by value per unit of risk.
    backgrounds and applies to any focus highlight the project draws.
 6. **Land `contrast.js` in CI (T8).** It caught a real failure in the first palette I wrote and
    then proved that palette unfixable. Hand-checked contrast will ship bugs.
-7. **Ship `blackglass a11y <url>` (§5.2) early.** It is roughly fifty lines on top of the
+7. **Ship `terminal-fenster a11y <url>` (§5.2) early.** It is roughly fifty lines on top of the
    extractor, it makes every subsequent text-mode bug diagnosable, and it is independently
    useful to anyone auditing a page.
 8. **Re-probe the two open CDP questions** — `nodesUpdated` subscription semantics, and

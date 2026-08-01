@@ -1,9 +1,9 @@
 # D01 — Keyboard Correctness Audit + IME/Composition Specification
 
-**Mission:** audit `crates/bg-term/src/input.rs` against the Kitty keyboard protocol; enumerate the
+**Mission:** audit `crates/tf-term/src/input.rs` against the Kitty keyboard protocol; enumerate the
 functional-key table we are missing; specify how CJK/IME input must reach Chromium.
 **Date:** 2026-07-31 · **Host:** macOS 26.1, Apple M4 arm64 · **Auditor:** D01
-**Audited revision:** `crates/bg-term/src/input.rs` @ 768 lines (worktree state at `5215e1e`).
+**Audited revision:** `crates/tf-term/src/input.rs` @ 768 lines (worktree state at `5215e1e`).
 **Method:** every defect below was *executed*, not inferred. See §1.
 
 > **File ownership.** This agent wrote only this file. No source under `crates/`, `apps/cli/`, or
@@ -47,7 +47,7 @@ discard the only thing it buys us.
 ## 1. Method and evidence
 
 Three probes were written to the session scratchpad
-(`/private/tmp/claude-501/-Users-adeebbashir-projects/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/`)
+(`/private/tmp/claude-501/-Users-builder/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/`)
 and executed. Full source is in Appendix A so the results are reproducible after the scratchpad is
 reaped.
 
@@ -176,7 +176,7 @@ So the terminal should send the base layout key as 99."*
 
 Two independent problems:
 
-1. `crates/bg-term/src/tty.rs:167` pushes `\x1b[>27u`. `27 = 1|2|8|16`. **Flag `4` is not set**, so
+1. `crates/tf-term/src/tty.rs:167` pushes `\x1b[>27u`. `27 = 1|2|8|16`. **Flag `4` is not set**, so
    Ghostty never sends the alternates in the first place. A06 §1.2 recommends `31`; the code says
    27 and the comment enumerates only four flags, so this reads as an oversight rather than a
    decision.
@@ -432,7 +432,7 @@ truncated SS3 'ESC O': pending=2, flush_pending_escape() -> false
 ```
 
 Three consequences. First, a remote page or a hostile SSH peer that emits `ESC [` followed by an
-endless digit run makes `blackglass` grow without bound; there is no ceiling and no resync. Second,
+endless digit run makes `terminal-fenster` grow without bound; there is no ceiling and no resync. Second,
 the same applies to a bracketed paste whose `ESC [201~` never arrives — relevant because §A09's
 threat model treats paste as attacker-controlled. Third, a stream that ends mid-`ESC O` wedges the
 decoder forever, because `flush_pending_escape` only fires on a 1-byte buffer.
@@ -601,7 +601,7 @@ get from an emoji picker or a paste, which they all handle correctly. So:
 4. **Preedit is out of scope, and say so.** Expose `imeSupport: "committed-only"` in the capability
    report the CLI already prints (`apps/cli/src/main.rs:147`), so the limitation is visible rather
    than mysterious. Keep `Input.imeSetComposition` wired but unused behind a flag: if we ever add a
-   BlackGlass-native terminal shim, or if a terminal ever ships a preedit escape code, the
+   Terminal-Fenster-native terminal shim, or if a terminal ever ships a preedit escape code, the
    measured-working call is already there and §7.2 documents its exact semantics.
 
 ### 7.4 Cursor parking — the part that decides whether CJK is usable
@@ -637,7 +637,7 @@ text.
 
 ## 8. Required changes (spec for the commander — this agent did not edit these files)
 
-In `crates/bg-term/src/input.rs`:
+In `crates/tf-term/src/input.rs`:
 
 1. Add `KeyCode` variants for the full functional set in §3, and a `functional_key(u32) -> Option<KeyCode>`
    lookup covering 57358–57454 plus the `~`-form numbers. Then make the fallback arm reject the PUA
@@ -658,7 +658,7 @@ In `crates/bg-term/src/input.rs`:
    Backspace **with `ctrl`**.
 8. Bound the buffers (§5) and generalise `flush_pending_escape` to any stalled partial sequence.
 
-In `crates/bg-term/src/tty.rs:167`: push `\x1b[>31u`, not `\x1b[>27u`, and update the comment to
+In `crates/tf-term/src/tty.rs:167`: push `\x1b[>31u`, not `\x1b[>27u`, and update the comment to
 list flag 4. Without this, item 6 above has nothing to parse.
 
 In `apps/cli/src/main.rs`: stop dropping `KeyEventKind::Release` at line 566 — forward it as
@@ -738,7 +738,7 @@ Reproduce with `rustc --edition 2021 -O -o decode_probe decode_probe.rs && ./dec
 **`decode_probe.rs`** (abbreviated to its mechanism; the vector list is §10 plus §3.6/§4.1/§4.3):
 
 ```rust
-#[path = "/Users/adeebbashir/projects/blackglass/crates/bg-term/src/input.rs"]
+#[path = "$REPO/crates/tf-term/src/input.rs"]
 mod input;
 use input::{Decoder, Event};
 

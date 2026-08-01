@@ -1,6 +1,6 @@
 # C05 — Capability detector hardening
 
-**Scope:** audit of `crates/bg-term/src/caps.rs` (373 lines) for failure modes under slow
+**Scope:** audit of `crates/tf-term/src/caps.rs` (373 lines) for failure modes under slow
 terminals, partial responders, concurrent user input, multiplexers, and SSH.
 
 **Verdict:** the detector's *philosophy* is right — ask the terminal, treat silence as a
@@ -237,7 +237,7 @@ This is the race the mission asked about, and it has three distinct edges.
 
 **(i) Keystrokes are silently destroyed.** `read_reply` (`caps.rs:92-114`) reads whatever
 is available into `buf`; `detect` parses `buf` and drops it. Any byte the user typed during
-detection is gone. Typeahead is the common case: the user runs `blackglass open …` and
+detection is gone. Typeahead is the common case: the user runs `terminal-fenster open …` and
 keeps typing, or a shell wrapper leaves bytes queued before we enter raw mode. Measured
 (`baseline.log`, E2 — user types `you` 40 ms in):
 
@@ -269,7 +269,7 @@ parse_da1_has_sixel("hello" + real DA1)   = true
 parse_decrqm_supported(user typed "\e[?1;1$y") = true
 ```
 
-A user typing `[?4;c` makes BlackGlass believe the terminal does sixel and select the sixel
+A user typing `[?4;c` makes Terminal-Fenster believe the terminal does sixel and select the sixel
 backend on a terminal that cannot render it. Low-probability, but it is a correctness hole
 reachable from ordinary input, and the mitigation is free.
 
@@ -482,7 +482,7 @@ the only genuine timeout. With the fix in place the same scenario yields
 ### F6 — MEDIUM: queries are written to `stdout`, not to the terminal
 
 `query` writes to `io::stdout()` (`caps.rs:117`) but reads from `fd`. When stdout is
-redirected — `blackglass doctor > report.txt`, a CI log, a tee — the escape sequences go
+redirected — `terminal-fenster doctor > report.txt`, a CI log, a tee — the escape sequences go
 into the file and never reach the terminal, while detection still waits the full deadline on
 each probe for replies that cannot arrive. `cmd_doctor` checks `isatty(stdin)`
 (`main.rs:138`) but never checks stdout, so this path is reachable in exactly the situation
@@ -507,13 +507,13 @@ currently still costs a full deadline of waiting.
 can never fire. `c.cell.unwrap_or((8, 16))` at `main.rs:252` does the same for cell size.
 
 The measured screen session hits exactly this: `CSI 14t`/`16t` unanswered *and*
-`TIOCGWINSZ` pixels `0×0`, so all three sources fail and BlackGlass would render an
+`TIOCGWINSZ` pixels `0×0`, so all three sources fail and Terminal-Fenster would render an
 `80*8 × 24*16 = 640×384` page bearing no relation to the real window, with every pointer
 coordinate wrong.
 
 Fix: let `choose_geometry` (F1) return `None` and make the CLI fail with an actionable
 message. An honest "I cannot determine your terminal's pixel geometry; try
-`BLACKGLASS_CELL=WxH`" beats a silently mis-scaled browser. If a fabricated default is kept
+`TERMINAL_FENSTER_CELL=WxH`" beats a silently mis-scaled browser. If a fabricated default is kept
 for the Unicode backend (where cell-exactness matters less), it must be flagged in
 `Capabilities` — e.g. `geometry_confidence: Measured | Derived | Assumed` — and printed by
 `doctor`, so the failure is visible rather than inferred.

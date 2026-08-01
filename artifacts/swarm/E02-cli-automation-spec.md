@@ -11,7 +11,7 @@ anchored to these exact bytes:
 | File | lines | md5 |
 |---|---:|---|
 | `apps/cli/src/main.rs` | 1039 | `bceb2a511097d93ea17ac90b94fcb077` |
-| `crates/bg-proto/src/lib.rs` | 284 | `edbb4c0b2e74e960857f2fc687210fe4` |
+| `crates/tf-proto/src/lib.rs` | 284 | `edbb4c0b2e74e960857f2fc687210fe4` |
 | `apps/engine/src/main.js` | 309 | `1520d7ab86e4c69e76508bd6d6bab2ce` |
 
 ---
@@ -45,13 +45,13 @@ screenshot. Every claim is either read directly off the pinned source, or produc
 binary already vendored in this repo with the sandbox disabled:
 
 ```
-cd /Users/adeebbashir/projects/blackglass/apps/engine
+cd $REPO/apps/engine
 ./node_modules/.bin/electron <probe>.js          # sandbox disabled for the Bash call
 ./node_modules/electron/dist/version  ->  43.2.0
 ```
 
 Probes live outside the repo, in
-`/private/tmp/claude-501/-Users-adeebbashir/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/e02/`:
+`/private/tmp/claude-501/-Users-builder/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/e02/`:
 
 | Probe | Question | Log |
 |---|---|---|
@@ -100,13 +100,13 @@ In interactive mode stdout carries kitty graphics escape sequences (`main.rs:899
 is JSON on stdout. **These cannot be the same process.** Therefore:
 
 ```text
-  [blackglass serve]            long-lived session host: owns the tty (optionally),
+  [terminal-fenster serve]            long-lived session host: owns the tty (optionally),
         |                       owns the engine child, owns the control socket
         |  AF_UNIX control socket (0600 in a 0700 dir, per main.rs:389-400)
         |
-  [blackglass click …]          short-lived verb process: connects, sends one command,
-  [blackglass wait  …]          reads one reply, prints one JSON envelope, exits
-  [blackglass snapshot …]
+  [terminal-fenster click …]          short-lived verb process: connects, sends one command,
+  [terminal-fenster wait  …]          reads one reply, prints one JSON envelope, exits
+  [terminal-fenster snapshot …]
 ```
 
 `serve` is new infrastructure this spec depends on; it is not one of the fourteen verbs. It reuses the
@@ -119,9 +119,9 @@ interactive case because the socket path is now long-lived and predictable.
 
 `main.rs:54-70` dispatches `doctor`, `open`, `version`, `help`. Only `open` collides with this spec.
 
-**Rule:** `blackglass open <url>` with no `--json` and no session in scope keeps today's behaviour exactly
+**Rule:** `terminal-fenster open <url>` with no `--json` and no session in scope keeps today's behaviour exactly
 — interactive TUI, `main.rs:218`. `open` becomes the automation verb only when `--json` is passed or a
-session is in scope (`--session PATH` or `$BLACKGLASS_SESSION`). Automation verbs other than `open`
+session is in scope (`--session PATH` or `$TERMINAL_FENSTER_SESSION`). Automation verbs other than `open`
 require a session and fail with `E_NO_SESSION` (exit 7) without one; they never start an engine implicitly,
 because an implicit engine start is a 200–400 ms cost with no owner and no teardown path.
 
@@ -450,7 +450,7 @@ envelope as above with `"type":"result"`. In non-stream mode the `type` field is
 ### 6.1 `open`
 
 ```
-blackglass open <url> [--json] [--tab N|--new-tab] [--wait load|dom|paint|network-idle|quiet|none]
+terminal-fenster open <url> [--json] [--tab N|--new-tab] [--wait load|dom|paint|network-idle|quiet|none]
                       [--timeout MS] [--referrer URL]
 ```
 
@@ -482,7 +482,7 @@ carried verbatim from Chromium.
 ### 6.2 `list`
 
 ```
-blackglass list [--json]
+terminal-fenster list [--json]
 ```
 
 Wraps B04 `tab.list`. Pure observation, never mutates, never waits.
@@ -507,7 +507,7 @@ page-controlled — see §9.2.
 ### 6.3 `focus`
 
 ```
-blackglass focus <tab> [--json]
+terminal-fenster focus <tab> [--json]
 ```
 
 Wraps B04 `tab.activate`. B04 measured that activation emits a full frame at current geometry even for a
@@ -523,7 +523,7 @@ Unknown or closed tab → `E_NO_SUCH_TAB` (exit 4). `focus` on the already-activ
 ### 6.4 `snapshot` — and the element reference design
 
 ```
-blackglass snapshot [--scope <ref|--selector CSS>] [--role ROLE] [--name TEXT]
+terminal-fenster snapshot [--scope <ref|--selector CSS>] [--role ROLE] [--name TEXT]
                     [--interactive-only|--all] [--max-nodes N] [--depth N] [--json]
 ```
 
@@ -596,7 +596,7 @@ Prefer them.
 ### 6.5 `click`
 
 ```
-blackglass click <ref> | --selector CSS [--button left|middle|right] [--count N]
+terminal-fenster click <ref> | --selector CSS [--button left|middle|right] [--count N]
                  [--modifiers ctrl,shift,alt,meta] [--position center|topleft|X,Y]
                  [--force] [--timeout MS] [--json]
 ```
@@ -628,7 +628,7 @@ intentionally proxy events), and a spec with no escape hatch gets worked around 
 ### 6.6 `type`
 
 ```
-blackglass type <ref>|--selector CSS <text> [--clear] [--method insert|keys]
+terminal-fenster type <ref>|--selector CSS <text> [--clear] [--method insert|keys]
                 [--delay MS] [--timeout MS] [--json]
 ```
 
@@ -653,7 +653,7 @@ field back into a log is always an explicit act (§9.3).
 ### 6.7 `key`
 
 ```
-blackglass key <combo> [--repeat N] [--json]
+terminal-fenster key <combo> [--repeat N] [--json]
 ```
 
 Sends a key to the focused element, not to an element by ref. Combos are `+`-separated:
@@ -676,7 +676,7 @@ silently differs otherwise.
 ### 6.8 `hover`
 
 ```
-blackglass hover <ref>|--selector CSS [--position …] [--timeout MS] [--json]
+terminal-fenster hover <ref>|--selector CSS [--position …] [--timeout MS] [--json]
 ```
 
 Same gate as `click`, dispatches `mouseMove` only. `main.js:160-168` already sends `mouseEnter` before the
@@ -693,7 +693,7 @@ a hover that does not trigger `:hover` is a confusing silent failure.
 ### 6.9 `scroll`
 
 ```
-blackglass scroll [--by DX,DY] [--to X,Y] [--into <ref>] [--page up|down] [--timeout MS] [--json]
+terminal-fenster scroll [--by DX,DY] [--to X,Y] [--into <ref>] [--page up|down] [--timeout MS] [--json]
 ```
 
 Exactly one of `--by` / `--to` / `--into` / `--page`.
@@ -722,7 +722,7 @@ Specified in full in §7.
 ### 6.11 `eval`
 
 ```
-blackglass eval <expression> [--file PATH] [--await] [--arg NAME=JSON]...
+terminal-fenster eval <expression> [--file PATH] [--await] [--arg NAME=JSON]...
                 [--on <ref>] [--timeout MS] [--json]
 ```
 
@@ -763,7 +763,7 @@ Serialisation rules, each derived from a measured failure in §5.2:
 ### 6.12 `screenshot`
 
 ```
-blackglass screenshot [--out PATH|-] [--format png|jpeg|webp] [--quality N]
+terminal-fenster screenshot [--out PATH|-] [--format png|jpeg|webp] [--quality N]
                       [--full-page] [--clip X,Y,W,H] [--of <ref>] [--scale N] [--json]
 ```
 
@@ -796,7 +796,7 @@ able to see in a log.
 ### 6.13 `close`
 
 ```
-blackglass close [<tab>] [--all] [--session] [--json]
+terminal-fenster close [<tab>] [--all] [--session] [--json]
 ```
 
 Wraps B04 `tab.close`, which stops painting, detaches the paint listener, destroys the window, and
@@ -817,7 +817,7 @@ id is inside the ref.
 ### 6.14 `status`
 
 ```
-blackglass status [--json] [--wait-ready MS]
+terminal-fenster status [--json] [--wait-ready MS]
 ```
 
 The health verb, and the only verb that is meaningful when the session is unhealthy. It must never block on
@@ -827,7 +827,7 @@ session-host state and process liveness only.
 ```json
 "result": {
   "session": "bg-8f3a1c",
-  "socket": "/var/folders/…/blackglass-4711-…/engine.sock",
+  "socket": "/var/folders/…/terminal-fenster-4711-…/engine.sock",
   "pid": 4711, "engine_pid": 4712,
   "uptime_ms": 91234,
   "protocol": {"envelope": 1, "wire": 1, "cdp": "1.3"},
@@ -859,7 +859,7 @@ stability — are measurably wrong.
 ### 7.1 Surface
 
 ```
-blackglass wait --for <predicate> [--timeout MS] [--poll-ms MS] [--quiet-ms MS]
+terminal-fenster wait --for <predicate> [--timeout MS] [--poll-ms MS] [--quiet-ms MS]
                 [--across-navigation] [--json]
 ```
 
@@ -1100,7 +1100,7 @@ hazards, and they need different mitigations.
 
 **Terminal injection (A09 TB3).** The interactive renderer already sanitises before writing to the tty
 (`main.rs:887-888`, `unicode::sanitize_for_terminal`). Automation output is JSON, and `json_escape`
-(`bg-proto/src/lib.rs:106-118`) correctly escapes control bytes below `0x20` — including `ESC` as
+(`tf-proto/src/lib.rs:106-118`) correctly escapes control bytes below `0x20` — including `ESC` as
 `\u001b`. So JSON output is safe *as JSON*. It stops being safe the moment a consumer pipes it through
 `jq -r` into a terminal. This spec therefore requires the `--raw-text` opt-in for any output mode that
 emits page text unescaped, and recommends consumers keep the escaping.
@@ -1141,24 +1141,24 @@ the page. Caps required at the session host, enforced on the length prefix befor
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
-export BLACKGLASS_SESSION=/tmp/bg.sock
+export TERMINAL_FENSTER_SESSION=/tmp/bg.sock
 
-blackglass serve --socket "$BLACKGLASS_SESSION" --action-log /tmp/actions.jsonl &
-blackglass status --wait-ready 10000 >/dev/null
+terminal-fenster serve --socket "$TERMINAL_FENSTER_SESSION" --action-log /tmp/actions.jsonl &
+terminal-fenster status --wait-ready 10000 >/dev/null
 
-blackglass open https://example.com --json --wait quiet --timeout 20000 >/tmp/open.json
+terminal-fenster open https://example.com --json --wait quiet --timeout 20000 >/tmp/open.json
 jq -e '.ok and .result.http_status == 200' /tmp/open.json >/dev/null
 
 # Observe semantically. Scoped query: 675 bytes measured, vs 9327 for the full tree.
-REF=$(blackglass snapshot --role button --name "Sign in" --json \
+REF=$(terminal-fenster snapshot --role button --name "Sign in" --json \
       | jq -r '.result.nodes[0].ref')
 
-blackglass click "$REF" --json | jq -e '.ok and .result.actionability.hit_self' >/dev/null
-blackglass wait --for 'quiet' --timeout 15000 --json | jq -e '.result.satisfied' >/dev/null
-blackglass screenshot --out /tmp/after.png --json \
+terminal-fenster click "$REF" --json | jq -e '.ok and .result.actionability.hit_self' >/dev/null
+terminal-fenster wait --for 'quiet' --timeout 15000 --json | jq -e '.result.satisfied' >/dev/null
+terminal-fenster screenshot --out /tmp/after.png --json \
   | jq -e '.result.matches_frame_geometry' >/dev/null
 
-blackglass close --session --json >/dev/null
+terminal-fenster close --session --json >/dev/null
 ```
 
 Every failure mode in this script is a distinct exit code: a stale `REF` exits 4, an occluded button
@@ -1219,9 +1219,9 @@ Marked plainly rather than smoothed over.
 1. **B06 F4 (socket authentication) is a blocker for `serve`, not a nice-to-have.** A long-lived,
    predictably-pathed, unauthenticated socket that accepts `eval` and `screenshot` is a local browser
    takeover. Everything else in this spec can ship incrementally; this cannot.
-2. **`crates/bg-proto` needs an automation message type.** Commands here are request/response with
+2. **`crates/tf-proto` needs an automation message type.** Commands here are request/response with
    correlation ids and cancellation; the current protocol is fire-and-forget commands plus unsolicited
-   events (`bg-proto/src/lib.rs:11-13`). I propose `T_RPC = 11` (request) and `T_RPC_REPLY = 12`, carrying
+   events (`tf-proto/src/lib.rs:11-13`). I propose `T_RPC = 11` (request) and `T_RPC_REPLY = 12`, carrying
    `{id, cmd, args}` / `{id, ok, result|error}`, leaving types 1/2/10 untouched. I did not edit `crates/`.
 3. **The engine must attach CDP after the first document commits** (§5.1) and enable `Runtime`, `DOM`,
    `Page`, `Accessibility` and `Network` there. `main.js:288-309` currently has no debugger attach at all.

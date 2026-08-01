@@ -1,0 +1,89 @@
+name: Unsigned release candidates
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-candidates-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Package ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            target: darwin-arm64
+          - os: macos-15-intel
+            target: darwin-x64
+          - os: ubuntu-24.04
+            target: linux-x64
+          - os: ubuntu-24.04-arm
+            target: linux-arm64
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Install stable Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - name: Require an exact version tag
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          version=$(awk -F'"' '/^version = "/ { print $2; exit }' Cargo.toml)
+          expected_tag="v$version"
+          if [[ "$GITHUB_REF_NAME" != "$expected_tag" ]]; then
+            printf 'release candidate: tag %s does not match workspace version %s\n' \
+              "$GITHUB_REF_NAME" "$version" >&2
+            exit 1
+          fi
+      - name: Build and verify native candidate
+        run: >-
+          tools/package-release.sh
+          --output dist-candidates
+          --expect-target ${{ matrix.target }}
+      - name: Record candidate digest
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          version=$(awk -F'"' '/^version = "/ { print $2; exit }' Cargo.toml)
+          archive="terminal-fenster-$version-$TARGET.tar.gz"
+          test -s "dist-candidates/$archive"
+          test -s "dist-candidates/$archive.sha256"
+          expected_line=$(cat "dist-candidates/$archive.sha256")
+          expected_file=${expected_line#*  }
+          if [[ "$expected_file" != "$archive" ]]; then
+            printf 'release candidate: checksum names %s, expected %s\n' \
+              "$expected_file" "$archive" >&2
+            exit 1
+          fi
+          {
+            printf '### %s (unsigned candidate)\n\n' "$TARGET"
+            printf '`%s`\n\n' "$expected_line"
+            printf 'Built from commit `%s`.\n' "$GITHUB_SHA"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload unsigned candidate
+        uses: actions/upload-artifact@v7
+        with:
+          name: terminal-fenster-${{ matrix.target }}-unsigned
+          path: |
+            dist-candidates/*.tar.gz
+            dist-candidates/*.tar.gz.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

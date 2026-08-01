@@ -1,4 +1,4 @@
-# BlackGlass local test fixtures
+# Terminal-Fenster local test fixtures
 
 Deterministic pages for exercising the Chromium engine, the input transport and the
 terminal backends. Every page opens over `file://` with no server, reaches no network, and
@@ -12,7 +12,7 @@ happened, and refuses to decide questions it cannot see the answer to.
 
 ## 1. Why these exist
 
-BlackGlass renders untrusted web content into a byte stream that a terminal emulator
+Terminal-Fenster renders untrusted web content into a byte stream that a terminal emulator
 interprets as commands. That inverts the usual browser threat model and makes the terminal
 side, not the page side, the thing most likely to be wrong. Screenshot diffing is not
 available on this host (the machine sits at a lock screen), so every fixture is built to be
@@ -122,10 +122,10 @@ escape corpus — and even the video has its clip inlined as a `data:` URI by de
 open tests/fixtures/index.html          # any browser, no server needed
 ```
 
-### 4.2 Through BlackGlass
+### 4.2 Through Terminal-Fenster
 
 ```bash
-blackglass open "file://$PWD/tests/fixtures/click-targets.html"
+terminal-fenster open "file://$PWD/tests/fixtures/click-targets.html"
 ```
 
 ### 4.3 The bundled verifier
@@ -165,7 +165,7 @@ Suggested procedure:
 
 ```bash
 pbcopy </dev/null
-blackglass open "file://$PWD/tests/fixtures/escape-injection.html"   # disposable terminal
+terminal-fenster open "file://$PWD/tests/fixtures/escape-injection.html"   # disposable terminal
 pbpaste | xxd | head            # must be empty
 ```
 
@@ -211,7 +211,7 @@ BS URL spoof, the full C0 zoo, the full C1 zoo, bidi override, bidi isolates, ze
 PUA, Zalgo, unpaired surrogate, U+2028/2029, a 16 KiB title, a 64 KiB unterminated OSC, and
 one benign control case that must pass through unchanged.
 
-The DCS and APC cases are BlackGlass-specific and are not in the usual terminal-injection
+The DCS and APC cases are Terminal-Fenster-specific and are not in the usual terminal-injection
 literature: our own sixel and kitty graphics data share one byte stream with page-derived
 text, so a page that can emit either introducer can desynchronise our renderer.
 
@@ -234,12 +234,12 @@ ready latency 1-3 ms after loadFile
 | what | result |
 |---|---|
 | Click at documented centre `(240,320)` of `t4` | hit, `dx=0 dy=0`, zero misses. `clientX/clientY` exactly as sent; `offsetX/offsetY = 40,40` |
-| Typing `blackglass` then `hunter` via `keyDown`+`char`+`keyUp` | both fields exact; 16 keydowns; `password.len 6`, `sum 662`; `masked true` |
-| Typing into `contenteditable` after a synthetic click | text `BLACKGLASS`, 10 `beforeinput` all `insertText`, caret rect `{x:146.33, y:132, w:0, h:19}` |
+| Typing `terminal-fenster` then `hunter` via `keyDown`+`char`+`keyUp` | both fields exact; 16 keydowns; `password.len 6`, `sum 662`; `masked true` |
+| Typing into `contenteditable` after a synthetic click | text `TERMINAL_FENSTER`, 10 `beforeinput` all `insertText`, caret rect `{x:146.33, y:132, w:0, h:19}` |
 | Bare `mouseMove` with **no** preceding `mouseEnter` | **`:hover` activated anyway.** Tile A went `rgb(0,192,0)`; one `mouseover` fired |
 | Occluded tile under a translucent overlay | stayed `rgb(192,0,0)`; `elementFromPoint` returned the occluder |
 | `Element.matches(':hover')` | returned **false** for every tile while `getComputedStyle` showed the hover style applied. Assert on computed style, not on `matches(':hover')` |
-| Form submit by clicking the button at `(635,160)` | navigated to exactly the predicted URL, `?q=blackglass&n=42&opt=b&hidden=h1&chk=on`; landing page self-checked `route: button` |
+| Form submit by clicking the button at `(635,160)` | navigated to exactly the predicted URL, `?q=terminal-fenster&n=42&opt=b&hidden=h1&chk=on`; landing page self-checked `route: button` |
 
 ### 6.2 Scrolling — the most consequential finding
 
@@ -407,7 +407,7 @@ self-contained; the files exist for the file-backed and H.264 paths.
   unverified.
 - **Nothing here has been run against a real terminal backend yet.** These fixtures verify
   the engine side. The clipboard oracle in section 5 is written but has not been executed
-  end to end through `blackglass open`.
+  end to end through `terminal-fenster open`.
 - **No `http://` variant.** The POST form and any origin-sensitive behaviour need a
   loopback server to test properly; the `file://` results are noted as such where they
   differ.

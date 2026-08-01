@@ -1,0 +1,25 @@
+[workspace]
+# Empty table: opts this crate OUT of the root terminal-fenster workspace (Cargo otherwise treats
+# any manifest nested under a workspace root as a member by directory containment, even if
+# absent from the root's explicit `members` list). This is the only way to touch zero shared
+# workspace state -- no edit to the root Cargo.toml/Cargo.lock is needed or made.
+
+[package]
+name = "compression-bench"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Deliberately NOT a member of the workspace at $REPO/Cargo.toml
+# (its [workspace].members list is explicit, so this crate is invisible to it and to
+# `cargo build`/`cargo test` run from the repo root). Run this benchmark with:
+#   cargo run --release --manifest-path benchmarks/compression-bench/Cargo.toml
+# It has its own Cargo.lock and target/ dir and touches no file outside this directory.
+
+[dependencies]
+flate2 = "1"
+zstd = "0.13"
+png = "0.17"
+
+[profile.release]
+opt-level = 3

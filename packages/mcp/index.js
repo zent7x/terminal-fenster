@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// BlackGlass MCP server -- drive the terminal browser from an AI agent.
+// Terminal-Fenster MCP server -- drive the terminal browser from an AI agent.
 //
 // Transport: stdio, newline-delimited JSON-RPC. Dependencies: none.
 //
@@ -9,38 +9,38 @@
 // specified this journey before this server existed.
 //
 // Actions travel over the engine's own 0600 unix socket as `input` commands -- the same
-// path a human's keystrokes take from the terminal. The agent and the human are the same
-// kind of input source to the page, which is what makes shared control possible.
+// path interactive terminal input takes. The page receives the same events even though the
+// MCP server currently owns a separate engine session rather than attaching to a live CLI.
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
-const os = require('os');
 
 const { StdioServer } = require('./lib/rpc');
 const { Session, DEFAULT_WIDTH, DEFAULT_HEIGHT } = require('./lib/engine');
 const snapshot = require('./lib/snapshot');
 const { encodeBGRA } = require('./lib/png');
+const { validateAgentNavigation } = require('./lib/navigation-policy');
+const { appendPrivate, classifyKey, defaultMcpStateDir, redactUrl } = require('./lib/privacy');
 
 const pkg = require('./package.json');
 
 // --- logging ------------------------------------------------------------------------
 // stdout belongs to JSON-RPC. Everything else goes to stderr, which the client may show,
 // forward, or ignore -- but must never parse.
-const LOG_FILE = process.env.BLACKGLASS_MCP_LOG || null;
+const LOG_FILE = process.env.TERMINAL_FENSTER_MCP_LOG || null;
 function log(msg) {
-  const line = `[blackglass-mcp] ${new Date().toISOString()} ${msg}`;
+  const line = `[terminal-fenster-mcp] ${new Date().toISOString()} ${msg}`;
   process.stderr.write(line + '\n');
-  if (LOG_FILE) { try { fs.appendFileSync(LOG_FILE, line + '\n'); } catch { /* logging must never throw */ } }
+  if (LOG_FILE) { try { appendPrivate(LOG_FILE, line + '\n'); } catch { /* logging must never throw */ } }
 }
 
 // --- action provenance log ----------------------------------------------------------
 // A03 requires every action, from either actor, to be appended to a JSONL log so an agent
 // run can be replayed and a disputed click attributed.
-const AUDIT_FILE = process.env.BLACKGLASS_MCP_AUDIT || path.join(os.tmpdir(), 'blackglass-mcp-audit.jsonl');
+const AUDIT_FILE = process.env.TERMINAL_FENSTER_MCP_AUDIT || path.join(defaultMcpStateDir(), 'audit.jsonl');
 function audit(entry) {
   try {
-    fs.appendFileSync(AUDIT_FILE, JSON.stringify({ ts: Date.now(), actor: 'agent', ...entry }) + '\n');
+    appendPrivate(AUDIT_FILE, JSON.stringify({ ts: Date.now(), actor: 'agent', ...entry }) + '\n');
   } catch { /* never let auditing break a tool call */ }
 }
 
@@ -80,10 +80,10 @@ function normalizeKey(key) {
 
 // --- server state -------------------------------------------------------------------
 const viewport = {
-  width: parseInt(process.env.BLACKGLASS_MCP_WIDTH || '', 10) || DEFAULT_WIDTH,
-  height: parseInt(process.env.BLACKGLASS_MCP_HEIGHT || '', 10) || DEFAULT_HEIGHT,
+  width: parseInt(process.env.TERMINAL_FENSTER_MCP_WIDTH || '', 10) || DEFAULT_WIDTH,
+  height: parseInt(process.env.TERMINAL_FENSTER_MCP_HEIGHT || '', 10) || DEFAULT_HEIGHT,
 };
-const useCdp = process.env.BLACKGLASS_MCP_CDP !== '0';
+const useCdp = process.env.TERMINAL_FENSTER_MCP_CDP !== '0';
 
 let session = null;
 let lastRefs = new Map();
@@ -94,7 +94,7 @@ async function ensureSession(initialUrl) {
   const s = new Session({ width: viewport.width, height: viewport.height, useCdp, log });
   await s.start(initialUrl || 'about:blank');
   session = s;
-  log(`engine ready: Chrome ${s.state.chrome} / Electron ${s.state.electron}${s.cdp ? ' + CDP' : ' (no CDP)'}`);
+  log(`engine ready: Chrome ${s.state.chrome} / Electron ${s.state.electron}${s.cdp ? ' + in-process CDP' : ' (no CDP)'}`);
   return s;
 }
 
@@ -173,7 +173,7 @@ const TOOLS = [
     name: 'browser_navigate',
     title: 'Navigate',
     description:
-      'Open a URL in the BlackGlass terminal browser, starting the browser if it is not running. ' +
+      'Open a URL in the Terminal-Fenster terminal browser, starting the browser if it is not running. ' +
       'Waits for the page to finish loading. Follow this with browser_snapshot to see the page.',
     inputSchema: {
       type: 'object',
@@ -293,7 +293,7 @@ const TOOLS = [
     name: 'browser_screenshot',
     title: 'Screenshot',
     description:
-      'PNG of the exact frame the terminal is rendering. Use only when appearance matters (layout, ' +
+      'PNG reconstructed from the engine\'s exact damage-frame stream. Use only when appearance matters (layout, ' +
       'charts, images, "did the animation run"); browser_snapshot is far cheaper for everything else.',
     inputSchema: {
       type: 'object',
@@ -322,7 +322,7 @@ const TOOLS = [
   {
     name: 'browser_resize',
     title: 'Resize viewport',
-    description: 'Resize the browser viewport. Match this to the terminal geometry when a human is watching.',
+    description: 'Resize the isolated browser viewport.',
     inputSchema: {
       type: 'object',
       properties: { width: { type: 'integer' }, height: { type: 'integer' } },
@@ -365,12 +365,12 @@ function text(...parts) {
 
 const HANDLERS = {
   async browser_navigate({ url }) {
-    if (typeof url !== 'string' || !url) throw new Error('url is required');
+    url = validateAgentNavigation(url);
     const fresh = !session || session._closed;
     const s = await ensureSession(fresh ? url : undefined);
     if (!fresh) await s.navigate(url);
     else await s.waitForLoad();
-    audit({ method: 'browser_navigate', params: { url }, epoch: s.navEpoch });
+    audit({ method: 'browser_navigate', params: { url: redactUrl(url) }, epoch: s.navEpoch });
     lastRefs = new Map();
     await s.syncState();
     return text(
@@ -467,14 +467,14 @@ const HANDLERS = {
     // inserts characters from char events, not keyDown.
     if (keyCode.length === 1 && !ctrl && !alt && !meta) cmd.text = keyCode;
     s.send(cmd);
-    audit({ method: 'browser_press_key', params: { key: keyCode, mods }, epoch: s.navEpoch });
+    audit({ method: 'browser_press_key', params: { key: classifyKey(keyCode), mods }, epoch: s.navEpoch });
     await sleep(200);
     await s.waitForLoad(5000);
     await s.syncState();
     return text(`Pressed ${keyCode}.`, statusLine(s));
   },
 
-  async browser_scroll({ direction = 'down', amount = 400 }) {
+  async browser_scroll({ direction = 'down', amount = 120 }) {
     const s = requireSession();
     const x = Math.round(s.width / 2);
     const y = Math.round(s.height / 2);
@@ -535,9 +535,8 @@ const HANDLERS = {
     audit({ method: 'browser_screenshot', params: { w: out.width, h: out.height }, epoch: s.navEpoch });
     await s.syncState();
     const vp = s.viewportSize();
-    // The engine does not always emit a frame at the new size after a resize (see README,
-    // "Resize lag"). Surfacing the discrepancy is the difference between an agent knowing
-    // the picture is out of date and an agent confidently reasoning about stale pixels.
+    // Keep a defensive geometry check even though resize invalidation is tested end to end:
+    // surfacing a future regression beats letting an agent reason about stale pixels.
     const stale = f.width !== vp.width || f.height !== vp.height
       ? `\nWARNING: this frame is ${f.width}x${f.height} but the page viewport is now ${vp.width}x${vp.height} -- the image predates the last resize. Coordinates read from it will not match the page.`
       : '';
@@ -603,7 +602,7 @@ const HANDLERS = {
     const vp = s.viewportSize();
     const f = s.latestFrame;
     const lag = f && (f.width !== vp.width || f.height !== vp.height)
-      ? ' The engine has not yet emitted a frame at the new size, so browser_screenshot will return the previous geometry until the page repaints.'
+      ? ' The compositor has not yet emitted a frame at the new size; browser_screenshot will flag the stale geometry.'
       : '';
     return text(`Viewport is now ${vp.width}x${vp.height}.${lag}`, statusLine(s));
   },
@@ -640,7 +639,7 @@ const HANDLERS = {
       statusLine(s),
       `viewport: ${s.width}x${s.height}`,
       `engine: Electron ${s.state.electron} / Chrome ${s.state.chrome}`,
-      `page semantics (CDP): ${s.cdp ? 'available' : 'UNAVAILABLE' + (s.cdpError ? ' -- ' + s.cdpError : '')}`,
+      `page semantics (CDP): ${s.cdp ? 'available via private engine socket' : 'UNAVAILABLE' + (s.cdpError ? ' -- ' + s.cdpError : '')}`,
       `latest frame: ${s.latestFrame ? `#${s.latestFrame.seq} ${s.latestFrame.width}x${s.latestFrame.height}` : 'none yet'}`,
       `navigation epoch: ${s.navEpoch} (refs from earlier epochs are rejected)`,
       `audit log: ${AUDIT_FILE}`
@@ -649,7 +648,7 @@ const HANDLERS = {
 
   async browser_close() {
     if (!session || session._closed) return text('No browser session was running.');
-    session.close();
+    await session.close();
     session = null;
     lastRefs = new Map();
     audit({ method: 'browser_close' });
@@ -660,7 +659,7 @@ const HANDLERS = {
 // --- wiring -------------------------------------------------------------------------
 
 const INSTRUCTIONS = [
-  'BlackGlass drives a real Chromium (offscreen-rendered) that a human may be watching live in their terminal.',
+  'Terminal-Fenster drives a real Chromium in an isolated offscreen engine session.',
   '',
   'Workflow: browser_navigate -> browser_snapshot -> act on [ref=eN] handles -> re-snapshot.',
   'Read the page with browser_snapshot, not screenshots: it is ~100x cheaper and gives exact targets.',
@@ -669,7 +668,7 @@ const INSTRUCTIONS = [
 ].join('\n');
 
 const server = new StdioServer({
-  name: 'blackglass',
+  name: 'terminal-fenster',
   version: pkg.version,
   instructions: INSTRUCTIONS,
   log,
@@ -699,7 +698,7 @@ for (const sig of ['SIGINT', 'SIGTERM']) {
 process.on('exit', () => { if (session) try { session.close(); } catch { /* exiting */ } });
 
 if (require.main === module) {
-  log(`blackglass-mcp ${pkg.version} on node ${process.version} (pid ${process.pid})`);
+  log(`terminal-fenster-mcp ${pkg.version} on node ${process.version} (pid ${process.pid})`);
   server.start();
 }
 

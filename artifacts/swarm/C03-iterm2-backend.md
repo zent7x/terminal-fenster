@@ -5,7 +5,7 @@
 
 **Evidence classes.** `[SRC]` = read from iTerm2's own published source at `github.com/gnachman/iTerm2@master` (2026-07-31T11:59:22Z), which is authoritative for behaviour. `[BIN]` = extracted from the installed 3.6.9 binary with `strings(1)`, which is authoritative for *this* build. `[MEAS]` = measured on this machine. `[SPEC]` = iTerm2's published documentation. `[UNVERIFIED]` = could not confirm; do not build on it.
 
-**Licence note (Hard Rule 4).** iTerm2 is GPL-2.0 (`gh api repos/gnachman/iTerm2 --jq .license.spdx_id` → `GPL-2.0`). Everything below was read to establish *behaviour*, which is fact and not copyrightable. **No iTerm2 code is to be copied into BlackGlass.** The OSC 1337 wire format is separately published as documentation at `iterm2.com` and is safe to implement from.
+**Licence note (Hard Rule 4).** iTerm2 is GPL-2.0 (`gh api repos/gnachman/iTerm2 --jq .license.spdx_id` → `GPL-2.0`). Everything below was read to establish *behaviour*, which is fact and not copyrightable. **No iTerm2 code is to be copied into Terminal-Fenster.** The OSC 1337 wire format is separately published as documentation at `iterm2.com` and is safe to implement from.
 
 ---
 
@@ -179,7 +179,7 @@ OSC 1337 carries a container format, so there is no equivalent of kitty's `f=32`
 
 ### 5.1 Measured encode cost on this machine `[MEAS]`
 
-Harness: `/private/tmp/claude-501/-Users-adeebbashir/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/c03/enc_bench.py` and `enc_bench2.py`, Python 3.14.2, Pillow 11.3.0, median of 7. Frame size 2482×814 — the measured Ghostty viewport from the mission brief, and a fair stand-in for a full-screen terminal on this display.
+Harness: `/private/tmp/claude-501/-Users-builder/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/c03/enc_bench.py` and `enc_bench2.py`, Python 3.14.2, Pillow 11.3.0, median of 7. Frame size 2482×814 — the measured Ghostty viewport from the mission brief, and a fair stand-in for a full-screen terminal on this display.
 
 **Near-blank page** — the real captured `apps/engine/spike/out/example-com.png`, upscaled. This is the *optimistic* end and it flatters PNG badly:
 
@@ -247,11 +247,11 @@ So on iTerm2, our existing kitty backend gets: raw pixels with no encode, ~70-by
 
 The reasoning in one line: on the only terminal that speaks OSC 1337, a strictly better protocol is already available and already implemented, so the backend can never be selected; and if it were selected it could not hold 30 fps on real content.
 
-I own no core source, so per Hard Rule 1 the change is described rather than made. In `crates/bg-term/src/caps.rs`:
+I own no core source, so per Hard Rule 1 the change is described rather than made. In `crates/tf-term/src/caps.rs`:
 
 - `Capabilities::best_backend` (lines 56–66): drop the `Iterm2` arm so the ladder reads `Kitty → Unicode`. Drop the `Sixel` arm too, on A04 §3's finding that Sixel buys nothing on any of the three targets.
 - `Capabilities::iterm2_images` (line 37) and its heuristic assignment (line 191): keep the **field** as reporting-only for `doctor`, since knowing you are on iTerm2 is still useful, but stop letting it select a backend. The existing comment at lines 187–190 already says this capability is "largely moot"; this makes the code agree with the comment.
-- `Backend::Iterm2` in `crates/bg-term/src/lib.rs`: retain the variant only if `doctor` prints it; otherwise remove it so nobody implements against it later.
+- `Backend::Iterm2` in `crates/tf-term/src/lib.rs`: retain the variant only if `doctor` prints it; otherwise remove it so nobody implements against it later.
 
 **Fallback ladder, final form:**
 
@@ -262,7 +262,7 @@ I own no core source, so per Hard Rule 1 the change is described rather than mad
 | Apple Terminal 465 | Unicode half-block | `[EMPIRICAL]`, A04 |
 | Anything else | Kitty if the query answers, else Unicode | detection is a query, never a `$TERM` match |
 
-If a terminal is later found that speaks OSC 1337 but **not** kitty, the correct response is a **single-shot screenshot command** (`blackglass shot <url>` printing one frame and exiting), not a render loop. That is ~40 lines against §1's grammar and it is genuinely useful for CI and for pasting a page into a terminal session. It should never be wired into the frame path. Which terminals are actually in that OSC-1337-only population was not established `[UNVERIFIED]`.
+If a terminal is later found that speaks OSC 1337 but **not** kitty, the correct response is a **single-shot screenshot command** (`terminal-fenster shot <url>` printing one frame and exiting), not a render loop. That is ~40 lines against §1's grammar and it is genuinely useful for CI and for pasting a page into a terminal session. It should never be wired into the frame path. Which terminals are actually in that OSC-1337-only population was not established `[UNVERIFIED]`.
 
 ---
 
@@ -285,18 +285,18 @@ $ /usr/bin/sample 31009 1
 
 798 of 798 samples in `write(2)` on the tty. The process was killed and the automation cleaned up.
 
-Two honest readings. The narrow one: this measures the lock screen, not OSC 1337, and proves nothing about iTerm2's throughput. The broader one, which stands regardless: **the write path back-pressures hard, and BlackGlass must never issue a frame write from the same thread that drives the engine or handles input.** A blocked terminal must degrade to dropped frames, not to a hung browser. That is a scheduler requirement (B07's territory) and it holds for the kitty backend too.
+Two honest readings. The narrow one: this measures the lock screen, not OSC 1337, and proves nothing about iTerm2's throughput. The broader one, which stands regardless: **the write path back-pressures hard, and Terminal-Fenster must never issue a frame write from the same thread that drives the engine or handles input.** A blocked terminal must degrade to dropped frames, not to a hung browser. That is a scheduler requirement (B07's territory) and it holds for the kitty backend too.
 
 The probe is complete and correct as far as it goes, and is worth running on an unlocked machine — it would close A04's `ReportCellSize` gap and measure the §5.2 receive-side cost. It is at:
 
 ```
-/private/tmp/claude-501/-Users-adeebbashir/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/c03/c03_iterm_probe.py
+/private/tmp/claude-501/-Users-builder/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/c03/c03_iterm_probe.py
 ```
 
 Run it with the machine **unlocked and iTerm2 frontmost**:
 
 ```sh
-SP=/private/tmp/claude-501/-Users-adeebbashir/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/c03
+SP=/private/tmp/claude-501/-Users-builder/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/c03
 osascript -e 'tell application "iTerm"
   create window with default profile command "/bin/sh -c '"'"'/Library/Frameworks/Python.framework/Versions/3.14/bin/python3 '"$SP"'/c03_iterm_probe.py '"$SP"'/out.json'"'"'"
 end tell'
@@ -330,8 +330,8 @@ gh api repos/gnachman/iTerm2/contents/sources/VT100/VT100Terminal.m \
    -H "Accept: application/vnd.github.raw" | sed -n '3904,4005p'  # executeFileCommandWithValue
 
 # Encode-cost measurements
-python3 /private/tmp/claude-501/-Users-adeebbashir/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/c03/enc_bench.py
-python3 /private/tmp/claude-501/-Users-adeebbashir/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/c03/enc_bench2.py
+python3 /private/tmp/claude-501/-Users-builder/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/c03/enc_bench.py
+python3 /private/tmp/claude-501/-Users-builder/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/c03/enc_bench2.py
 ```
 
 **Primary sources**
@@ -341,4 +341,4 @@ python3 /private/tmp/claude-501/-Users-adeebbashir/a6555dd0-1471-4951-aa0d-5958b
 - iTerm2 source, GPL-2.0 — <https://github.com/gnachman/iTerm2>
 - WezTerm's `doNotMoveCursor` extension — <https://wezterm.org/imgcat.html>
 - kitty graphics protocol — <https://sw.kovidgoyal.net/kitty/graphics-protocol/>
-- Prior art in this repo: `/Users/adeebbashir/projects/blackglass/artifacts/swarm/A04-terminal-capability-matrix.md` §4, §5.3, §8
+- Prior art in this repo: `$REPO/artifacts/swarm/A04-terminal-capability-matrix.md` §4, §5.3, §8

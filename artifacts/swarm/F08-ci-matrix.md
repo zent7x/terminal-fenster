@@ -8,7 +8,7 @@ Scope: this document plus a prototype in a scratchpad. No repo source files were
 
 ## 0. Bottom line first
 
-BlackGlass looks like a project that cannot be tested in CI (a browser, in a terminal, drawing
+Terminal-Fenster looks like a project that cannot be tested in CI (a browser, in a terminal, drawing
 pixels). It mostly can. I measured the split:
 
 | Tier | What it covers | Needs a graphics terminal? | Needs Electron? | Runs on GH-hosted runners |
@@ -80,7 +80,7 @@ $ cargo test --workspace 2>&1 | grep -E "test result" | awk '{s+=$4} END {print 
 96
 ```
 
-Broken down: `bg-term` 70, `bg-proto` 12, `blackglass` (bin) 14, doc-tests 0. Whole suite runs
+Broken down: `tf-term` 70, `tf-proto` 12, `terminal-fenster` (bin) 14, doc-tests 0. Whole suite runs
 in **0.08 s** wall clock. The number presumably grew as other agents landed work. CI should
 never hard-code a test count, but the growth is worth knowing.
 
@@ -90,8 +90,8 @@ Two gates in the brief's implied "just turn CI on" plan would go red on day one:
 rustfmt wants to expand the deliberate one-line `let ... else`:
 
 ```
--    let Ok(path) = std::env::var("BLACKGLASS_LOG") else { return };
-+    let Ok(path) = std::env::var("BLACKGLASS_LOG") else {
+-    let Ok(path) = std::env::var("TERMINAL_FENSTER_LOG") else { return };
++    let Ok(path) = std::env::var("TERMINAL_FENSTER_LOG") else {
 +        return;
 +    };
 ```
@@ -117,11 +117,11 @@ I did not fix either, because `crates/`, `apps/cli/`, and root config are comman
 
 I checked what the tests actually touch. The tty-dependent surface is small and already isolated:
 
-- `crates/bg-term/src/caps.rs` tests exercise **pure parsers** (`parse_da1_has_sixel`,
+- `crates/tf-term/src/caps.rs` tests exercise **pure parsers** (`parse_da1_has_sixel`,
   `parse_two_param_t`, `parse_decrqm_supported`) against recorded byte strings. No fd involved.
-- `crates/bg-term/src/tty.rs:250` `acquire_rejects_non_tty` opens `/dev/null` and asserts
+- `crates/tf-term/src/tty.rs:250` `acquire_rejects_non_tty` opens `/dev/null` and asserts
   `TtyGuard::acquire` errors. That works anywhere.
-- Everything in `kitty.rs`, `unicode.rs`, `b64.rs`, `input.rs`, `bg-proto` is pure byte-in/byte-out.
+- Everything in `kitty.rs`, `unicode.rs`, `b64.rs`, `input.rs`, `tf-proto` is pure byte-in/byte-out.
 
 There are no `#[cfg(target_os)]` gates anywhere in the workspace, so the same tests compile and
 run on Linux and macOS. `libc` usage is confined to `tty.rs` (36 sites), `caps.rs` (3), and
@@ -183,7 +183,7 @@ Ghostty", and it is the only way to regression-test capability detection.
 `caps.rs` is asymmetric about I/O, and this single fact determines the whole design:
 
 ```rust
-// crates/bg-term/src/caps.rs:116-121
+// crates/tf-term/src/caps.rs:116-121
 fn query(fd: RawFd, seq: &[u8], deadline: Duration, done: impl Fn(&[u8]) -> bool) -> Vec<u8> {
     let mut out = io::stdout();          // <-- writes to stdout, hard-coded
     let _ = out.write_all(seq);
@@ -200,7 +200,7 @@ commander-owned core.
 Additionally `TtyGuard::acquire` hard-refuses anything that is not a tty:
 
 ```rust
-// crates/bg-term/src/tty.rs:85
+// crates/tf-term/src/tty.rs:85
 if unsafe { libc::isatty(fd) } != 1 { return Err(...) }
 ```
 
@@ -236,7 +236,7 @@ which is exactly how Apple Terminal behaves for 5 of the 6, and it forces the co
 
 ### 4.3 It works. Evidence.
 
-Running the real `target/debug/blackglass doctor` under the harness with the recorded Ghostty
+Running the real `target/debug/terminal-fenster doctor` under the harness with the recorded Ghostty
 1.3.1 transcript reproduces **every measured value from the brief, exactly**:
 
 ```
@@ -471,15 +471,15 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: build blackglass
-        run: cargo build --locked -p blackglass
+      - name: build terminal-fenster
+        run: cargo build --locked -p terminal-fenster
 
       # Replays recorded terminal transcripts on a kernel PTY. No graphics
       # terminal, no display, no GPU. Fixtures whose provenance is ASSUMED
       # warn instead of failing; see F08 report section 4.5.
       - name: replay recorded terminal transcripts
         env:
-          BLACKGLASS_BIN: target/debug/blackglass
+          TERMINAL_FENSTER_BIN: target/debug/terminal-fenster
         run: python3 tests/pty/replay.py 'tests/pty/fixtures/*.json'
 
   # --------------------------------------------------------------- tier 2
@@ -566,7 +566,7 @@ jobs:
 
 I own only this report, so the harness and fixtures are reproduced here rather than written into
 the tree. Validated working copies are in my scratchpad at
-`/private/tmp/claude-501/-Users-adeebbashir/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/`
+`/private/tmp/claude-501/-Users-builder/a6555dd0-1471-4951-aa0d-5958b606ca83/scratchpad/`
 (`replay.py`, `fx/*.json`) and can be copied verbatim.
 
 Proposed layout:
@@ -584,16 +584,16 @@ tests/pty/
 
 ```python
 #!/usr/bin/env python3
-"""Mock-PTY terminal-conformance harness for BlackGlass.
+"""Mock-PTY terminal-conformance harness for Terminal-Fenster.
 
-Runs the real `blackglass` binary on a kernel PTY and replays a recorded
+Runs the real `terminal-fenster` binary on a kernel PTY and replays a recorded
 terminal's query/response transcript from the master side. No graphics
 terminal, no GPU, no display, just termios and a pipe pair the kernel
 happens to call a tty. Runs identically on macOS and Linux.
 
 Usage:
     python3 tests/pty/replay.py 'tests/pty/fixtures/*.json'
-    python3 tests/pty/replay.py --binary target/release/blackglass FIXTURE...
+    python3 tests/pty/replay.py --binary target/release/terminal-fenster FIXTURE...
 """
 
 import argparse
@@ -609,7 +609,7 @@ import sys
 import termios
 import time
 
-DEFAULT_BINARY = "target/debug/blackglass"
+DEFAULT_BINARY = "target/debug/terminal-fenster"
 
 
 def unesc(s):
@@ -640,8 +640,8 @@ def run_case(binary, fx, timeout=15.0):
                   "TMUX", "STY", "SSH_CONNECTION", "SSH_TTY"):
             env.pop(k, None)
         env.update({k: v for k, v in fx.get("env", {}).items() if v != ""})
-        env.setdefault("BLACKGLASS_ENGINE", "/nonexistent")
-        env.pop("BLACKGLASS_BACKEND", None)
+        env.setdefault("TERMINAL_FENSTER_ENGINE", "/nonexistent")
+        env.pop("TERMINAL_FENSTER_BACKEND", None)
         try:
             os.execve(binary, [binary] + argv, env)
         finally:
@@ -722,7 +722,7 @@ def check(fx, wire, status, matched, total):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("fixtures", nargs="+")
-    ap.add_argument("--binary", default=os.environ.get("BLACKGLASS_BIN", DEFAULT_BINARY))
+    ap.add_argument("--binary", default=os.environ.get("TERMINAL_FENSTER_BIN", DEFAULT_BINARY))
     ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args()
 
@@ -838,12 +838,12 @@ if __name__ == "__main__":
 
 Advisory only. Encodes the `caps.rs` beliefs so they are at least regression-tested, without
 letting an unmeasured assumption gate a merge. Replace `provenance` with `MEASURED ...` the day
-someone runs `blackglass doctor` in a real iTerm2 and confirms these bytes.
+someone runs `terminal-fenster doctor` in a real iTerm2 and confirms these bytes.
 
 ```json
 {
   "terminal": "iTerm2 3.6.9",
-  "provenance": "ASSUMED, derived from source comments crates/bg-term/src/caps.rs:189,201. NOT measured: iTerm2 automation is TCC-blocked on the reference machine.",
+  "provenance": "ASSUMED, derived from source comments crates/tf-term/src/caps.rs:189,201. NOT measured: iTerm2 automation is TCC-blocked on the reference machine.",
   "env": {"TERM":"xterm-256color","TERM_PROGRAM":"iTerm.app","TERM_PROGRAM_VERSION":"3.6.9","COLORTERM":"truecolor"},
   "winsize": {"rows":40,"cols":160,"xpixel":1280,"ypixel":800},
   "argv": ["doctor"],
@@ -897,8 +897,8 @@ we still hand the shell back intact.
 
 ## 8. The manual gate CI cannot replace
 
-Before tagging a release, on a real machine with a real terminal, run `blackglass doctor` and
-`blackglass open https://example.com` in Ghostty, kitty, WezTerm, and Apple Terminal. Confirm
+Before tagging a release, on a real machine with a real terminal, run `terminal-fenster doctor` and
+`terminal-fenster open https://example.com` in Ghostty, kitty, WezTerm, and Apple Terminal. Confirm
 text is legible, the image lands in the right place, colors are right, the mouse hits what you
 aimed at, and `ctrl+q` leaves a clean shell. Then, for each terminal, capture the `raw replies`
 block from `doctor` and commit it as a MEASURED fixture. **That is the loop that makes tier 3
@@ -940,5 +940,5 @@ Per the ownership rule, described rather than done.
 - The iTerm2 fixture is ASSUMED, not measured, and is advisory by design. It also surfaces a real
   contradiction between the brief and `caps.rs:189` that someone should resolve.
 - Everything marked MEASURED was measured on this machine (macOS 26.1, Apple M4) on 2026-07-31
-  with `target/debug/blackglass` built from the current worktree, and each result above is
+  with `target/debug/terminal-fenster` built from the current worktree, and each result above is
   reproducible with the commands shown.

@@ -15,7 +15,7 @@ There are exactly **two** viable ways to put real web pixels in a terminal, and 
 | **A. Glyph-cell approximation** — Unicode block/quadrant glyphs + SGR color | ≤ 2 colors per cell; ~2×2 "pixels"/cell | **Universal** (any ANSI terminal, incl. Apple Terminal, SSH, tmux) | Carbonyl, Browsh |
 | **B. Real raster protocol** — Kitty graphics / Sixel / iTerm2 OSC 1337 | True per-pixel | **Fragmented** — see §5 | terminal-browser, casty, awrit, brow6el, w3m |
 
-The single most consequential environmental fact for BlackGlass: **Ghostty supports the Kitty graphics protocol and explicitly refuses Sixel; iTerm2 supports Sixel and OSC 1337 but not Kitty graphics; Apple Terminal supports neither.** No single raster protocol covers the three target terminals. Details and citations in §5.
+The single most consequential environmental fact for Terminal-Fenster: **Ghostty supports the Kitty graphics protocol and explicitly refuses Sixel; iTerm2 supports Sixel and OSC 1337 but not Kitty graphics; Apple Terminal supports neither.** No single raster protocol covers the three target terminals. Details and citations in §5.
 
 ---
 
@@ -35,7 +35,7 @@ The single most consequential environmental fact for BlackGlass: **Ghostty suppo
 | **Nyxt** | **Electron** (`cl-electron`); GTK/WebKit renderers still present | **N/A — GUI window** | Emacs/vi/CUA, keyboard-driven | **BSD-3-Clause** | **4.0.0, 2026-01-18** | Flathub, distro pkgs | Linux, macOS, FreeBSD | ✅ Active |
 | **Vieb** | **Electron 43.1.1** | **N/A — GUI window** | Vim bindings | **GPL-3.0-or-later** | **12.10.0, 2026-07-19** | npm / releases | Linux, macOS, Windows | ✅ Very active |
 
-> **Nyxt and Vieb are not terminal browsers.** They are keyboard-first GUI browsers. They are in the matrix because they define the *interaction* bar (modal editing, hinting, command palette) that BlackGlass will be judged against, not the *rendering* bar.
+> **Nyxt and Vieb are not terminal browsers.** They are keyboard-first GUI browsers. They are in the matrix because they define the *interaction* bar (modal editing, hinting, command palette) that Terminal-Fenster will be judged against, not the *rendering* bar.
 
 ---
 
@@ -47,7 +47,7 @@ Repo: `github.com/fathyb/carbonyl`. Author: Fathy Boundjadj. 19,309★.
 
 `license.md` is verbatim **BSD-3-Clause**, `Copyright © 2023, Fathy Boundjadj`. `package.json` declares `"license": "BSD-3-Clause"`. GitHub API returns `spdx_id: "BSD-3-Clause"`.
 
-**Caveat that matters:** the BSD-3 grant covers only *Carbonyl's own* Rust + C++ glue (`src/`) and the patch files. The shipped **runtime is a patched Chromium 111**, which carries Chromium's own BSD-3-Clause plus its enormous third-party license set — and `chromium/src/browser/args.gn` sets `ffmpeg_branding = "Chrome"` and `proprietary_codecs = true`, which pulls in **H.264/AAC patent-encumbered decoders**. Redistributing a Carbonyl-derived binary is a codec-licensing question, not just a copyright one. BSD-3 also carries a **no-endorsement clause** — we may not use "Carbonyl" or the author's name to promote BlackGlass.
+**Caveat that matters:** the BSD-3 grant covers only *Carbonyl's own* Rust + C++ glue (`src/`) and the patch files. The shipped **runtime is a patched Chromium 111**, which carries Chromium's own BSD-3-Clause plus its enormous third-party license set — and `chromium/src/browser/args.gn` sets `ffmpeg_branding = "Chrome"` and `proprietary_codecs = true`, which pulls in **H.264/AAC patent-encumbered decoders**. Redistributing a Carbonyl-derived binary is a codec-licensing question, not just a copyright one. BSD-3 also carries a **no-endorsement clause** — we may not use "Carbonyl" or the author's name to promote Terminal-Fenster.
 
 **Verdict:** Carbonyl's own source is permissively licensed and *legally* copyable with attribution. We should still not copy it — see §6.
 
@@ -192,7 +192,7 @@ The repository has **no license file and GitHub reports `license: null`**. Under
 
 ## 5. Protocol reality check for our three target terminals
 
-This is the constraint that should drive BlackGlass's rendering architecture.
+This is the constraint that should drive Terminal-Fenster's rendering architecture.
 
 | Terminal | Kitty graphics | Sixel | iTerm2 OSC 1337 | Kitty keyboard |
 |---|---|---|---|---|
@@ -204,7 +204,7 @@ This is the constraint that should drive BlackGlass's rendering architecture.
 | foot | ✅ | ✅ (since 1.2.0) | ❌ | ✅ |
 | xterm | ❌ | ✅ (default since patch #359) | ❌ | ❌ |
 
-**Consequence:** BlackGlass needs **three** backends to cover its own stated test matrix — Kitty graphics (Ghostty), Sixel *or* OSC 1337 (iTerm2), and a glyph-cell fallback (Apple Terminal, plain SSH, tmux). There is no shortcut.
+**Consequence:** Terminal-Fenster needs **three** backends to cover its own stated test matrix — Kitty graphics (Ghostty), Sixel *or* OSC 1337 (iTerm2), and a glyph-cell fallback (Apple Terminal, plain SSH, tmux). There is no shortcut.
 
 ### 5.1 Kitty graphics protocol — exact wire format
 
@@ -251,7 +251,7 @@ ESC ] 1337 ; File = [key=value;…] : <base64 file bytes> BEL
 
 **4. Use Kitty's `t=s` shared-memory transmission, not `t=d` base64.** Base64 inflates every frame by 33% and forces a full memcpy through the PTY. `t=s` hands the terminal a POSIX shm name. This is the single highest-leverage optimization available and no competitor in this matrix is documented as using it.
 
-**5. Carbonyl's real speed trick was resolution, not encoding — but its cost was fidelity.** The `1.0/7.0` forced device scale factor plus forced-monospace `StyleResolver` patching bought ~49× rasterization savings, and that is why it hits 60 FPS. But it means Carbonyl **does not render the web faithfully** — layout differs from a real browser. BlackGlass's differentiator should be the opposite bet: real pixels at real DPI via a raster protocol, with `zoom`/DSF as a *user-facing* control rather than a hidden 1/7 hack.
+**5. Carbonyl's real speed trick was resolution, not encoding — but its cost was fidelity.** The `1.0/7.0` forced device scale factor plus forced-monospace `StyleResolver` patching bought ~49× rasterization savings, and that is why it hits 60 FPS. But it means Carbonyl **does not render the web faithfully** — layout differs from a real browser. Terminal-Fenster's differentiator should be the opposite bet: real pixels at real DPI via a raster protocol, with `zoom`/DSF as a *user-facing* control rather than a hidden 1/7 hack.
 
 **6. Steal terminal-browser's OS-level input side-channel.** Terminal mouse protocols cannot express trackpad momentum or pixel-delta scroll — `\x1b[?1003h`/`?1006` give discrete button-4/5 clicks only. A non-intrusive native helper (they use Swift on macOS; a `CGEventTap` at `.listenOnly`) reading scroll phase and delta is the difference between "terminal browser" and "browser that happens to be in a terminal." Combine with `CSI > 5 u` (kitty keyboard, all flags) for **key-release events** — otherwise no web game, drag gesture, or modifier-held interaction works.
 
@@ -265,7 +265,7 @@ ESC ] 1337 ; File = [key=value;…] : <base64 file bytes> BEL
 
 **11. Ship a first-class agent CLI from day one.** terminal-browser exposes `terminal-browser action`; brow6el exposes a user-script injection system. A browser living in a terminal is where coding agents already are — this is a differentiator competitors are only just discovering, and it costs little to design in early.
 
-**12. Learn from awrit's obituary.** Archived 2026-04-25 with the maintainer citing "the rising number of security issues." A CEF/Chromium embedder that falls behind becomes a liability, not just stale software. **Whatever embedding we choose must have an automated upgrade path in CI from week one**, or BlackGlass joins Carbonyl and awrit.
+**12. Learn from awrit's obituary.** Archived 2026-04-25 with the maintainer citing "the rising number of security issues." A CEF/Chromium embedder that falls behind becomes a liability, not just stale software. **Whatever embedding we choose must have an automated upgrade path in CI from week one**, or Terminal-Fenster joins Carbonyl and awrit.
 
 ---
 

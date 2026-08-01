@@ -34,7 +34,7 @@
 
 | Property | Value |
 |---|---|
-| Local install | none (`ssh host blackglass`) |
+| Local install | none (`ssh host terminal-fenster`) |
 | Codec ceiling | zlib-deflate over raw RGB, or PNG. **No lossy.** |
 | Base64 penalty | +33.3% on every byte, unavoidable |
 | Measured wire/frame (1440×900) | 226–388 KB |
@@ -49,17 +49,17 @@
 ```
 [remote] chromium → compositor → WebP/AV1 encoder → stdout (binary, NO pty)
                                                        │  ssh -T   (raw pipe)
-[local]  blackglass-render → decode → kitty escapes → local pty (~100 MB/s) → terminal
+[local]  terminal-fenster-render → decode → kitty escapes → local pty (~100 MB/s) → terminal
 ```
 
 Two sub-variants:
 
 - **(b) side channel** — `ssh -L`/`direct-tcpip` port forward, or a second SSH session. Extra auth, extra connection, firewall exposure. Avoid.
-- **(b′) same connection, no pty** — `ssh -T host blackglass-engine`. `-T` disables pty allocation, so stdio is a **clean 8-bit-transparent pipe**: no line discipline, no `ONLCR`, no `OPOST`, no base64 required. This is strictly better than (b) and nearly as simple as (a).
+- **(b′) same connection, no pty** — `ssh -T host terminal-fenster-engine`. `-T` disables pty allocation, so stdio is a **clean 8-bit-transparent pipe**: no line discipline, no `ONLCR`, no `OPOST`, no base64 required. This is strictly better than (b) and nearly as simple as (a).
 
 | Property | Value |
 |---|---|
-| Local install | one binary (`blackglass-render`) |
+| Local install | one binary (`terminal-fenster-render`) |
 | Codec ceiling | **anything** — WebP, AVIF, H.264, custom |
 | Base64 penalty | **none on the WAN hop** (base64 only on the local pty, which runs at ~100 MB/s) |
 | Measured wire/frame (1440×900, WebP q60) | **60–108 KB** |
