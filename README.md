@@ -13,6 +13,9 @@ Website: [terminal-fenster.com](https://terminal-fenster.com)
 ## Open source
 
 Licensed under [MIT](LICENSE). Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+Source: [github.com/zent7x/terminal-fenster](https://github.com/zent7x/terminal-fenster) ·
+[commit history](https://github.com/zent7x/terminal-fenster/commits/main)
+
 This is experimental software: see [Known gaps](#known-gaps) and [RELEASE.md](RELEASE.md) before
 treating it as production-ready.
 
