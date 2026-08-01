@@ -135,11 +135,25 @@ never reuse the user's logged-in session.
     (`document.hasFocus()===false`), so Chromium's blink timer never fired. The click and
     text-mutation paths are proven; the 1×20px caret rect should be reconfirmed by running the
     probe interactively in a focused Ghostty window.
-- Related: the engine currently **writes the dirty rect into the frame header and then sends
-  the full bitmap anyway** (`apps/engine/src/main.js`). Damage is now proven but **not yet
-  consumed**, so every frame still costs full viewport bytes. Cropping `onPaint` to the (now
-  trusted) device-pixel dirty rect is the single largest remaining performance win and the
-  gate on the SSH story; it is unblocked by this spike. C08 (damage encoder) owns it.
+- Damage is now **consumed on the capture/compositing side** (C08, first half). `onPaint`
+  crops to the device-pixel dirty rect and the engine sends only those pixels
+  (`apps/engine/src/main.js`); the core composites each rect into a **persistent RGB
+  framebuffer** (`Renderer` in `apps/cli/src/main.rs`, `kitty::blit_bgra_into_rgb`). A full
+  repaint is just the special case where the dirty rect covers the viewport. Verified by unit
+  tests (compositing, out-of-bounds rejection, resize reallocation) and by the e2e
+  input-injection test, whose decoder now reconstructs the same framebuffer from partial
+  frames — all 9 pixel checks pass. Backpressure coalescing was made damage-safe: because the
+  engine's bitmap is always the whole current viewport, a frame that would overwrite a
+  pending one is promoted to a full update, so no partial damage is ever silently dropped.
+  - **Still full-frame: the terminal transmission.** `present` re-encodes the whole
+    framebuffer into a Kitty image every frame, so the bytes that cross the terminal — and,
+    in the SSH topology, the network — are not yet reduced. That is the second half of C08
+    and the actual SSH win (A10 §0.1: `write()` of a full frame is 10.8 ms p50 / 20.1 ms
+    p99). The dirty rect is now threaded to the renderer (`Renderer::last_dirty`) ready for
+    it. It is deliberately **not** implemented blind: transmitting only the changed region
+    means a scratch-image Kitty placement whose on-screen correctness cannot be verified
+    without a graphics terminal, and this repo does not ship unverified rendering. Design and
+    the interactive verification plan are in `artifacts/swarm/C08-damage-encoder.md`.
 - Shared-texture mode was re-measured by B05 across 10 paired runs and was **0.52 ms
   *slower*** (t=0.41) — the p99 advantage recorded in the table above came from a single
   sample and does not reproduce. B05 additionally found IOSurface pads rows to a 64-byte

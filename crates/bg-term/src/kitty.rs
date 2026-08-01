@@ -67,6 +67,43 @@ pub fn bgra_rect_to_rgb(bgra: &[u8], img_w: u32, rect: Rect, out: &mut Vec<u8>) 
     }
 }
 
+/// Composite a dirty-rectangle BGRA update into a persistent packed-RGB framebuffer.
+///
+/// This is the *consume* side of damage tracking (proven possible by the B02 spike). The
+/// engine now sends only the changed region — `src` is `w*h*4` BGRA bytes — and the terminal
+/// core keeps the whole page as RGB in `dst` (`frame_w * frame_h * 3`), rewriting only the
+/// pixels that changed. An idle page therefore costs nothing and a caret costs ~one glyph,
+/// where before every frame rewrote the entire viewport.
+///
+/// The rectangle must lie within the frame and `src`/`dst` must be correctly sized; callers
+/// validate that with `FrameHeader::dirty_within_frame` and the dirty/RGB length helpers in
+/// `bg-proto` before calling. Given those invariants this indexes only in bounds.
+pub fn blit_bgra_into_rgb(
+    src: &[u8],
+    dst: &mut [u8],
+    frame_w: u32,
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+) {
+    let fw = frame_w as usize;
+    let (x, y, w, h) = (x as usize, y as usize, w as usize, h as usize);
+    let src_stride = w * 4;
+    let dst_stride = fw * 3;
+    for row in 0..h {
+        let s0 = row * src_stride;
+        let d0 = (y + row) * dst_stride + x * 3;
+        let src_row = &src[s0..s0 + src_stride];
+        let dst_row = &mut dst[d0..d0 + w * 3];
+        for (px, o) in src_row.chunks_exact(4).zip(dst_row.chunks_exact_mut(3)) {
+            o[0] = px[2]; // R
+            o[1] = px[1]; // G
+            o[2] = px[0]; // B
+        }
+    }
+}
+
 fn deflate(data: &[u8], level: u32) -> std::io::Result<Vec<u8>> {
     let mut enc = ZlibEncoder::new(Vec::with_capacity(data.len() / 4), Compression::new(level));
     enc.write_all(data)?;
@@ -282,6 +319,48 @@ mod tests {
         bgra_rect_to_rgb(&bgra, 3, Rect::new(1, 0, 2, 1), &mut rgb);
         // B channel lands in RGB position 2.
         assert_eq!(rgb, vec![0, 0, 1, 0, 0, 2]);
+    }
+
+    #[test]
+    fn blit_writes_only_the_dirty_rect_and_swaps_channels() {
+        // 4x4 RGB framebuffer, pre-filled mid-grey so we can see exactly what changes.
+        let mut fb = vec![128u8; 4 * 4 * 3];
+        // A 2x2 BGRA patch of pure red, to land at (1,1).
+        let mut patch = Vec::new();
+        for _ in 0..4 {
+            patch.extend_from_slice(&[0u8, 0, 255, 255]); // B,G,R,A -> red
+        }
+        blit_bgra_into_rgb(&patch, &mut fb, 4, 1, 1, 2, 2);
+
+        let px = |x: usize, y: usize| {
+            let i = (y * 4 + x) * 3;
+            (fb[i], fb[i + 1], fb[i + 2])
+        };
+        // Inside the rect: red.
+        assert_eq!(px(1, 1), (255, 0, 0));
+        assert_eq!(px(2, 2), (255, 0, 0));
+        // Outside the rect: untouched grey. Corners and the row/col just outside the patch.
+        assert_eq!(px(0, 0), (128, 128, 128));
+        assert_eq!(px(3, 3), (128, 128, 128));
+        assert_eq!(px(0, 1), (128, 128, 128));
+        assert_eq!(px(3, 1), (128, 128, 128));
+    }
+
+    #[test]
+    fn blit_full_frame_equals_bgra_to_rgb() {
+        // The full-frame case (dirty == whole frame) must produce exactly what the
+        // whole-buffer converter would, so switching every frame to the blit path is a
+        // no-op for full repaints.
+        let mut bgra = Vec::new();
+        for i in 0..(3 * 2) as u8 {
+            bgra.extend_from_slice(&[i, i.wrapping_add(10), i.wrapping_add(20), 255]);
+        }
+        let mut expected = Vec::new();
+        bgra_to_rgb(&bgra, &mut expected);
+
+        let mut fb = vec![0u8; 3 * 2 * 3];
+        blit_bgra_into_rgb(&bgra, &mut fb, 3, 0, 0, 3, 2);
+        assert_eq!(fb, expected);
     }
 
     #[test]

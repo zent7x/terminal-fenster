@@ -100,7 +100,7 @@ ADR-0001 was amended rather than silently edited.
 | C05 | Detector hardening | delivered | Race conditions noted; partially addressed |
 | C06 | Compositor design | delivered | Not implemented |
 | C07 | Scaling and colour | delivered | Not implemented — **open risk**: at 2482 px wide with a 17 px cell, default scale makes text tiny |
-| C08 | Damage encoder | delivered | Not implemented — the largest perf gap |
+| C08 | Damage encoder | consume-side implemented 2026-08-01 | Engine crops onPaint + core composites partial rects into a persistent framebuffer (tested + e2e 9/9). Terminal-transmission tile mosaic still full-frame — designed, needs interactive Ghostty verification |
 | C09 | SSH adaptive transport | delivered | Not implemented |
 | C10 | Rendering profiler | delivered | Partially present via `BLACKGLASS_LOG` |
 

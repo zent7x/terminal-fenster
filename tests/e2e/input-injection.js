@@ -106,15 +106,41 @@ class Harness {
         const payload = buf.subarray(5, 5 + len);
         buf = buf.subarray(5 + len);
         if (type === T_FRAME) {
-          const width = payload.readUInt32BE(4);
-          const height = payload.readUInt32BE(8);
-          this.latest = { width, height, pixels: payload.subarray(32) };
-          this.frames.push(this.latest);
+          this._compositeFrame(payload);
         } else if (type === T_EVENT) {
           this.events.push(JSON.parse(payload.toString('utf8')));
         }
       }
     });
+  }
+
+  // The engine now sends only the changed rectangle (damage tracking), so this harness must
+  // do exactly what the Rust core does: keep a persistent full-frame BGRA buffer and blit
+  // each dirty rect into it. Asserting on `this.fb` then still means "the composited page",
+  // which is what every pixel check below intends.
+  _compositeFrame(payload) {
+    const width = payload.readUInt32BE(4);
+    const height = payload.readUInt32BE(8);
+    const dx = payload.readUInt32BE(12);
+    const dy = payload.readUInt32BE(16);
+    const dw = payload.readUInt32BE(20);
+    const dh = payload.readUInt32BE(24);
+    const pixels = payload.subarray(32);
+
+    if (!this.fb || this.width !== width || this.height !== height) {
+      this.fb = Buffer.alloc(width * height * 4);
+      this.width = width;
+      this.height = height;
+    }
+    const srcStride = dw * 4;
+    const dstStride = width * 4;
+    for (let row = 0; row < dh; row++) {
+      const src = row * srcStride;
+      const dst = (dy + row) * dstStride + dx * 4;
+      pixels.copy(this.fb, dst, src, src + srcStride);
+    }
+    this.latest = { width, height, pixels: this.fb };
+    this.frames.push({ dx, dy, dw, dh });
   }
 
   send(obj) {

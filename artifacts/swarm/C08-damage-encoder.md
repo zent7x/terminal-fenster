@@ -11,6 +11,39 @@ written as an instruction for the commander, not applied. Baseline left untouche
 
 ---
 
+## Implementation status (updated 2026-08-01)
+
+C08 splits cleanly into two halves. **The first half is now implemented and verified; the
+second — the terminal-transmission tile mosaic designed below — is not, deliberately.**
+
+**Done — damage is consumed on the capture/compositing side.** Following the B02 spike
+(which confirmed Chromium reports device-pixel partial dirty rects), the engine crops
+`onPaint` to the dirty rect and sends only those pixels; the core composites each rect into a
+persistent RGB framebuffer (`kitty::blit_bgra_into_rgb`, `Renderer` in `apps/cli/src/main.rs`).
+Backpressure coalescing was made damage-safe by promoting a would-be-dropped frame to a full
+update (the engine bitmap is always the whole viewport). Verified by unit tests (composite,
+out-of-bounds rejection, resize realloc, full-frame == whole-buffer conversion) and by the e2e
+input-injection test, whose wire decoder now reconstructs the same framebuffer from partial
+frames — 9/9 pixel checks pass. This removes the full-bitmap copy, socket write, and BGRA→RGB
+conversion from every frame's capture path.
+
+**Not done — the terminal transmission is still a full-frame re-encode.** `present` re-encodes
+the entire framebuffer to one Kitty image per frame, so the bytes crossing the terminal (and,
+over SSH, the network) are not yet reduced. That is the actual A10 §0.1 `write()` win and it is
+the tile-mosaic design in §5 below. It is **not shipped blind** because, as §3 documents,
+Ghostty rejects the obvious in-place partial-update actions (`a=f`/`a=a`/`a=c`) and
+re-transmitting an image id deletes its placements — so the mosaic's on-screen correctness
+genuinely cannot be validated without eyes on a graphics terminal, and this repo does not ship
+unverified rendering. `Renderer::last_dirty` already carries the rect the mosaic needs.
+
+**To finish it, interactively (Ghostty, not under the agent sandbox):** implement the
+per-position tile-image mosaic from §5, then confirm with `node benchmarks/bench.mjs --page
+repaint` that `last_wire_bytes` drops in proportion to damage on an interaction-heavy page while
+the screen stays correct (no stale tiles, no tearing) on a static one — the same measure-it-then-
+believe-it bar B02 held.
+
+---
+
 ## 0. TL;DR
 
 1. **Chromium's own damage rect is the design.** I captured the real `paint` dirty rects from the

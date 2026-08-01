@@ -73,6 +73,51 @@ impl FrameHeader {
     pub fn expected_payload(&self) -> usize {
         self.checked_payload().unwrap_or(usize::MAX)
     }
+
+    /// Byte length of the pixel payload when the engine sends only the dirty rectangle
+    /// (damage tracking, proven by the B02 spike). `dirty_w * dirty_h * 4`, overflow-checked.
+    ///
+    /// A full-frame update is simply the case where the dirty rect equals the whole frame,
+    /// so this subsumes [`checked_payload`](Self::checked_payload) — the renderer only ever
+    /// needs the dirty length once it composites into a persistent framebuffer.
+    pub fn checked_dirty_payload(&self) -> Option<usize> {
+        (self.dirty_w as usize)
+            .checked_mul(self.dirty_h as usize)?
+            .checked_mul(4)
+    }
+
+    /// Saturating wrapper, so `payload.len() < dirty_payload()` rejects impossible geometry.
+    pub fn dirty_payload(&self) -> usize {
+        self.checked_dirty_payload().unwrap_or(usize::MAX)
+    }
+
+    /// Byte length of the full-frame packed-RGB framebuffer this header describes:
+    /// `width * height * 3`, overflow-checked. `None` for geometry that cannot exist.
+    ///
+    /// This matters specifically because, with partial frames, the payload length no longer
+    /// bounds `width * height`: a bogus header could claim a 4-gigapixel frame behind a
+    /// 16-byte dirty rect. Callers size (and cap) their framebuffer allocation off this.
+    pub fn checked_rgb_len(&self) -> Option<usize> {
+        (self.width as usize)
+            .checked_mul(self.height as usize)?
+            .checked_mul(3)
+    }
+
+    /// True iff the dirty rectangle lies wholly inside the declared frame and the pixel
+    /// format is one we understand (0 = BGRA8888). This is the guard that makes a blit into
+    /// the framebuffer safe: without it a malformed `(x,y,w,h)` would index out of bounds.
+    pub fn dirty_within_frame(&self) -> bool {
+        if self.format != 0 {
+            return false;
+        }
+        match (
+            self.dirty_x.checked_add(self.dirty_w),
+            self.dirty_y.checked_add(self.dirty_h),
+        ) {
+            (Some(x1), Some(y1)) => x1 <= self.width && y1 <= self.height,
+            _ => false,
+        }
+    }
 }
 
 /// Incremental reader for length-prefixed messages.
@@ -257,6 +302,47 @@ mod tests {
     #[test]
     fn frame_header_rejects_short_input() {
         assert!(FrameHeader::parse(&[0u8; 31]).is_none());
+    }
+
+    fn header(vals: [u32; 8]) -> FrameHeader {
+        let mut b = Vec::new();
+        for v in vals {
+            b.extend_from_slice(&v.to_be_bytes());
+        }
+        FrameHeader::parse(&b).unwrap()
+    }
+
+    #[test]
+    fn dirty_payload_is_the_rect_not_the_frame() {
+        // A 40x40 damage rect on a 1440x900 frame: the payload is the rect, not the frame.
+        let h = header([1, 1440, 900, 600, 400, 40, 40, 0]);
+        assert_eq!(h.checked_dirty_payload(), Some(40 * 40 * 4));
+        assert_eq!(h.checked_rgb_len(), Some(1440 * 900 * 3));
+        // A full-frame update is just dirty == whole frame, and dirty_payload subsumes it.
+        let full = header([1, 4, 4, 0, 0, 4, 4, 0]);
+        assert_eq!(full.checked_dirty_payload(), full.checked_payload());
+    }
+
+    #[test]
+    fn dirty_within_frame_accepts_a_real_rect_and_rejects_overflow() {
+        assert!(header([0, 1440, 900, 600, 400, 40, 40, 0]).dirty_within_frame());
+        assert!(header([0, 100, 100, 0, 0, 100, 100, 0]).dirty_within_frame()); // full-frame
+        // Rect spilling past the right edge must be rejected before it indexes a blit OOB.
+        assert!(!header([0, 100, 100, 80, 0, 40, 10, 0]).dirty_within_frame());
+        // Rect spilling past the bottom edge.
+        assert!(!header([0, 100, 100, 0, 95, 10, 10, 0]).dirty_within_frame());
+        // x + w that overflows u32 must not wrap to something that looks in-bounds.
+        assert!(!header([0, 100, 100, u32::MAX, 0, 10, 10, 0]).dirty_within_frame());
+        // Unknown pixel format is refused.
+        assert!(!header([0, 100, 100, 0, 0, 100, 100, 7]).dirty_within_frame());
+    }
+
+    #[test]
+    fn absurd_frame_dims_do_not_overflow_rgb_len() {
+        // Partial frames mean a tiny payload can carry a giant claimed frame size; the RGB
+        // length must saturate to None rather than wrap to a small allocation.
+        let h = header([0, u32::MAX, u32::MAX, 0, 0, 1, 1, 0]);
+        assert_eq!(h.checked_rgb_len(), None);
     }
 
     #[test]

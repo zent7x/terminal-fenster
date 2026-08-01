@@ -15,7 +15,7 @@
 //! network listener is ever opened.
 
 use bg_proto as proto;
-use bg_term::{caps, input, kitty, tty, unicode, Backend};
+use bg_term::{caps, input, kitty, tty, unicode, Backend, Rect};
 use std::io::{Read, Write};
 use std::os::fd::AsRawFd;
 use std::os::unix::net::{UnixListener, UnixStream};
@@ -866,9 +866,15 @@ struct Renderer {
     backend: Backend,
     page_w: u32,
     page_h: u32,
+    /// Persistent full-frame packed-RGB image of the page. Damage updates composite into it
+    /// (see `on_frame`); it is what `present` encodes for the terminal.
     rgb: Vec<u8>,
     out: Vec<u8>,
     dirty: bool,
+    /// The rectangle the most recent frame changed, in device pixels. Retained so the
+    /// terminal-transmission side can eventually send only this region (the SSH win); today
+    /// it is recorded for observability while the whole framebuffer is still re-encoded.
+    last_dirty: Rect,
     frame_times: Vec<Instant>,
 }
 
@@ -881,22 +887,58 @@ impl Renderer {
             rgb: Vec::new(),
             out: Vec::new(),
             dirty: false,
+            last_dirty: Rect::new(0, 0, 0, 0),
             frame_times: Vec::new(),
         }
     }
 
+    /// Consume one frame. The engine now sends only the dirty rectangle's pixels (damage
+    /// tracking, proven by the B02 spike), so this composites that rectangle into the
+    /// persistent `rgb` framebuffer rather than replacing the whole thing. A full repaint is
+    /// simply a frame whose dirty rect covers the entire viewport.
     fn on_frame(&mut self, payload: &[u8], status: &mut Status) {
-        let Some(h) = proto::FrameHeader::parse(payload) else { return };
         if payload.len() < proto::FRAME_HEADER_LEN {
             return;
         }
-        let pixels = &payload[proto::FRAME_HEADER_LEN..];
-        if pixels.len() < h.expected_payload() {
-            return; // truncated frame; drop rather than render garbage
+        let Some(h) = proto::FrameHeader::parse(payload) else { return };
+        // The dirty rect must fit inside the declared frame (and be a format we know), or the
+        // blit would index out of bounds. Reject rather than render garbage.
+        if !h.dirty_within_frame() {
+            return;
         }
-        kitty::bgra_to_rgb(&pixels[..h.expected_payload()], &mut self.rgb);
+        // With partial frames the payload no longer bounds width*height, so a bogus header
+        // could otherwise force a multi-gigabyte allocation. Size the framebuffer off the
+        // header, but only within the same 64 MiB ceiling the protocol reader enforces.
+        let Some(fb_len) = h.checked_rgb_len() else { return };
+        if fb_len == 0 || fb_len > proto::MAX_MESSAGE_LEN {
+            return;
+        }
+        let Some(dirty_bytes) = h.checked_dirty_payload() else { return };
+        let pixels = &payload[proto::FRAME_HEADER_LEN..];
+        if pixels.len() < dirty_bytes {
+            return; // truncated dirty region; drop rather than composite garbage
+        }
+
+        // Reallocate on the first frame or a geometry change. A resize always forces a
+        // full-frame invalidate (B02: `invalidate-forces-full`), so the very next frame
+        // repaints the whole buffer — a partial update never lands on a stale-sized surface.
+        if self.rgb.len() != fb_len {
+            self.rgb = vec![0u8; fb_len];
+        }
         self.page_w = h.width;
         self.page_h = h.height;
+
+        kitty::blit_bgra_into_rgb(
+            &pixels[..dirty_bytes],
+            &mut self.rgb,
+            h.width,
+            h.dirty_x,
+            h.dirty_y,
+            h.dirty_w,
+            h.dirty_h,
+        );
+        self.last_dirty = Rect::new(h.dirty_x, h.dirty_y, h.dirty_w, h.dirty_h);
+
         status.frames += 1;
         self.frame_times.push(Instant::now());
         let cutoff = Instant::now() - Duration::from_secs(1);
@@ -907,6 +949,13 @@ impl Renderer {
 
     fn present(&mut self, status: &mut Status, cell_h: u32, rows: u16) {
         if !self.dirty || self.rgb.is_empty() {
+            return;
+        }
+        // Defensive: never hand the encoder a buffer whose length disagrees with the
+        // geometry. `encode_rgb_frame` asserts `rgb.len() == w*h*3`, and a panic here would
+        // unwind through the raw-mode tty. A transient mismatch (e.g. mid-resize) simply
+        // waits for the next frame, which repaints at the new size.
+        if self.rgb.len() != (self.page_w as usize) * (self.page_h as usize) * 3 {
             return;
         }
         self.dirty = false;
@@ -1095,5 +1144,65 @@ mod tests {
         r.on_frame(&payload, &mut s);
         assert_eq!(s.frames, 1);
         assert_eq!(r.rgb.len(), 4 * 4 * 3);
+    }
+
+    /// Build a FRAME payload: fixed header + `dirty_w*dirty_h` BGRA pixels of one colour.
+    /// `dims` is `(width, height)`; `dirty` is `(x, y, w, h)`.
+    fn frame(seq: u32, dims: (u32, u32), dirty: (u32, u32, u32, u32), bgra: [u8; 4]) -> Vec<u8> {
+        let (w, h) = dims;
+        let (dx, dy, dw, dh) = dirty;
+        let mut p = Vec::new();
+        for v in [seq, w, h, dx, dy, dw, dh, 0] {
+            p.extend_from_slice(&v.to_be_bytes());
+        }
+        for _ in 0..(dw * dh) {
+            p.extend_from_slice(&bgra);
+        }
+        p
+    }
+
+    #[test]
+    fn partial_frame_composites_without_wiping_the_rest() {
+        // Establish a full green frame, then a 1x1 red damage update at (2,1). The changed
+        // pixel must go red and every other pixel must stay green -- proving damage is
+        // consumed into a persistent framebuffer, not re-sent whole.
+        let mut r = Renderer::new(Backend::Kitty, 4, 4);
+        let mut s = Status::default();
+        r.on_frame(&frame(1, (4, 4), (0, 0, 4, 4), [0, 255, 0, 255]), &mut s); // full green
+        r.on_frame(&frame(2, (4, 4), (2, 1, 1, 1), [0, 0, 255, 255]), &mut s); // red dot
+        assert_eq!(s.frames, 2);
+
+        let px = |x: usize, y: usize| {
+            let i = (y * 4 + x) * 3;
+            (r.rgb[i], r.rgb[i + 1], r.rgb[i + 2])
+        };
+        assert_eq!(px(2, 1), (255, 0, 0), "damaged pixel is red");
+        assert_eq!(px(0, 0), (0, 255, 0), "untouched pixel stayed green");
+        assert_eq!(px(3, 3), (0, 255, 0), "untouched pixel stayed green");
+        assert_eq!(px(2, 2), (0, 255, 0), "pixel just below the dirty rect stayed green");
+    }
+
+    #[test]
+    fn out_of_bounds_dirty_rect_is_dropped() {
+        // A rect claiming to extend past the frame must be rejected before it blits OOB.
+        let mut r = Renderer::new(Backend::Kitty, 4, 4);
+        let mut s = Status::default();
+        // dx=3,dw=4 -> right edge 7 > width 4. Payload is sized to the (bogus) rect so the
+        // only thing standing between this and an OOB write is the geometry check.
+        r.on_frame(&frame(1, (4, 4), (3, 0, 4, 1), [1, 2, 3, 4]), &mut s);
+        assert_eq!(s.frames, 0, "an out-of-bounds dirty rect must not be composited");
+    }
+
+    #[test]
+    fn geometry_change_reallocates_the_framebuffer() {
+        let mut r = Renderer::new(Backend::Kitty, 4, 4);
+        let mut s = Status::default();
+        r.on_frame(&frame(1, (4, 4), (0, 0, 4, 4), [10, 20, 30, 255]), &mut s);
+        assert_eq!(r.rgb.len(), 4 * 4 * 3);
+        // A larger full frame arrives (as a resize would drive); the buffer must grow.
+        r.on_frame(&frame(2, (6, 5), (0, 0, 6, 5), [10, 20, 30, 255]), &mut s);
+        assert_eq!(r.rgb.len(), 6 * 5 * 3);
+        assert_eq!(r.page_w, 6);
+        assert_eq!(r.page_h, 5);
     }
 }

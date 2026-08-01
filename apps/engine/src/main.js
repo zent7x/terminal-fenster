@@ -79,22 +79,65 @@ function flushFrame() {
   }
 }
 
+// Crop the changed rectangle out of a full BGRA frame. Chromium's bitmap is non-strided
+// (row stride == width*4), so a row of the crop is a contiguous slice of the source.
+function cropBGRA(bitmap, imgW, x, y, w, h) {
+  const srcStride = imgW * 4;
+  const dstStride = w * 4;
+  const out = Buffer.allocUnsafe(w * h * 4);
+  for (let row = 0; row < h; row++) {
+    const srcStart = (y + row) * srcStride + x * 4;
+    bitmap.copy(out, row * dstStride, srcStart, srcStart + dstStride);
+  }
+  return out;
+}
+
 function onPaint(_event, dirty, image) {
   if (!sock || sock.destroyed) return;
   stats.produced++;
   const size = image.getSize();
   const bitmap = image.toBitmap(); // BGRA, 4 bytes/px, verified non-strided
+
+  // Damage tracking (proven by the B02 spike): send only the changed rectangle, and let the
+  // core composite it into its persistent framebuffer. The dirty rect is in device pixels,
+  // the same space as the bitmap, so it crops directly. Clamp defensively — a rect that
+  // spills past the frame would read out of bounds.
+  let dx = Math.max(0, Math.min(dirty.x | 0, size.width));
+  let dy = Math.max(0, Math.min(dirty.y | 0, size.height));
+  let dw = Math.max(0, Math.min(dirty.width | 0, size.width - dx));
+  let dh = Math.max(0, Math.min(dirty.height | 0, size.height - dy));
+
+  // Coalescing safety. Backpressure keeps only the newest pending frame; with full frames
+  // that was lossless, but dropping an intermediate PARTIAL update would strand that region
+  // as stale forever. `bitmap` is always the complete current viewport, so whenever we are
+  // about to overwrite a pending frame we promote THIS one to a full update — it supersedes
+  // whatever the dropped partial changed. We also send full when damage is degenerate or
+  // already covers the whole viewport (cropping would be pure overhead).
+  const coalescing = pendingFrame !== null;
+  const sendFull =
+    coalescing || dw === 0 || dh === 0 || (dw === size.width && dh === size.height);
+  let pixels;
+  if (sendFull) {
+    dx = 0;
+    dy = 0;
+    dw = size.width;
+    dh = size.height;
+    pixels = bitmap;
+  } else {
+    pixels = cropBGRA(bitmap, size.width, dx, dy, dw, dh);
+  }
+
   const head = Buffer.allocUnsafe(32);
   head.writeUInt32BE(seq++, 0);
   head.writeUInt32BE(size.width, 4);
   head.writeUInt32BE(size.height, 8);
-  head.writeUInt32BE(dirty.x, 12);
-  head.writeUInt32BE(dirty.y, 16);
-  head.writeUInt32BE(dirty.width, 20);
-  head.writeUInt32BE(dirty.height, 24);
+  head.writeUInt32BE(dx, 12);
+  head.writeUInt32BE(dy, 16);
+  head.writeUInt32BE(dw, 20);
+  head.writeUInt32BE(dh, 24);
   head.writeUInt32BE(0, 28); // format 0 = BGRA8888
-  if (pendingFrame) stats.coalesced++;
-  pendingFrame = Buffer.concat([head, bitmap]);
+  if (coalescing) stats.coalesced++;
+  pendingFrame = Buffer.concat([head, pixels]);
   flushFrame();
 }
 
