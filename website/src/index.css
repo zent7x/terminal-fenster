@@ -14,6 +14,11 @@
     --muted-foreground: 240 5% 64%;
     --border: 240 4% 16%;
     --accent: 168 76% 64%;
+    /* scroll-faqaccordion.tsx uses bg-primary/20 and text-primary. The theme
+       had no `primary`, so those classes resolved to nothing — mapped here to
+       the Desk amber so the component's own styling works out of the box. */
+    --primary: 51 100% 30%;
+    --primary-foreground: 48 40% 97%;
     --accent-foreground: 168 86% 9%;
   }
 
@@ -23,12 +28,13 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    background-image:
-      radial-gradient(circle at 14% 0%, hsl(var(--accent) / 0.08), transparent 30rem),
-      linear-gradient(hsl(var(--foreground) / 0.018) 1px, transparent 1px),
-      linear-gradient(90deg, hsl(var(--foreground) / 0.018) 1px, transparent 1px);
-    background-size: auto, 42px 42px, 42px 42px;
-    background-attachment: fixed;
+  }
+
+  /* The redesigns own their own colour and type; keep the dark token
+     defaults from leaking into them. */
+  body {
+    background: #f9f9f8;
+    color: inherit;
   }
 
   ::selection {

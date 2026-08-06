@@ -1,0 +1,469 @@
+/* ================================================================== */
+/* /nixole — "AI that converts patients for your medical practice".   */
+/* A framed Nixole landing-hero, recreated pixel-for-pixel from a      */
+/* 1600×1200 reference. All sizes are logical px in frame coordinates; */
+/* the whole 1600×1200 canvas is transform-scaled to fit any viewport. */
+/* ================================================================== */
+
+@font-face {
+  font-family: "NX Display";
+  src: url("/fonts/SF-Pro-Display-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-display: block;
+}
+@font-face {
+  font-family: "NX Display";
+  src: url("/fonts/SF-Pro-Display-Semibold.woff2") format("woff2");
+  font-weight: 600;
+  font-display: block;
+}
+@font-face {
+  font-family: "NX Display";
+  src: url("/fonts/SF-Pro-Display-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-display: block;
+}
+@font-face {
+  font-family: "NX Text";
+  src: url("/fonts/SF-Pro-Text-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: "NX Text";
+  src: url("/fonts/SF-Pro-Text-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-display: block;
+}
+@font-face {
+  font-family: "NX Text";
+  src: url("/fonts/SF-Pro-Text-Semibold.woff2") format("woff2");
+  font-weight: 600;
+  font-display: block;
+}
+
+/* ---- stage + canvas ---------------------------------------------- */
+.nx-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: #e1e1e1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-family: "NX Text", -apple-system, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+.nx-canvas {
+  position: relative;
+  width: 1600px;
+  height: 1200px;
+  flex: none;
+  transform: scale(var(--nx-scale, 1));
+  transform-origin: center center;
+}
+
+/* ---- the floating page ------------------------------------------- */
+.nx-page {
+  position: absolute;
+  left: 123px;
+  top: 136px;
+  width: 1353px;
+  height: 927px;
+  background: #f9f9f9;
+  border-radius: 5px;
+  box-shadow:
+    0 1.5px 4px rgba(20, 20, 20, 0.04),
+    0 22px 44px -16px rgba(20, 20, 20, 0.13),
+    0 70px 120px -30px rgba(20, 20, 20, 0.16);
+  overflow: hidden;
+}
+
+/* ---- header ------------------------------------------------------ */
+.nx-header {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 90px;
+}
+
+.nx-logo {
+  position: absolute;
+  left: 44px;
+  top: 26px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.nx-logo-icon {
+  width: 38px;
+  height: 38px;
+  display: block;
+  flex: none;
+}
+.nx-logo-word {
+  font-family: "NX Display", sans-serif;
+  font-weight: 700;
+  font-size: 26px;
+  letter-spacing: -0.026em;
+  color: #18181a;
+}
+
+.nx-nav {
+  position: absolute;
+  left: 50%;
+  top: 34px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 27px;
+  white-space: nowrap;
+}
+.nx-nav a {
+  font-family: "NX Text", sans-serif;
+  font-size: 15px;
+  font-weight: 400;
+  color: #8c8c8c;
+  text-decoration: none;
+  letter-spacing: -0.006em;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.nx-nav a.active {
+  color: #1a1a1c;
+  font-weight: 600;
+}
+.nx-nav .chev {
+  width: 12px;
+  height: 12px;
+  margin-top: 1px;
+}
+
+.nx-book {
+  position: absolute;
+  right: 44px;
+  top: 26px;
+  height: 37px;
+  padding: 0 17px;
+  display: inline-flex;
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #e6e6e6;
+  border-radius: 12px;
+  font-family: "NX Text", sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: #1a1a1c;
+  letter-spacing: -0.01em;
+  box-shadow: 0 1px 1.5px rgba(0, 0, 0, 0.03);
+  cursor: pointer;
+}
+
+/* ---- hero copy --------------------------------------------------- */
+.nx-badge {
+  position: absolute;
+  left: 50%;
+  top: 120px;
+  transform: translateX(-50%);
+  height: 29px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px 0 4px;
+  background: #ececec;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 15px;
+}
+.nx-badge .chip {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 9px;
+  background: #ffffff;
+  border-radius: 11px;
+  font-family: "NX Text", sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1a1a1c;
+  letter-spacing: 0.01em;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+}
+.nx-badge .blabel {
+  font-family: "NX Text", sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: #4c4c4c;
+  letter-spacing: -0.004em;
+}
+
+.nx-h1 {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 158px;
+  margin: 0;
+  text-align: center;
+  font-family: "NX Display", sans-serif;
+  font-weight: 500;
+  font-size: 64px;
+  line-height: 64px;
+  letter-spacing: -0.022em;
+  color: #18181a;
+}
+.nx-h1 .line {
+  display: block;
+}
+.nx-h1 .l2 {
+  position: relative;
+  left: 26px;
+}
+.nx-h1 .muted {
+  color: #b4b4b4;
+}
+.nx-capsule {
+  display: inline-block;
+  width: 63px;
+  height: 60px;
+  margin: 0 13px 0 11px;
+  vertical-align: middle;
+  transform: translateY(-1px);
+}
+
+.nx-sub {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 304px;
+  margin: 0;
+  text-align: center;
+  font-family: "NX Text", sans-serif;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 23px;
+  letter-spacing: -0.006em;
+  color: #9b9b9b;
+}
+
+.nx-cta {
+  position: absolute;
+  left: 50%;
+  top: 384px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.nx-cta button {
+  height: 35px;
+  border-radius: 18px;
+  font-family: "NX Text", sans-serif;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+.nx-cta .ghost {
+  padding: 0 20px;
+  background: #ffffff;
+  border: 1px solid #e4e4e4;
+  color: #1a1a1c;
+  font-weight: 500;
+  box-shadow: 0 1px 1.5px rgba(0, 0, 0, 0.03);
+}
+.nx-cta .solid {
+  padding: 0 27px;
+  background: #f6d813;
+  border: 1px solid #f6d813;
+  color: #1a1a1c;
+  font-weight: 600;
+}
+
+/* ---- hero card --------------------------------------------------- */
+.nx-hero {
+  position: absolute;
+  left: 15px;
+  top: 458px;
+  width: 1323px;
+  height: 462px;
+  border-radius: 18px;
+  overflow: hidden;
+}
+.nx-hero-img {
+  position: absolute;
+  inset: 0;
+  width: 1323px;
+  height: 462px;
+  display: block;
+  object-fit: cover;
+}
+
+/* the bottom band: dark overlay that masks the baked trusted/logo row */
+.nx-strip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 86px;
+  background: linear-gradient(
+    to bottom,
+    rgba(7, 6, 5, 0) 0%,
+    rgba(7, 6, 5, 1) 18px,
+    rgba(6, 6, 5, 1) 100%
+  );
+  pointer-events: none;
+}
+.nx-trusted {
+  position: absolute;
+  left: 24px;
+  bottom: 12px;
+  width: 372px;
+  font-family: "NX Text", sans-serif;
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 17px;
+  letter-spacing: -0.004em;
+  color: #8d8d8d;
+}
+.nx-marquee {
+  position: absolute;
+  left: 430px;
+  right: 0;
+  bottom: 26px;
+  height: 28px;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 70px,
+    #000 calc(100% - 30px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 70px,
+    #000 calc(100% - 30px),
+    transparent 100%
+  );
+}
+.nx-track {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 46px;
+  white-space: nowrap;
+  animation: nx-scroll 33s linear infinite;
+  will-change: transform;
+}
+.nx-logo-mark {
+  color: #f3f3f3;
+  font-family: "NX Text", sans-serif;
+  display: inline-flex;
+  align-items: center;
+  opacity: 0.94;
+}
+.nx-logo-mark.oracle {
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: 0.13em;
+}
+.nx-logo-mark.gofundme {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.nx-logo-mark.nutanix {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+}
+.nx-logo-mark.upside {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.nx-logo-mark.intel {
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+@keyframes nx-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* ================================================================== */
+/* entrance — staggered blur-rise, top to bottom                       */
+/* ================================================================== */
+@keyframes nx-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+    filter: blur(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+.nx-anim .nx-rise {
+  opacity: 0;
+  animation: nx-rise 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--d, 0s);
+}
+/* nav and badge are translateX-centred, so animate a child wrapper to
+   avoid clobbering the centring transform */
+.nx-anim .nx-nav,
+.nx-anim .nx-badge,
+.nx-anim .nx-cta {
+  opacity: 0;
+  animation: nx-rise-x 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--d, 0s);
+}
+@keyframes nx-rise-x {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 18px);
+    filter: blur(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+    filter: blur(0);
+  }
+}
+
+/* still mode — everything settled, marquee frozen */
+.nx-still .nx-rise,
+.nx-still .nx-nav,
+.nx-still .nx-badge,
+.nx-still .nx-cta {
+  opacity: 1 !important;
+  animation: none !important;
+  filter: none !important;
+}
+.nx-still .nx-nav,
+.nx-still .nx-badge,
+.nx-still .nx-cta {
+  transform: translateX(-50%) !important;
+}
+.nx-still .nx-track {
+  animation-play-state: paused;
+}
