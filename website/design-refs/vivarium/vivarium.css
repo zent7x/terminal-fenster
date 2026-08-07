@@ -1,0 +1,586 @@
+/* ==================================================================== */
+/* /vivarium — a personal-site card floating on its own wallpaper.      */
+/*                                                                      */
+/* Recreated from a 1088×720 reference capture. Every dimension below   */
+/* is written in *reference pixels* and multiplied by `--u`, a length   */
+/* token that resolves to exactly 1px when the viewport is 1088×720 and */
+/* grows/shrinks with the window from there. So the layout is fluid,    */
+/* yet at the reference size it is pixel-for-pixel the original.        */
+/*                                                                      */
+/* Nothing here animates on its own: the wallpaper is a frozen still    */
+/* until you point at it, and every transition is triggered by a real   */
+/* pointer / keyboard / submit event.                                   */
+/* ==================================================================== */
+
+/* The reference sets copy in SF Pro Display with ~-0.02em tracking: matched by
+   ink-width-at-equal-cap-height across six probe lines (mean error 0.07 vs
+   3.4 for Geist, the runner-up). Cap height in the capture is 9.3px, and SF
+   Pro Display's cap is 0.7167em → 13px. */
+@font-face {
+  font-family: "Vivarium Sans";
+  src: url("/fonts/SF-Pro-Display-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "Vivarium Sans";
+  src: url("/fonts/SF-Pro-Display-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-display: block;
+}
+
+.viv-root {
+  /* 1 reference px. Bounded so the card stays readable on a phone and
+     doesn't turn into a billboard on a 5K display. */
+  --u: clamp(0.66px, min(100vw / 1088, 100vh / 720), 1.44px);
+
+  --viv-ink: #262626;
+  --viv-muted: #8d8d8d;
+  --viv-field: #fafafa;
+  --viv-accent: #46845f;
+  --viv-accent-hi: #4f9169;
+
+  --viv-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --viv-spring: cubic-bezier(0.34, 1.42, 0.5, 1);
+
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: #10231c;
+  font-family: "Vivarium Sans", -apple-system, BlinkMacSystemFont, ui-sans-serif,
+    system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* -------------------------------------------------------------------- */
+/* Backdrop — the same wallpaper, blown up and blurred to a colour wash. */
+/* -------------------------------------------------------------------- */
+
+.viv-backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  /* The blur bleeds transparent edges inward, so the layers below are
+     over-sized rather than clipped tight to the box. */
+  contain: strict;
+}
+
+.viv-backdrop-media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 44%;
+  filter: blur(calc(7 * var(--u))) saturate(1.18) brightness(0.88);
+  will-change: filter;
+}
+
+.viv-backdrop-media--clip {
+  opacity: 0;
+  transition: opacity 0.62s var(--viv-ease);
+}
+
+.viv-root[data-live="true"] .viv-backdrop-media--clip {
+  opacity: 1;
+}
+
+/* -------------------------------------------------------------------- */
+/* Frame — the translucent ring the white card sits inside.             */
+/* -------------------------------------------------------------------- */
+
+.viv-frame {
+  position: relative;
+  box-sizing: content-box;
+  width: calc(924 * var(--u));
+  height: calc(554 * var(--u));
+  padding: calc(7 * var(--u));
+  border-radius: calc(13 * var(--u));
+  background: rgba(255, 255, 255, 0.42);
+  backdrop-filter: blur(calc(14 * var(--u))) saturate(1.4);
+  -webkit-backdrop-filter: blur(calc(14 * var(--u))) saturate(1.4);
+  box-shadow:
+    0 calc(1 * var(--u)) calc(2 * var(--u)) rgba(9, 22, 17, 0.16),
+    0 calc(18 * var(--u)) calc(46 * var(--u)) rgba(9, 22, 17, 0.3),
+    0 calc(52 * var(--u)) calc(96 * var(--u)) rgba(9, 22, 17, 0.22);
+}
+
+.viv-card {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: calc(31 * var(--u)) calc(31 * var(--u)) calc(30 * var(--u))
+    calc(31.6 * var(--u));
+  border-radius: calc(6 * var(--u));
+  background: #fff;
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+/* -------------------------------------------------------------------- */
+/* Left column — avatar pinned top, bio + form pinned bottom.           */
+/* -------------------------------------------------------------------- */
+
+.viv-col {
+  position: relative;
+  flex: 0 0 calc(348 * var(--u));
+  width: calc(348 * var(--u));
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.viv-avatar {
+  position: absolute;
+  /* Registered against the capture, which sets the portrait a hair outside
+     the text column's own top-left corner. */
+  top: calc(-1 * var(--u));
+  left: calc(-1.1 * var(--u));
+  width: calc(22.5 * var(--u));
+  height: calc(22.5 * var(--u));
+  border-radius: 50%;
+  overflow: hidden;
+  background: #ddd;
+  display: block;
+  border: 0;
+  padding: 0;
+  transition: transform 0.42s var(--viv-spring);
+  will-change: transform;
+}
+
+.viv-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.viv-avatar--link:hover,
+.viv-avatar--link:focus-visible {
+  transform: scale(1.14);
+}
+
+.viv-avatar--link:focus-visible {
+  outline: calc(1.5 * var(--u)) solid var(--viv-accent);
+  outline-offset: calc(2 * var(--u));
+}
+
+/* -------------------------------------------------------------------- */
+/* Bio                                                                  */
+/* -------------------------------------------------------------------- */
+
+.viv-bio {
+  font-size: calc(13 * var(--u));
+  line-height: calc(18.5 * var(--u));
+  letter-spacing: -0.02em;
+  color: var(--viv-ink);
+  margin: 0 0 calc(14.5 * var(--u));
+}
+
+.viv-bio p {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.viv-bio p + p {
+  margin-top: calc(17 * var(--u));
+}
+
+/* Inline brand glyphs sit on the text baseline with a hair of air on
+   each side — the reference spaces them wider than a normal word gap. */
+.viv-mark {
+  display: inline-block;
+  width: calc(11 * var(--u));
+  height: calc(11 * var(--u));
+  margin: 0 calc(2 * var(--u)) 0 calc(2 * var(--u));
+  vertical-align: calc(-1.4 * var(--u));
+  color: var(--viv-ink);
+}
+
+.viv-mark--x {
+  /* The X in the capture is a hairline double-struck glyph, not the solid
+     logo: 9px of ink but only ~7.5px of advance, so it tucks between its
+     spaces rather than pushing the rest of the line along. */
+  width: calc(9.6 * var(--u));
+  height: calc(9.6 * var(--u));
+  margin: 0 calc(-1.05 * var(--u));
+  vertical-align: calc(-0.3 * var(--u));
+}
+
+.viv-mark svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.viv-bio a {
+  color: inherit;
+  text-decoration: none;
+  border-bottom: calc(1 * var(--u)) solid transparent;
+  transition:
+    border-color 0.24s var(--viv-ease),
+    color 0.24s var(--viv-ease);
+}
+
+.viv-bio a:hover,
+.viv-bio a:focus-visible {
+  border-bottom-color: rgba(38, 38, 38, 0.35);
+  outline: none;
+}
+
+/* -------------------------------------------------------------------- */
+/* Subscribe form                                                       */
+/* -------------------------------------------------------------------- */
+
+.viv-form {
+  position: relative;
+  height: calc(33 * var(--u));
+  border-radius: 999px;
+  background: var(--viv-field);
+  box-shadow: inset 0 0 0 calc(1 * var(--u)) rgba(0, 0, 0, 0);
+  transition:
+    box-shadow 0.3s var(--viv-ease),
+    background-color 0.3s var(--viv-ease),
+    transform 0.16s var(--viv-ease);
+  will-change: box-shadow;
+}
+
+.viv-form[data-focused="true"] {
+  background: #fff;
+  box-shadow:
+    inset 0 0 0 calc(1 * var(--u)) rgba(70, 132, 95, 0.42),
+    0 0 0 calc(3 * var(--u)) rgba(70, 132, 95, 0.11);
+}
+
+.viv-form[data-invalid="true"] {
+  animation: viv-shake 0.42s var(--viv-ease);
+  box-shadow:
+    inset 0 0 0 calc(1 * var(--u)) rgba(190, 60, 60, 0.5),
+    0 0 0 calc(3 * var(--u)) rgba(190, 60, 60, 0.1);
+}
+
+@keyframes viv-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  18% {
+    transform: translateX(calc(-4 * var(--u)));
+  }
+  40% {
+    transform: translateX(calc(3.2 * var(--u)));
+  }
+  62% {
+    transform: translateX(calc(-2 * var(--u)));
+  }
+  82% {
+    transform: translateX(calc(1 * var(--u)));
+  }
+}
+
+.viv-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0 calc(40 * var(--u)) 0 calc(15 * var(--u));
+  border: 0;
+  outline: none;
+  background: transparent;
+  border-radius: inherit;
+  font: inherit;
+  font-size: calc(11.3 * var(--u));
+  line-height: calc(33 * var(--u));
+  letter-spacing: -0.02em;
+  color: var(--viv-ink);
+  transition: opacity 0.28s var(--viv-ease);
+}
+
+.viv-input:disabled {
+  cursor: default;
+}
+
+.viv-input::placeholder {
+  color: var(--viv-muted);
+  opacity: 1;
+}
+
+/* Success message crossfades in over the field. */
+.viv-done {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding-left: calc(15 * var(--u));
+  font-size: calc(11.3 * var(--u));
+  letter-spacing: -0.02em;
+  color: var(--viv-accent);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(calc(4 * var(--u)));
+  transition:
+    opacity 0.34s var(--viv-ease),
+    transform 0.44s var(--viv-ease);
+}
+
+.viv-form[data-sent="true"] .viv-done {
+  opacity: 1;
+  transform: none;
+}
+
+.viv-form[data-sent="true"] .viv-input {
+  opacity: 0;
+}
+
+.viv-submit {
+  position: absolute;
+  top: calc(2.4 * var(--u));
+  right: calc(0.55 * var(--u));
+  width: calc(29 * var(--u));
+  height: calc(29 * var(--u));
+  border: 0;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--viv-accent);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color 0.28s var(--viv-ease),
+    transform 0.34s var(--viv-spring);
+  will-change: transform;
+}
+
+.viv-submit:hover {
+  background: var(--viv-accent-hi);
+  transform: scale(1.06);
+}
+
+.viv-submit:active {
+  transform: scale(0.94);
+}
+
+.viv-submit:focus-visible {
+  outline: calc(1.5 * var(--u)) solid var(--viv-accent);
+  outline-offset: calc(2 * var(--u));
+}
+
+/* Arrow → check swap: both glyphs share one grid cell so the button
+   never reflows, and they trade places on a short spring. */
+.viv-submit-glyph {
+  grid-area: 1 / 1;
+  display: block;
+  width: calc(11 * var(--u));
+  height: calc(11 * var(--u));
+  transition:
+    opacity 0.2s var(--viv-ease),
+    transform 0.4s var(--viv-spring);
+}
+
+.viv-submit-glyph--check {
+  opacity: 0;
+  transform: scale(0.5) rotate(-18deg);
+}
+
+.viv-form[data-sent="true"] .viv-submit-glyph--arrow {
+  opacity: 0;
+  transform: scale(0.5) rotate(18deg);
+}
+
+.viv-form[data-sent="true"] .viv-submit-glyph--check {
+  opacity: 1;
+  transform: none;
+  transition-delay: 0.06s;
+}
+
+/* -------------------------------------------------------------------- */
+/* Wallpaper panel                                                      */
+/* -------------------------------------------------------------------- */
+
+.viv-panel {
+  position: absolute;
+  top: calc(29.55 * var(--u));
+  right: calc(31.7 * var(--u));
+  width: calc(412.5 * var(--u));
+  height: calc(492.5 * var(--u));
+  border: 0;
+  padding: 0;
+  margin: 0;
+  border-radius: calc(14 * var(--u));
+  overflow: hidden;
+  background: #cfe6f2;
+  display: block;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: box-shadow 0.5s var(--viv-ease);
+  box-shadow: 0 0 0 0 rgba(70, 132, 95, 0);
+}
+
+.viv-panel:disabled {
+  cursor: default;
+}
+
+.viv-panel:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 calc(2 * var(--u)) #fff,
+    0 0 0 calc(4 * var(--u)) var(--viv-accent);
+}
+
+.viv-panel-media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  /* A whisper of scale on the still keeps the crossfade from "cutting"
+     when the clip takes over. */
+  transition: opacity 0.62s var(--viv-ease);
+}
+
+.viv-panel-media--clip {
+  opacity: 0;
+}
+
+.viv-panel[data-live="true"] .viv-panel-media--clip {
+  opacity: 1;
+}
+
+/* Bottom-up scrim only exists while the control is showing. */
+.viv-panel-scrim {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: calc(96 * var(--u));
+  background: linear-gradient(
+    to top,
+    rgba(8, 26, 20, 0.34),
+    rgba(8, 26, 20, 0)
+  );
+  opacity: 0;
+  transition: opacity 0.4s var(--viv-ease);
+  pointer-events: none;
+}
+
+.viv-panel[data-showctl="true"] .viv-panel-scrim {
+  opacity: 1;
+}
+
+.viv-panel-ctl {
+  position: absolute;
+  right: calc(11 * var(--u));
+  bottom: calc(11 * var(--u));
+  display: flex;
+  align-items: center;
+  gap: calc(5 * var(--u));
+  height: calc(22 * var(--u));
+  padding: 0 calc(9 * var(--u)) 0 calc(8 * var(--u));
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(calc(8 * var(--u))) saturate(1.6);
+  -webkit-backdrop-filter: blur(calc(8 * var(--u))) saturate(1.6);
+  box-shadow: 0 calc(2 * var(--u)) calc(8 * var(--u)) rgba(8, 26, 20, 0.24);
+  color: #1d2b24;
+  font-size: calc(10 * var(--u));
+  font-weight: 500;
+  letter-spacing: calc(0.02 * var(--u) * 10);
+  line-height: 1;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(calc(5 * var(--u))) scale(0.94);
+  transform-origin: bottom right;
+  transition:
+    opacity 0.34s var(--viv-ease),
+    transform 0.42s var(--viv-spring);
+}
+
+.viv-panel[data-showctl="true"] .viv-panel-ctl {
+  opacity: 1;
+  transform: none;
+}
+
+.viv-panel-ctl svg {
+  display: block;
+  width: calc(9 * var(--u));
+  height: calc(9 * var(--u));
+}
+
+/* A dot that pulses only while the clip is actually running. */
+.viv-panel-dot {
+  width: calc(5 * var(--u));
+  height: calc(5 * var(--u));
+  border-radius: 50%;
+  background: var(--viv-accent);
+}
+
+.viv-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* -------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .viv-root *,
+  .viv-root *::before,
+  .viv-root *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* Narrow viewports: stack the wallpaper above the column. The reference
+   has no mobile state, so this is a straight, quiet fallback. */
+@media (max-width: 720px) {
+  .viv-root {
+    --u: clamp(0.62px, min(100vw / 420, 100vh / 760), 1.1px);
+    place-items: start center;
+    overflow-y: auto;
+  }
+
+  .viv-frame {
+    width: calc(356 * var(--u));
+    height: auto;
+    margin: calc(28 * var(--u)) 0;
+  }
+
+  .viv-card {
+    flex-direction: column;
+    height: auto;
+    padding: calc(20 * var(--u));
+    gap: calc(20 * var(--u));
+  }
+
+  .viv-panel {
+    position: relative;
+    top: auto;
+    right: auto;
+    width: 100%;
+    height: calc(300 * var(--u));
+    order: -1;
+  }
+
+  .viv-col {
+    flex: 1 1 auto;
+    width: 100%;
+    padding-top: calc(34 * var(--u));
+  }
+}

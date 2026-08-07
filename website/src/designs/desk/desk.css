@@ -1,0 +1,1422 @@
+/* ==================================================================== */
+/* Design A — "Desk".                                                    */
+/*                                                                       */
+/* Lineage: the Nixole block. Its central idea is that the page is a     */
+/* physical sheet of paper resting on a grey desk — a three-layer shadow */
+/* stack lifts it, and everything inside is set in SF Pro with tight     */
+/* negative tracking. Ported here as a fluid, scrolling document rather  */
+/* than Nixole's fixed 1600x1200 transform-scaled canvas, which cannot   */
+/* carry a real landing page.                                            */
+/* ==================================================================== */
+
+.dk {
+  --dk-desk: #e3e3e1;
+  --dk-sheet: #f9f9f8;
+  --dk-ink: #18181a;
+  --dk-body: #55555a;
+  --dk-mute: #9b9b9b;
+  --dk-faint: #b8b8b6;
+  --dk-line: #e7e7e4;
+  --dk-amber: #f6d813;
+  --dk-well: #0a0a0b;
+
+  --dk-ease: cubic-bezier(0.16, 1, 0.3, 1);
+
+  min-height: 100vh;
+  /* Edge to edge. The Nixole lineage framed the page as a sheet resting on a
+     desk, but every millimetre of that frame is margin the content does not
+     get, so the desk is gone and the sheet is the page. */
+  padding: 0;
+  background: var(--dk-sheet);
+  color: var(--dk-ink);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter',
+    system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'ss01', 'cv01';
+}
+
+/* The sheet is now the page itself: no cap, no radius, and no floating
+   shadow, because there is nothing left underneath for it to float above. */
+.dk-sheet {
+  width: 100%;
+  margin: 0;
+  background: var(--dk-sheet);
+  overflow: hidden;
+}
+
+.dk-inner {
+  /* Uncapped. Everything at this level is furniture — tables, grids, code
+     panes — which reads fine at any width. The padding is a gutter so content
+     never touches the screen edge; prose is capped separately in `ch`, so line
+     length never follows the container. */
+  max-width: none;
+  margin: 0;
+  padding-inline: clamp(16px, 2.2vw, 46px);
+}
+
+/* ---- header -------------------------------------------------------- */
+.dk-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  height: 78px;
+}
+
+.dk-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  text-decoration: none;
+  color: var(--dk-ink);
+}
+.dk-brand svg {
+  display: block;
+  color: #1f1f22;
+  --mark-cell: #2c2c31;
+}
+.dk-brand span {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.028em;
+}
+
+.dk-nav {
+  display: none;
+  align-items: center;
+  gap: 28px;
+}
+@media (min-width: 900px) {
+  .dk-nav {
+    display: flex;
+  }
+}
+.dk-nav a {
+  font-size: 14.5px;
+  font-weight: 400;
+  letter-spacing: -0.006em;
+  color: #8c8c8c;
+  text-decoration: none;
+  transition: color 0.18s var(--dk-ease);
+}
+.dk-nav a:hover {
+  color: var(--dk-ink);
+}
+
+.dk-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 16px;
+  background: #fff;
+  border: 1px solid #e6e6e6;
+  border-radius: 11px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--dk-ink);
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: 0 1px 1.5px rgba(0, 0, 0, 0.03);
+  transition:
+    transform 0.18s var(--dk-ease),
+    box-shadow 0.18s var(--dk-ease);
+}
+.dk-ghost:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.07);
+}
+.dk-ghost:active {
+  transform: translateY(0);
+}
+
+.dk-solid {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 22px;
+  background: var(--dk-amber);
+  border: 1px solid #e9cd11;
+  border-radius: 11px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: #1a1a1c;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow:
+    0 1px 2px rgba(120, 100, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  transition:
+    transform 0.18s var(--dk-ease),
+    box-shadow 0.18s var(--dk-ease);
+}
+.dk-solid:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 6px 16px rgba(190, 165, 10, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+.dk-solid:active {
+  transform: translateY(0);
+}
+
+/* ---- hero ---------------------------------------------------------- */
+.dk-hero {
+  text-align: center;
+  padding-top: clamp(30px, 3.4vw, 52px);
+}
+
+/* Nixole's chip-in-pill: a white capsule riding inside a grey capsule. */
+.dk-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 14px 0 4px;
+  background: #ececea;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 15px;
+}
+.dk-badge .chip {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 9px;
+  background: #fff;
+  border-radius: 11px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--dk-ink);
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+}
+.dk-badge .blabel {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.004em;
+  color: #4c4c4c;
+}
+
+.dk-h1 {
+  margin: 22px auto 0;
+  max-width: 17ch;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter',
+    system-ui, sans-serif;
+  font-weight: 600;
+  font-size: clamp(38px, 5.4vw, 66px);
+  line-height: 1.02;
+  letter-spacing: -0.032em;
+  color: var(--dk-ink);
+  text-wrap: balance;
+}
+.dk-h1 .muted {
+  color: var(--dk-faint);
+}
+
+.dk-sub {
+  margin: 20px auto 0;
+  max-width: 570px;
+  font-size: clamp(15px, 1.15vw, 16.5px);
+  line-height: 1.55;
+  letter-spacing: -0.006em;
+  color: var(--dk-mute);
+  text-wrap: pretty;
+}
+
+.dk-cta {
+  margin-top: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.dk-req {
+  margin-top: 18px;
+  font-size: 12.5px;
+  letter-spacing: -0.004em;
+  color: var(--dk-faint);
+}
+.dk-req b {
+  font-weight: 500;
+  color: var(--dk-mute);
+}
+
+/* ---- proof numbers ------------------------------------------------- */
+.dk-proof {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  border-top: 1px solid var(--dk-line);
+  margin-top: clamp(40px, 4.4vw, 64px);
+}
+@media (min-width: 760px) {
+  .dk-proof {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+.dk-proof-cell {
+  padding: 26px 4px 26px 22px;
+  border-left: 1px solid var(--dk-line);
+}
+.dk-proof-cell:first-child {
+  border-left: 0;
+  padding-left: 0;
+}
+@media (max-width: 759px) {
+  .dk-proof-cell:nth-child(3) {
+    border-left: 0;
+    padding-left: 0;
+  }
+  .dk-proof-cell:nth-child(n + 3) {
+    border-top: 1px solid var(--dk-line);
+  }
+}
+.dk-proof-v {
+  font-size: clamp(26px, 2.6vw, 34px);
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.dk-proof-l {
+  margin-top: 7px;
+  font-size: 12.5px;
+  letter-spacing: -0.004em;
+  color: var(--dk-mute);
+}
+/* The qualifier under each number — it was shipping unstyled, which made it
+   render larger than the label it sits beneath. */
+.dk-proof-n {
+  margin-top: 3px;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 10.5px;
+  line-height: 1.4;
+  letter-spacing: -0.002em;
+  color: var(--dk-faint);
+}
+
+/* ---- sections ------------------------------------------------------ */
+.dk-section {
+  padding-top: clamp(52px, 5.2vw, 84px);
+}
+
+/* Section head: title left, lede in its own right column. Keeps the full
+   measure in use instead of leaving 40% of the sheet empty, which was the
+   single biggest layout problem on the old site. */
+.dk-shead {
+  display: grid;
+  gap: 10px 44px;
+  grid-template-columns: 1fr;
+  align-items: end;
+  padding-bottom: 34px;
+}
+@media (min-width: 900px) {
+  .dk-shead {
+    grid-template-columns: 1.05fr 1fr;
+  }
+}
+
+.dk-eyebrow {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dk-faint);
+}
+
+.dk-h2 {
+  margin: 13px 0 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter',
+    system-ui, sans-serif;
+  font-size: clamp(26px, 3vw, 38px);
+  font-weight: 600;
+  letter-spacing: -0.028em;
+  line-height: 1.08;
+  max-width: 15ch;
+  text-wrap: balance;
+}
+
+.dk-lede {
+  margin: 0;
+  max-width: 52ch;
+  font-size: 15.5px;
+  line-height: 1.6;
+  letter-spacing: -0.006em;
+  color: var(--dk-mute);
+  text-wrap: pretty;
+}
+
+/* Pillars: tall cards, each led by a large measured drawing. Structure from
+   the `cores` block — the art is the top two-thirds, not a 20px icon in a
+   tinted square, which is what made the old cards read as filler. */
+.dk-pillars {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 860px) {
+  .dk-pillars {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.dk-pillar {
+  display: flex;
+  flex-direction: column;
+  background: #fdfdfc;
+  border: 1px solid var(--dk-line);
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow:
+    0 2px 3px rgba(16, 16, 20, 0.045),
+    0 16px 32px -14px rgba(16, 16, 20, 0.07);
+  transition:
+    transform 0.4s var(--dk-ease),
+    box-shadow 0.4s var(--dk-ease);
+}
+.dk-pillar:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    0 1px 2px rgba(16, 16, 20, 0.05),
+    0 24px 42px -18px rgba(16, 16, 20, 0.12);
+}
+
+/* The art surface: a hair cooler than the card so the drawing sits in a well. */
+.dk-art {
+  position: relative;
+  background: linear-gradient(180deg, #f6f6f4 0%, #fbfbfa 100%);
+  border-bottom: 1px solid var(--dk-line);
+
+  --art-line: #9d9d99;
+  --art-soft: #bdbdb8;
+  --art-fill: #ffffff;
+  --art-edge: #dededa;
+  --art-accent: #b99b00;
+  --art-accent-soft: #fdf5c8;
+}
+.dk-art svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+/* The accent wakes up on hover — the drawing is the card's whole point. */
+.dk-pillar:hover .dk-art {
+  --art-accent: #a08700;
+  --art-line: #8b8b87;
+}
+
+.dk-pillar-body {
+  padding: 20px 22px 24px;
+}
+.dk-pillar-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 21px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: #f4efd0;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: #7d6a00;
+}
+.dk-pillar-t {
+  margin: 12px 0 0;
+  font-size: 17.5px;
+  font-weight: 600;
+  letter-spacing: -0.022em;
+}
+.dk-pillar-b {
+  margin: 8px 0 0;
+  font-size: 14.5px;
+  line-height: 1.58;
+  letter-spacing: -0.004em;
+  color: var(--dk-mute);
+  text-wrap: pretty;
+}
+
+/* ---- install ------------------------------------------------------- */
+/* A light card, not a black slab. Dropping a near-black rectangle onto the
+   paper sheet made it the heaviest object on the page and fought the whole
+   surface; a well-set code card on paper is what a good docs page does. */
+.dk-cmd {
+  background: #fdfdfc;
+  border: 1px solid var(--dk-line);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow:
+    0 2px 3px rgba(16, 16, 20, 0.04),
+    0 14px 30px -16px rgba(16, 16, 20, 0.08);
+}
+
+.dk-cmd-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 11px;
+  background: linear-gradient(180deg, #f7f7f5 0%, #f2f2ef 100%);
+  border-bottom: 1px solid var(--dk-line);
+}
+
+.dk-tabs {
+  display: flex;
+  gap: 2px;
+}
+.dk-tab {
+  position: relative;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: #8c8c88;
+  padding: 6px 13px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: color 0.2s var(--dk-ease);
+}
+.dk-tab:hover {
+  color: var(--dk-ink);
+}
+.dk-tab[data-active] {
+  color: var(--dk-ink);
+  font-weight: 600;
+}
+.dk-tab-pill {
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgba(16, 16, 20, 0.09),
+    0 0 0 1px rgba(16, 16, 20, 0.05);
+}
+.dk-tab-label {
+  position: relative;
+  z-index: 1;
+}
+
+.dk-copy {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  background: #fff;
+  border: 1px solid #e6e6e2;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: -0.008em;
+  color: var(--dk-ink);
+  cursor: pointer;
+  box-shadow: 0 1px 1.5px rgba(0, 0, 0, 0.03);
+  transition:
+    transform 0.18s var(--dk-ease),
+    box-shadow 0.18s var(--dk-ease);
+}
+.dk-copy:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.07);
+}
+.dk-copy[data-copied] {
+  color: #3f7d54;
+  border-color: #cfe4d6;
+  background: #f3faf5;
+}
+.dk-copy-mark {
+  display: inline-flex;
+  color: #9a8300;
+}
+.dk-copy[data-copied] .dk-copy-mark {
+  color: #3f7d54;
+}
+
+/* Code left, what-it-does right — the block used to run the code across the
+   full width and strand half of it empty. */
+.dk-cmd-split {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 880px) {
+  .dk-cmd-split {
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  }
+}
+
+.dk-code {
+  list-style: none;
+  margin: 0;
+  padding: 16px 0;
+  min-width: 0;
+  overflow-x: auto;
+}
+.dk-code li {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 2px 18px;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 12.5px;
+  line-height: 1.85;
+  white-space: nowrap;
+}
+.dk-code li[data-kind='comment'] code {
+  color: #a2a29c;
+}
+.dk-code code {
+  color: #26262a;
+}
+.dk-gutter {
+  flex: none;
+  width: 12px;
+  text-align: right;
+  color: #c6c6c0;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+.dk-prompt {
+  color: #9a8300;
+  user-select: none;
+}
+
+.dk-facts {
+  min-width: 0;
+  padding: 18px 20px 20px;
+  border-top: 1px solid var(--dk-line);
+  background: #f8f8f6;
+}
+@media (min-width: 880px) {
+  .dk-facts {
+    border-top: 0;
+    border-left: 1px solid var(--dk-line);
+  }
+}
+.dk-facts-blurb {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.55;
+  letter-spacing: -0.006em;
+  color: #6f6f6a;
+  text-wrap: pretty;
+}
+.dk-facts dl {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+.dk-facts dl > div {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.dk-facts dt {
+  flex: none;
+  /* Wide enough for INSTALLS TO on one line — at 78px it wrapped and threw
+     the row's baseline out. */
+  width: 94px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #a3a39c;
+}
+.dk-facts dd {
+  margin: 0;
+  min-width: 0;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #4a4a4e;
+  word-break: break-word;
+}
+
+.dk-note {
+  margin-top: 22px;
+  padding: 15px 17px;
+  background: #fffdf0;
+  border: 1px solid #f2e9b8;
+  border-radius: 12px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  letter-spacing: -0.004em;
+  color: #6d6440;
+}
+
+/* ---- footer -------------------------------------------------------- */
+.dk-footer {
+  margin-top: clamp(56px, 7vw, 92px);
+  border-top: 1px solid var(--dk-line);
+  padding: 26px 0 34px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 26px;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--dk-mute);
+}
+.dk-footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+.dk-footer a {
+  color: var(--dk-mute);
+  text-decoration: none;
+  transition: color 0.16s var(--dk-ease);
+}
+.dk-footer a:hover {
+  color: var(--dk-ink);
+}
+
+/* ---- reveal -------------------------------------------------------- */
+/* Nixole's signature entrance: rise + de-blur on a long expo ease. */
+[data-reveal='hidden'] {
+  opacity: 0;
+  transform: translateY(16px);
+  filter: blur(9px);
+}
+[data-reveal='shown'] {
+  opacity: 1;
+  transform: none;
+  filter: none;
+  transition:
+    opacity 0.85s var(--dk-ease),
+    transform 0.85s var(--dk-ease),
+    filter 0.85s var(--dk-ease);
+  transition-delay: var(--d, 0s);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+  }
+  .dk-gap-panel {
+    transition: none;
+  }
+}
+
+/* ==================================================================== */
+/* Components added with the information build-out                       */
+/* ==================================================================== */
+
+.dk-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.dk-h3 {
+  margin: 0 0 14px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.018em;
+  color: var(--dk-ink);
+}
+
+.dk-foot-note {
+  margin: 20px 0 0;
+  max-width: 78ch;
+  font-size: 13px;
+  line-height: 1.6;
+  letter-spacing: -0.004em;
+  color: var(--dk-mute);
+  text-wrap: pretty;
+}
+
+.dk-two {
+  display: grid;
+  gap: 22px;
+  grid-template-columns: 1fr;
+  align-items: start;
+}
+@media (min-width: 860px) {
+  .dk-two {
+    grid-template-columns: 1.15fr 1fr;
+  }
+}
+.dk-two > * {
+  min-width: 0;
+}
+.dk-two--spaced {
+  margin-top: 44px;
+}
+.dk-two--tight {
+  margin-top: 16px;
+}
+
+.dk-pillars--spaced {
+  margin-top: 52px;
+}
+
+/* ---- architecture stack --------------------------------------------- */
+/* README draws this as ASCII. That reads fine in a terminal and badly on a
+   page, so the wire between the layers is where the labels go. */
+.dk-arch {
+  display: grid;
+  gap: 0;
+}
+.dk-arch-layer {
+  padding: 20px 22px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid var(--dk-line);
+  box-shadow: 0 1px 2px rgba(16, 16, 20, 0.03);
+}
+.dk-arch-layer[data-role='core'] {
+  border-color: #ecdfa4;
+  background: linear-gradient(180deg, #fffdf3 0%, #fffefa 100%);
+  box-shadow:
+    0 1px 2px rgba(16, 16, 20, 0.03),
+    0 10px 26px -16px rgba(150, 126, 0, 0.28);
+}
+.dk-arch-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.dk-arch-name {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--dk-ink);
+}
+.dk-arch-lang {
+  display: inline-flex;
+  align-items: center;
+  height: 19px;
+  padding: 0 8px;
+  border-radius: 5px;
+  background: #f2efd8;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #7d6a00;
+}
+.dk-arch-body {
+  margin: 8px 0 0;
+  max-width: 72ch;
+  font-size: 13.5px;
+  line-height: 1.6;
+  letter-spacing: -0.004em;
+  color: var(--dk-mute);
+  text-wrap: pretty;
+}
+
+.dk-arch-wire {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 22px;
+}
+.dk-arch-rail {
+  flex: none;
+  width: 1px;
+  height: 16px;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--dk-faint) 0 3px,
+    transparent 3px 6px
+  );
+}
+.dk-arch-rail:last-child {
+  display: none;
+}
+.dk-arch-wire-label {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: #a5a5a0;
+  letter-spacing: -0.004em;
+}
+
+/* ---- capability matrix ----------------------------------------------- */
+.dk-matrix {
+  border: 1px solid var(--dk-line);
+  border-radius: 16px;
+  overflow: hidden;
+  background: #fff;
+}
+.dk-matrix-head,
+.dk-matrix-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) 0.7fr 0.7fr 0.8fr minmax(0, 1.2fr);
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+}
+.dk-matrix-head {
+  background: #f8f8f6;
+  border-bottom: 1px solid var(--dk-line);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #b0b0aa;
+}
+.dk-matrix-row {
+  border-top: 1px solid var(--dk-line);
+}
+.dk-matrix-row:first-of-type {
+  border-top: 0;
+}
+.dk-matrix-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.016em;
+}
+.dk-matrix-name img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  flex: none;
+}
+.dk-matrix-name i {
+  display: block;
+  margin-top: 1px;
+  font-style: normal;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 10.5px;
+  font-weight: 400;
+  color: var(--dk-faint);
+}
+.dk-matrix-cell code {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--dk-body);
+}
+/* The note spans every column on its own row. */
+.dk-matrix-note {
+  grid-column: 1 / -1;
+  margin: 2px 0 0;
+  max-width: 84ch;
+  font-size: 12.5px;
+  line-height: 1.55;
+  letter-spacing: -0.004em;
+  color: var(--dk-mute);
+  text-wrap: pretty;
+}
+
+.dk-cap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+}
+.dk-cap.is-yes {
+  color: #2f6b45;
+  background: #e8f5ec;
+  box-shadow: inset 0 0 0 1px rgba(47, 107, 69, 0.14);
+}
+.dk-cap.is-no {
+  color: #9d9d97;
+  background: #f1f1ee;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+.dk-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: 11px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.dk-tag--verified {
+  background: #e8f5ec;
+  color: #2f6b45;
+  box-shadow: inset 0 0 0 1px rgba(47, 107, 69, 0.14);
+}
+.dk-tag--protocol {
+  background: #fdf6dd;
+  color: #7d6a00;
+  box-shadow: inset 0 0 0 1px rgba(125, 106, 0, 0.14);
+}
+.dk-tag--capability,
+.dk-tag--expected {
+  background: #f0f0ee;
+  color: #82827c;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+/* Below the matrix width the grid becomes a stack of labelled pairs. */
+@media (max-width: 900px) {
+  .dk-matrix-head {
+    display: none;
+  }
+  .dk-matrix-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 14px;
+  }
+  .dk-matrix-name {
+    grid-column: 1 / -1;
+  }
+  .dk-matrix-cell[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: #b0b0aa;
+  }
+}
+
+/* ---- MCP tools -------------------------------------------------------- */
+.dk-tools {
+  display: grid;
+  gap: 1px;
+  grid-template-columns: 1fr;
+  background: var(--dk-line);
+  border: 1px solid var(--dk-line);
+  border-radius: 16px;
+  overflow: hidden;
+}
+@media (min-width: 720px) {
+  .dk-tools {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.dk-tool {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 12px 18px;
+  background: #fff;
+  transition: background 0.18s var(--dk-ease);
+}
+.dk-tool:hover {
+  background: #fdfcf4;
+}
+.dk-tool code {
+  flex: none;
+  width: 178px;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 12px;
+  color: #6d5d00;
+}
+.dk-tool span {
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  letter-spacing: -0.004em;
+  color: var(--dk-mute);
+}
+@media (max-width: 520px) {
+  .dk-tool {
+    flex-direction: column;
+    gap: 3px;
+  }
+  .dk-tool code {
+    width: auto;
+  }
+}
+
+/* ---- keys ------------------------------------------------------------- */
+.dk-keys {
+  margin: 0;
+  display: grid;
+  gap: 0;
+}
+.dk-keys > div {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 9px 0;
+  border-top: 1px solid var(--dk-line);
+}
+.dk-keys > div:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.dk-keys dt {
+  flex: none;
+  width: 110px;
+  display: flex;
+  gap: 4px;
+}
+.dk-keys dd {
+  margin: 0;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  letter-spacing: -0.004em;
+  color: var(--dk-mute);
+}
+kbd {
+  display: inline-flex;
+  align-items: center;
+  height: 21px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #fff 0%, #f4f4f1 100%);
+  border: 1px solid #e2e2dd;
+  border-bottom-width: 2px;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--dk-ink);
+  white-space: nowrap;
+}
+
+/* ---- benchmark table --------------------------------------------------- */
+.dk-bench {
+  border: 1px solid var(--dk-line);
+  border-radius: 16px;
+  overflow: hidden;
+  background: #fff;
+}
+.dk-bench-head,
+.dk-bench-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) 0.9fr 0.8fr 0.9fr 0.8fr;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 20px;
+}
+.dk-bench-head {
+  background: #f8f8f6;
+  border-bottom: 1px solid var(--dk-line);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #b0b0aa;
+}
+.dk-bench-row + .dk-bench-row {
+  border-top: 1px solid var(--dk-line);
+}
+.dk-bench-w {
+  font-size: 13.5px;
+  letter-spacing: -0.008em;
+  color: var(--dk-ink);
+}
+.dk-bench-row code {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--dk-mute);
+}
+.dk-bench-row b {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: #9d9d97;
+}
+.dk-bench-row[data-good] b {
+  color: #2f6b45;
+}
+@media (max-width: 900px) {
+  .dk-bench-head {
+    display: none;
+  }
+  .dk-bench-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 14px;
+  }
+  .dk-bench-w {
+    grid-column: 1 / -1;
+    font-weight: 600;
+  }
+  .dk-bench-row span[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: #b0b0aa;
+  }
+}
+
+/* ---- tests + security --------------------------------------------------- */
+.dk-tests {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 780px) {
+  .dk-tests {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.dk-test {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 13px 16px;
+  border: 1px solid var(--dk-line);
+  border-radius: 12px;
+  background: #fff;
+  min-width: 0;
+}
+.dk-test-n {
+  flex: none;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--dk-ink);
+}
+.dk-test-w {
+  flex: none;
+  font-size: 13px;
+  letter-spacing: -0.006em;
+  color: var(--dk-body);
+}
+.dk-test code {
+  margin-left: auto;
+  min-width: 0;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--dk-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 640px) {
+  .dk-test code {
+    display: none;
+  }
+}
+
+.dk-sec {
+  margin-top: 44px;
+  display: grid;
+  gap: 0;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 780px) {
+  .dk-sec {
+    grid-template-columns: repeat(2, 1fr);
+    column-gap: 44px;
+  }
+}
+.dk-sec-item {
+  padding: 18px 0;
+  border-top: 1px solid var(--dk-line);
+}
+.dk-sec-item h3 {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.016em;
+}
+.dk-sec-item p {
+  margin: 7px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  letter-spacing: -0.004em;
+  color: var(--dk-mute);
+  text-wrap: pretty;
+}
+
+/* ---- known gaps --------------------------------------------------------- */
+/* Numbered rows on hairline rules, from the `plinth` block. */
+.dk-gaps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.dk-gap {
+  border-top: 1px solid var(--dk-line);
+}
+.dk-gap:last-child {
+  border-bottom: 1px solid var(--dk-line);
+}
+.dk-gap-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 16px 4px;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.dk-gap-n {
+  flex: none;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dk-faint);
+  transition: color 0.24s var(--dk-ease);
+}
+.dk-gap[data-open] .dk-gap-n {
+  color: #9a8300;
+}
+.dk-gap-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.016em;
+  color: var(--dk-ink);
+}
+.dk-gap-mark {
+  flex: none;
+  display: inline-flex;
+  color: var(--dk-faint);
+  transition:
+    transform 0.32s var(--dk-ease),
+    color 0.24s var(--dk-ease);
+}
+.dk-gap[data-open] .dk-gap-mark {
+  transform: rotate(135deg);
+  color: var(--dk-ink);
+}
+
+/* grid-template-rows animates height without measuring it in JS. */
+.dk-gap-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.42s var(--dk-ease);
+}
+.dk-gap[data-open] .dk-gap-panel {
+  grid-template-rows: 1fr;
+}
+.dk-gap-panel > div {
+  overflow: hidden;
+}
+.dk-gap-panel p {
+  margin: 0;
+  padding: 0 4px 20px 44px;
+  max-width: 80ch;
+  font-size: 13.5px;
+  line-height: 1.65;
+  letter-spacing: -0.004em;
+  color: var(--dk-mute);
+  text-wrap: pretty;
+}
+
+/* ---- small code pane ---------------------------------------------------- */
+.dk-mini {
+  border: 1px solid var(--dk-line);
+  border-radius: 13px;
+  background: #fdfdfc;
+  overflow-x: auto;
+}
+.dk-mini pre {
+  margin: 0;
+  padding: 15px 17px;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.85;
+  color: #26262a;
+  white-space: pre;
+}
+.dk-mini .c {
+  color: #a2a29c;
+}
+.dk-mini .p {
+  color: #9a8300;
+  user-select: none;
+}
+
+/* ---- FAQ (components/ui/scroll-faqaccordion) ---------------------------- */
+/* The component is styled with Tailwind utilities, so only what clashes with
+   the paper surface is overridden — through the className props it already
+   exposes, rather than by forking the file. */
+/* `.dk-faq` alone ties with Tailwind's own `.max-w-4xl`/`.mx-auto`, and load
+   order decided it in their favour — so these are scoped one level deeper. */
+.dk .dk-faq {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
+.dk-faq [data-radix-collection-item],
+.dk-faq > div > div {
+  margin-bottom: 0;
+}
+
+/* Row: full width, on a hairline rule, matching the known-gaps list above. */
+.dk-faq button[data-state] {
+  gap: 16px;
+  padding: 15px 4px;
+  border-top: 1px solid var(--dk-line);
+  justify-content: space-between;
+}
+.dk-faq [class*='mb-6']:last-child button[data-state] {
+  border-bottom: 1px solid var(--dk-line);
+}
+
+/* The question chip — upstream ships bg-muted / bg-primary/20 pills. */
+.dk-faq-q {
+  padding: 0 !important;
+  border-radius: 0 !important;
+  background: none !important;
+  color: var(--dk-ink) !important;
+}
+.dk-faq-q span {
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.016em;
+  text-align: left;
+}
+.dk-faq button[data-state='open'] .dk-faq-q span {
+  color: #9a8300;
+}
+
+/* The +/- mark. */
+.dk-faq button[data-state] > span:last-child {
+  color: var(--dk-faint);
+  display: inline-flex;
+  transition: color 0.22s var(--dk-ease);
+}
+.dk-faq button[data-state='open'] > span:last-child {
+  color: var(--dk-ink);
+}
+.dk-faq button[data-state] svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* The answer. Upstream is a right-aligned blue chat bubble with !important
+   on the background; that blue belongs to nothing else on this page. */
+.dk-faq [class*='justify-end'] {
+  justify-content: flex-start !important;
+  margin-left: 0 !important;
+  margin-top: 0 !important;
+}
+.dk-faq-a {
+  max-width: 78ch !important;
+  padding: 0 4px 18px !important;
+  border-radius: 0 !important;
+  background: none !important;
+  color: var(--dk-mute) !important;
+  font-size: 13.5px !important;
+  line-height: 1.65;
+  letter-spacing: -0.004em;
+  text-wrap: pretty;
+}
