@@ -6,13 +6,15 @@
  * not to invent capability. If a claim changes upstream, change it here once.
  */
 
+import { withBase } from '@/lib/base';
+
 export const PRODUCT = {
   name: 'Terminal-Fenster',
   headline: { lead: 'A real browser', trail: 'inside your terminal.' },
   blurb:
     'Not Lynx. Not a screenshot viewer. Chromium 150 renders offscreen, a Rust core paints Kitty graphics, and your keyboard and mouse go straight back to the page.',
   repo: 'https://github.com/zent7x/terminal-fenster',
-  docs: '/docs/',
+  docs: withBase('/docs/'),
   license: 'MIT',
 } as const;
 
@@ -115,7 +117,7 @@ export const TERMINALS: ReadonlyArray<{
     id: 'ghostty',
     name: 'Ghostty',
     version: '1.3.1',
-    logo: '/logos/ghostty.png',
+    logo: withBase('/logos/ghostty.png'),
     graphics: 'Kitty',
     keyboard: true,
     pixelMouse: true,
@@ -126,7 +128,7 @@ export const TERMINALS: ReadonlyArray<{
     id: 'kitty',
     name: 'kitty',
     version: '—',
-    logo: '/logos/kitty.png',
+    logo: withBase('/logos/kitty.png'),
     graphics: 'Kitty',
     keyboard: true,
     pixelMouse: true,
@@ -137,7 +139,7 @@ export const TERMINALS: ReadonlyArray<{
     id: 'wezterm',
     name: 'WezTerm',
     version: '—',
-    logo: '/logos/wezterm.png',
+    logo: withBase('/logos/wezterm.png'),
     graphics: 'Kitty',
     keyboard: true,
     pixelMouse: true,
@@ -148,7 +150,7 @@ export const TERMINALS: ReadonlyArray<{
     id: 'iterm2',
     name: 'iTerm2',
     version: '3.6.9',
-    logo: '/logos/iterm2.svg',
+    logo: withBase('/logos/iterm2.svg'),
     graphics: 'Kitty',
     keyboard: true,
     pixelMouse: false,
@@ -159,7 +161,7 @@ export const TERMINALS: ReadonlyArray<{
     id: 'apple-terminal',
     name: 'Apple Terminal',
     version: '465',
-    logo: '/logos/apple-terminal.png',
+    logo: withBase('/logos/apple-terminal.png'),
     graphics: 'none',
     keyboard: false,
     pixelMouse: false,

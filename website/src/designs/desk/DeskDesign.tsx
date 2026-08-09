@@ -25,6 +25,7 @@ import { ArchStack } from '@/designs/desk/ArchStack';
 import { Gaps } from '@/designs/desk/Gaps';
 import { Faq } from '@/designs/desk/Faq';
 import { AgentArt, EngineArt, InputArt } from '@/designs/art/pillar-art';
+import { withBase } from '@/lib/base';
 import './desk.css';
 
 const PILLAR_ART = {
@@ -95,7 +96,7 @@ export function DeskDesign() {
       <div className="dk-sheet">
         <div className="dk-inner">
           <header className="dk-header">
-            <a className="dk-brand" href="/">
+            <a className="dk-brand" href={withBase('/')}>
               <Mark size={27} />
               <span>Terminal-Fenster</span>
             </a>
@@ -138,27 +139,57 @@ export function DeskDesign() {
                 Read the docs
               </a>
             </div>
-
-            <p className="dk-req" data-reveal-item style={at(0.29)}>
-              Requires{' '}
-              {REQUIREMENTS.map((r, i) => (
-                <span key={r}>
-                  {i > 0 && ' · '}
-                  <b>{r}</b>
-                </span>
-              ))}
-            </p>
-
-            <div className="dk-proof" data-reveal-item style={at(0.36)}>
-              {PROOF.map((p) => (
-                <div className="dk-proof-cell" key={p.label}>
-                  <div className="dk-proof-v">{p.value}</div>
-                  <div className="dk-proof-l">{p.label}</div>
-                  <div className="dk-proof-n">{p.note}</div>
-                </div>
-              ))}
-            </div>
           </section>
+
+          {/* ---------------------------------------------- hero capture -- */}
+          <figure className="dk-stage" id="demo" data-reveal-item style={at(0.3)}>
+            <div className="dk-stage-chrome" aria-hidden>
+              <span className="dk-stage-dots">
+                <i />
+                <i />
+                <i />
+              </span>
+              <code>terminal-fenster open news.ycombinator.com</code>
+            </div>
+            <picture>
+              <source
+                srcSet={withBase('/assets/demo.gif')}
+                type="image/gif"
+                media="(prefers-reduced-motion: no-preference)"
+              />
+              <img
+                src={withBase('/assets/demo.png')}
+                alt="Terminal-Fenster running Hacker News inside Ghostty via Kitty graphics"
+                width={1600}
+                height={1000}
+                decoding="async"
+                fetchPriority="high"
+              />
+            </picture>
+            <figcaption className="dk-stage-cap">
+              Real Ghostty capture on macOS — Chromium pixels through the Kitty graphics protocol.
+            </figcaption>
+          </figure>
+
+          <p className="dk-req" data-reveal-item>
+            Requires{' '}
+            {REQUIREMENTS.map((r, i) => (
+              <span key={r}>
+                {i > 0 && ' · '}
+                <b>{r}</b>
+              </span>
+            ))}
+          </p>
+
+          <div className="dk-proof" data-reveal-item>
+            {PROOF.map((p) => (
+              <div className="dk-proof-cell" key={p.label}>
+                <div className="dk-proof-v">{p.value}</div>
+                <div className="dk-proof-l">{p.label}</div>
+                <div className="dk-proof-n">{p.note}</div>
+              </div>
+            ))}
+          </div>
 
           {/* ---------------------------------------------- how it works -- */}
           <section className="dk-section" id="how">

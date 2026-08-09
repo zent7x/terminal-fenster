@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+  // GitHub project pages live at /terminal-fenster/; local/Vercel stay at /.
+  base: process.env.GITHUB_PAGES === '1' ? '/terminal-fenster/' : '/',
   plugins: [react()],
   resolve: {
     alias: {
