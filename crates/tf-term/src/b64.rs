@@ -9,6 +9,10 @@ const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0
 /// Encode `input` as standard base64 with `=` padding, appending into `out`.
 ///
 /// Appends rather than allocates so frame encoding can reuse one buffer across frames.
+// `as_chunks` is what clippy wants here, but it landed in Rust 1.88 and this
+// workspace declares rust-version = "1.80". Keeping the lint off costs nothing;
+// raising the MSRV for a style preference would cost users.
+#[allow(clippy::chunks_exact_to_as_chunks)]
 pub fn encode_into(input: &[u8], out: &mut Vec<u8>) {
     out.reserve(input.len().div_ceil(3) * 4);
     let mut chunks = input.chunks_exact(3);

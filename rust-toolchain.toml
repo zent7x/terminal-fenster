@@ -1,0 +1,6 @@
+# CI runs `cargo clippy -- -D warnings`, so an unpinned toolchain means any new
+# lint in any future Rust release breaks the build retroactively, on green
+# commits that never changed. Pin the toolchain and bump it deliberately.
+[toolchain]
+channel = "1.98.1"
+components = ["rustfmt", "clippy"]

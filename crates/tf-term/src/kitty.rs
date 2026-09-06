@@ -673,6 +673,8 @@ mod tests {
     }
 
     #[test]
+    // Same MSRV reason as b64::encode_into: `as_chunks` requires Rust 1.88.
+    #[allow(clippy::chunks_exact_to_as_chunks)]
     fn optimized_swizzle_matches_scalar_reference_across_lengths() {
         for pixels in 0..257usize {
             for trailing in 0..4usize {
