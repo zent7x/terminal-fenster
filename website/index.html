@@ -31,14 +31,68 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
+    <link rel="canonical" href="https://zent7x.com/terminal-fenster/" />
+    <meta name="robots" content="index,follow,max-image-preview:large" />
+    <meta name="author" content="Adeeb Bashir" />
     <title>Terminal-Fenster — a real browser inside your terminal</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "@id": "https://zent7x.com/terminal-fenster/#app",
+        "name": "Terminal-Fenster",
+        "alternateName": "terminal-fenster",
+        "description": "A terminal browser that renders real Chromium pixels inside Ghostty using the Kitty graphics protocol, rather than approximating pages as text.",
+        "url": "https://zent7x.com/terminal-fenster/",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "macOS",
+        "license": "https://opensource.org/licenses/MIT",
+        "codeRepository": "https://github.com/zent7x/terminal-fenster",
+        "programmingLanguage": ["Rust", "TypeScript"],
+        "author": {
+          "@type": "Person",
+          "@id": "https://zent7x.com/#person",
+          "name": "Adeeb Bashir",
+          "alternateName": ["zentex", "zent7x"],
+          "url": "https://zent7x.com/",
+          "sameAs": ["https://github.com/zent7x", "https://x.com/zent7x"]
+        }
+      }
+    </script>
   </head>
   <body>
     <div id="root">
-      <p style="margin:0;padding:2rem;font-family:'IBM Plex Sans',system-ui,sans-serif;color:#9b9b9b;background:#f9f9f8;min-height:100vh">
-        Loading Terminal-Fenster…
-        <br /><small>If this stays blank, open <strong>http://localhost:5173</strong> (not just <code>localhost</code>) or run <code>npm run build &amp;&amp; npm run preview</code> → <strong>http://localhost:4173</strong></small>
-      </p>
+      <main style="max-width:44rem;margin:0 auto;padding:3rem 1.5rem;font-family:'IBM Plex Sans',system-ui,sans-serif;color:#1a1a1a;background:#f9f9f8;min-height:100vh;line-height:1.6">
+        <h1 style="font-size:1.75rem;margin:0 0 1rem">Terminal-Fenster</h1>
+        <p>
+          Terminal-Fenster is a terminal browser that renders real Chromium pixels inside Ghostty
+          using the Kitty graphics protocol, built by Adeeb Bashir (zentex). It is not a text-mode
+          approximation of the web and not a screenshot viewer: the actual browser engine draws the
+          page, and the frames land in your terminal.
+        </p>
+        <p>
+          "Terminal-Fenster" is German for "terminal window". The project takes the phrase
+          literally, by putting a real browser window inside the terminal.
+        </p>
+        <h2 style="font-size:1.15rem;margin:2rem 0 0.5rem">How it works</h2>
+        <p>
+          Chromium renders the page offscreen. A Rust core converts each frame into terminal
+          graphics and forwards keyboard and mouse input from the terminal back into the page, so
+          you can scroll, click, type, and log in without leaving the shell. Ghostty is
+          auto-detected through the Kitty graphics protocol.
+        </p>
+        <h2 style="font-size:1.15rem;margin:2rem 0 0.5rem">Status</h2>
+        <p>
+          Experimental source alpha. The vertical slice works and is covered by real-pixel
+          end-to-end tests on macOS in Ghostty, including up to 16 tabs and a 16-tool MCP server
+          that drives an isolated engine. There are no signed binaries yet, and other terminals
+          still need community testing. MIT licensed.
+        </p>
+        <p>
+          <a href="https://github.com/zent7x/terminal-fenster">Source on GitHub</a> ·
+          <a href="https://zent7x.com/">More work by Adeeb Bashir</a>
+        </p>
+      </main>
     </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
