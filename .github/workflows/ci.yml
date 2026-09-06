@@ -26,9 +26,10 @@ jobs:
         with:
           node-version: 24
       - name: Install Rust quality components
-        run: |
-          rustup toolchain install stable --profile minimal --component rustfmt,clippy
-          rustup default stable
+        # Installs the version named in rust-toolchain.toml, components included.
+        # Do not reintroduce `rustup default stable` here: an unpinned toolchain
+        # plus `-D warnings` lets any future clippy lint break green commits.
+        run: rustup show active-toolchain || rustup toolchain install
       - name: Formatting
         run: cargo fmt --all -- --check
       - name: Clippy
