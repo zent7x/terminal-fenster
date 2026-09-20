@@ -327,3 +327,7 @@ MIT — see [`LICENSE`](LICENSE). Third-party components and prior art studied (
 listed in `NOTICE.md`. Notably the benchmark product, `zenbu-labs/terminal-browser`, ships
 **no licence file**, so its implementation was treated as unavailable: only its public
 behaviour informed this work.
+
+---
+
+Built by Adeeb Bashir (zentex) · [zent7x.com](https://zent7x.com)
